@@ -1,0 +1,9 @@
+schemaVersion: 1
+scope: repo
+retention:
+  staleAfterDays: 90
+  quarantineAfterDays: 180
+  deleteAfterQuarantineDays: 30
+  wrongDeleteAfterDays: 7
+  promotedStaleAfterDays: 365
+  promotedQuarantineAfterDays: 30

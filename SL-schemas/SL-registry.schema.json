@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/microsoft/SL-Repo/SL-registry.schema.json",
+  "title": "SL artifact registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "artifacts"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": [
+          "id",
+          "path",
+          "artifactType",
+          "classification",
+          "managedBy",
+          "status",
+          "createdAt",
+          "lastVerifiedAt",
+          "pinned",
+          "relatedTo"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^SL-[A-Z0-9][A-Z0-9-]*$"
+          },
+          "path": {
+            "type": ["string", "null"]
+          },
+          "originalPath": {
+            "type": "string"
+          },
+          "artifactType": {
+            "enum": ["lesson", "instruction", "skill", "system"]
+          },
+          "classification": {
+            "enum": ["system", "evidence", "promoted"]
+          },
+          "managedBy": {
+            "const": "SL-Repo"
+          },
+          "status": {
+            "enum": [
+              "raw",
+              "distilled",
+              "promotion-candidate",
+              "promoted",
+              "stale",
+              "quarantined",
+              "superseded",
+              "deleted",
+              "active"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastVerifiedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastRetrievedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastSuccessfulUseAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "hits": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "retrievals": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "notUsefulVotes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "staleAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "quarantinedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "deleteEligibleAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "deletedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "pinned": {
+            "type": "boolean"
+          },
+          "relatedTo": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "dependsOn": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}

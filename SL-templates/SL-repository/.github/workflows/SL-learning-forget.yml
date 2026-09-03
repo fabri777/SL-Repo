@@ -1,0 +1,52 @@
+name: SL learning forgetting
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        type: boolean
+        required: true
+        default: false
+  schedule:
+    - cron: "17 4 * * 1"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: SL-forgetting
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://npm.pkg.github.com
+      - name: Preview
+        run: npm exec --yes --package=@microsoft/sl-repo@0.1.0 -- sl-repo sweep . --dry-run
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Apply
+        if: ${{ github.event_name == 'schedule' || inputs.apply }}
+        run: npm exec --yes --package=@microsoft/sl-repo@0.1.0 -- sl-repo sweep .
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create pull request
+        id: retention-pr
+        if: ${{ github.event_name == 'schedule' || inputs.apply }}
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: SL-forget/automated-sweep
+          delete-branch: true
+          title: "SL: apply automatic forgetting policy"
+          commit-message: "chore: apply SL forgetting policy"
+      - name: Enable guarded automatic merge
+        if: ${{ steps.retention-pr.outputs.pull-request-number != '' }}
+        run: gh pr merge "${{ steps.retention-pr.outputs.pull-request-number }}" --auto --squash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
