@@ -18,6 +18,6 @@ jobs:
         with:
           node-version: 20
           registry-url: https://npm.pkg.github.com
-      - run: npm exec --yes --package=@microsoft/sl-repo@0.1.0 -- sl-repo validate .
+      - run: npm exec --yes --package=@fabri777/sl-repo@0.1.0 -- sl-repo validate .
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

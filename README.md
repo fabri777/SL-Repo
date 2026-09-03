@@ -36,7 +36,7 @@ This repository implements the first project milestone:
 ## Development
 
 ```powershell
-gh repo clone microsoft/SL-Repo C:\dev\SL-Repo
+gh repo clone fabri777/SL-Repo C:\dev\SL-Repo
 Set-Location C:\dev\SL-Repo
 npm ci
 npm run ci
@@ -44,13 +44,20 @@ npm link
 sl-repo --help
 ```
 
-Until the Microsoft remote is created, use the existing local clone:
+The repository is private. Authenticate Git access as `fabri777` before
+cloning or installing it.
 
 ```powershell
 Set-Location C:\dev\SL-Repo
 npm install
 npm run ci
 npm link
+```
+
+An authenticated Git installation can also invoke the package directly:
+
+```powershell
+npm exec --yes --package=github:fabri777/SL-Repo -- sl-repo --help
 ```
 
 ## Install into a repository

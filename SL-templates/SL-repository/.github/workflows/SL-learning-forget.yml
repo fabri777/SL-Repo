@@ -28,12 +28,12 @@ jobs:
           node-version: 20
           registry-url: https://npm.pkg.github.com
       - name: Preview
-        run: npm exec --yes --package=@microsoft/sl-repo@0.1.0 -- sl-repo sweep . --dry-run
+        run: npm exec --yes --package=@fabri777/sl-repo@0.1.0 -- sl-repo sweep . --dry-run
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Apply
         if: ${{ github.event_name == 'schedule' || inputs.apply }}
-        run: npm exec --yes --package=@microsoft/sl-repo@0.1.0 -- sl-repo sweep .
+        run: npm exec --yes --package=@fabri777/sl-repo@0.1.0 -- sl-repo sweep .
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Create pull request

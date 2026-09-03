@@ -34,7 +34,15 @@ The first milestone intentionally does not provide destructive uninstall.
 Remove system templates only after `sl-repo doctor` identifies them. Produced
 knowledge remains ordinary Git content.
 
-## Private Microsoft repository installation
+## Private GitHub repository installation
 
-The exact `npx` command will be documented after `microsoft/SL-Repo` exists and
-has been tested with the `ffishkel_microsoft` account.
+Authenticate GitHub as `fabri777`, then run:
+
+```powershell
+npm exec --yes --package=github:fabri777/SL-Repo -- sl-repo init C:\path\to\target
+```
+
+The generated workflows reference the future
+`@fabri777/sl-repo` GitHub Package. Until that package is published, use a
+local clone or replace the workflow installation step with an authenticated
+checkout of `fabri777/SL-Repo`.

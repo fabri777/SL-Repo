@@ -1,5 +1,5 @@
 {
-  "name": "@microsoft/sl-repo",
+  "name": "@fabri777/sl-repo",
   "version": "0.1.0",
   "private": false,
   "description": "Repository-local self-learning lifecycle for GitHub Copilot agents",
@@ -16,6 +16,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "prepare": "npm run build",
     "check": "tsc -p tsconfig.json --noEmit && tsc -p SL-tsconfig.test.json --noEmit",
     "test": "npm run build && vitest run --config SL-vitest.config.ts",
     "test:watch": "vitest",
