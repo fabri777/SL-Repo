@@ -39,7 +39,7 @@ knowledge remains ordinary Git content.
 Authenticate GitHub as `fabri777`, then run:
 
 ```powershell
-npm exec --yes --package=github:fabri777/SL-Repo -- sl-repo init C:\path\to\target
+npm exec --yes --package=github:fabri777/SL-Repo -c "sl-repo init C:\path\to\target"
 ```
 
 The generated workflows reference the future
