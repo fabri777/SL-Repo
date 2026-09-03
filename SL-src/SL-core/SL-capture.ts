@@ -1,5 +1,6 @@
 import { SL_PATHS } from "./SL-constants.js";
 import { slStringifyMarkdown } from "./SL-frontmatter.js";
+import { slWithRepositoryMutationLock } from "./SL-mutation-lock.js";
 import {
   slAppendEvents,
   slAssertEventPathSafe,
@@ -31,6 +32,16 @@ export interface SLCaptureOptions {
 }
 
 export async function slCaptureLesson(
+  root: string,
+  options: SLCaptureOptions,
+): Promise<{ id: string; path: string; changes: SLChange[] }> {
+  return slWithRepositoryMutationLock(root, () =>
+    slCaptureLessonUnlocked(root, options),
+    { dryRun: options.dryRun },
+  );
+}
+
+async function slCaptureLessonUnlocked(
   root: string,
   options: SLCaptureOptions,
 ): Promise<{ id: string; path: string; changes: SLChange[] }> {

@@ -4,6 +4,10 @@ import { afterEach, describe, expect, test } from "vitest";
 import { slCaptureLesson } from "../../SL-src/SL-core/SL-capture.js";
 import { slInstall } from "../../SL-src/SL-core/SL-installer.js";
 import {
+  slFinishUsage,
+  slStartUsage,
+} from "../../SL-src/SL-core/SL-usage.js";
+import {
   slLoadRegistry,
   slSaveRegistry,
 } from "../../SL-src/SL-core/SL-registry.js";
@@ -69,6 +73,54 @@ describe("SL forgetting", () => {
     expect(await getArtifact(root, id)).toMatchObject({
       status: "deleted",
       path: null,
+    });
+  });
+
+  test("serializes sweep with usage completion without losing fresh activity", async () => {
+    const root = await slCreateTestRepository();
+    repositories.push(root);
+    await slInstall(root, "init", false);
+    const id = await createLesson(root, "Sweep usage race");
+    const started = await slStartUsage(root, id, {
+      applicationId: "sweep-usage-application",
+      now: new Date("2026-01-02T00:00:00.000Z"),
+    });
+
+    await Promise.all([
+      slSweep(root, false, new Date("2026-09-04T00:00:00.000Z")),
+      slFinishUsage(root, started.applicationId, {
+        outcome: "success",
+        verified: true,
+        verifierType: "test-suite",
+        evidenceRef: "ci:sweep-usage-race",
+        now: new Date("2026-09-05T00:00:00.000Z"),
+      }),
+    ]);
+
+    expect(await getArtifact(root, id)).toMatchObject({
+      status: "raw",
+      lastSuccessfulUseAt: "2026-09-05T00:00:00.000Z",
+      usageProjection: {
+        verifiedSuccessCount: 1,
+      },
+    });
+    const index = JSON.parse(
+      await readFile(
+        join(root, ".github", "SL-learning", "SL-index.json"),
+        "utf8",
+      ),
+    ) as {
+      artifacts: Array<{
+        id: string;
+        status: string;
+        usageProjection?: { verifiedSuccessCount: number };
+      }>;
+    };
+    expect(index.artifacts.find((artifact) => artifact.id === id)).toMatchObject({
+      status: "raw",
+      usageProjection: {
+        verifiedSuccessCount: 1,
+      },
     });
   });
 

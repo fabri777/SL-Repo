@@ -4,6 +4,7 @@ coverage/
 .DS_Store
 *.log
 *.SL-tmp-*
+.github/SL-learning/SL-promotion.lock
 .env
 .env.*
 !.env.example

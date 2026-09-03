@@ -69,8 +69,34 @@ export async function slReadText(path: string): Promise<string> {
   return readFile(path, "utf8");
 }
 
+export async function slReadContainedText(
+  root: string,
+  relativePath: string,
+): Promise<string> {
+  await slAssertRealPathInside(root, relativePath);
+  return slReadText(slResolveInside(root, relativePath));
+}
+
 export async function slReadJson<T>(path: string): Promise<T> {
   return JSON.parse(await slReadText(path)) as T;
+}
+
+export function slCanonicalJson(value: unknown): string {
+  function canonicalize(entry: unknown): unknown {
+    if (Array.isArray(entry)) {
+      return entry.map(canonicalize);
+    }
+    if (entry !== null && typeof entry === "object") {
+      return Object.fromEntries(
+        Object.entries(entry as Record<string, unknown>)
+          .sort(([left], [right]) => left.localeCompare(right))
+          .map(([key, child]) => [key, canonicalize(child)]),
+      );
+    }
+    return entry;
+  }
+
+  return JSON.stringify(canonicalize(value));
 }
 
 export async function slWriteText(

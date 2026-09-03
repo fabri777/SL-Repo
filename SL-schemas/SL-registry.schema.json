@@ -16,7 +16,7 @@
       "type": "array",
       "items": {
         "type": "object",
-        "additionalProperties": true,
+        "additionalProperties": false,
         "required": [
           "id",
           "path",
@@ -40,6 +40,21 @@
           "originalPath": {
             "type": "string"
           },
+          "previousStatus": {
+            "enum": [
+              "raw",
+              "distilled",
+              "promotion-candidate",
+              "generated",
+              "probation",
+              "promoted",
+              "stale",
+              "quarantined",
+              "superseded",
+              "deleted",
+              "active"
+            ]
+          },
           "artifactType": {
             "enum": ["lesson", "instruction", "skill", "system"]
           },
@@ -54,6 +69,8 @@
               "raw",
               "distilled",
               "promotion-candidate",
+              "generated",
+              "probation",
               "promoted",
               "stale",
               "quarantined",
@@ -106,6 +123,96 @@
             "type": "string",
             "format": "date-time"
           },
+          "activatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "promotionTargetPath": {
+            "type": "string"
+          },
+          "promotionEvaluation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "schemaVersion",
+              "status",
+              "artifactVersion",
+              "artifactContentHash",
+              "contractContentHash",
+              "evaluatedAt",
+              "gates"
+            ],
+            "properties": {
+              "schemaVersion": {
+                "const": 1
+              },
+              "status": {
+                "enum": ["passed", "failed"]
+              },
+              "artifactVersion": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              },
+              "artifactContentHash": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "contractContentHash": {
+                "type": ["string", "null"],
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "evaluatedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "gates": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["id", "status", "message"],
+                  "properties": {
+                    "id": {
+                      "enum": [
+                        "contract",
+                        "provenance",
+                        "static-scenarios",
+                        "active-conflicts",
+                        "executable-checks",
+                        "repository-approval",
+                        "content-unchanged"
+                      ]
+                    },
+                    "status": {
+                      "enum": ["passed", "failed"]
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                }
+              },
+              "approvalEvidence": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["kind", "evidenceRef"],
+                "properties": {
+                  "kind": {
+                    "const": "repository-review"
+                  },
+                  "evidenceRef": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  }
+                }
+              }
+            }
+          },
+          "usageProjection": {
+            "$ref": "#/$defs/usageProjection"
+          },
           "pinned": {
             "type": "boolean"
           },
@@ -120,7 +227,101 @@
             "items": {
               "type": "string"
             }
+          },
+          "trigger": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "forgetReason": {
+            "enum": [
+              "wrong",
+              "irrelevant",
+              "superseded",
+              "unused"
+            ]
           }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "usageProjection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifactId",
+        "artifactVersion",
+        "artifactContentHash",
+        "retrievalCount",
+        "applicationCount",
+        "resolvedCount",
+        "verifiedSuccessCount",
+        "verifiedFailureCount",
+        "unknownCount",
+        "verifiedSuccessRate"
+      ],
+      "properties": {
+        "artifactId": {
+          "type": "string",
+          "pattern": "^SL-[A-Z0-9][A-Z0-9-]*$"
+        },
+        "artifactVersion": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "artifactContentHash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "retrievalCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "applicationCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "resolvedCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "verifiedSuccessCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "verifiedFailureCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unknownCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "verifiedSuccessRate": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "lastRetrievedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "lastAppliedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "lastVerifiedSuccessAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "lastVerifiedFailureAt": {
+          "type": "string",
+          "format": "date-time"
         }
       }
     }

@@ -1,6 +1,6 @@
 {
   "name": "@fabri777/sl-repo",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": false,
   "description": "Repository-local self-learning lifecycle for GitHub Copilot agents",
   "type": "module",
@@ -9,10 +9,12 @@
   },
   "files": [
     "dist",
+    "SL-docs",
     "SL-schemas",
     "SL-templates",
     "SL-plugin",
-    "README.md"
+    "README.md",
+    "SECURITY.md"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",

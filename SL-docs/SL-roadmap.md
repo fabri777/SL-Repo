@@ -5,6 +5,20 @@
 Repository-local capture, reuse, promotion, validation, installation, and
 forgetting.
 
+Implemented lifecycle capabilities include immutable usage and lifecycle
+events, version-specific projections, legacy counter migration, governed
+probation and activation, validation contracts, bounded executable checks,
+deterministic projection repair, and retention integration.
+
+Current limitations:
+
+- Instruction usage requires an applying agent or host to emit a receipt.
+- Outcome association is not proof of causal improvement.
+- Obvious declaration conflicts are detected; semantic contradictions still
+  require repository review.
+- The generated private-source workflows require `SL_REPO_TOKEN` until a
+  supported package distribution is published.
+
 ## SL Org
 
 Future work:

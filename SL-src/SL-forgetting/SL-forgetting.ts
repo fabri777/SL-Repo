@@ -1,7 +1,16 @@
 import { basename } from "node:path";
-import { SL_ACTIVE_STATUSES, SL_PATHS } from "../SL-core/SL-constants.js";
+import {
+  SL_PATHS,
+  SL_REFERENCE_PROTECTING_STATUSES,
+} from "../SL-core/SL-constants.js";
 import { slLoadConfig } from "../SL-core/SL-config.js";
 import { slParseMarkdown, slStringifyMarkdown } from "../SL-core/SL-frontmatter.js";
+import { slWithRepositoryMutationLock } from "../SL-core/SL-mutation-lock.js";
+import {
+  slPreflightPromotedProbationDestination,
+  slPromotedProbationPath,
+  slRewriteAndMovePromotionToProbation,
+} from "../SL-core/SL-promotion-path.js";
 import {
   slAppendEvents,
   slAssertEventPathSafe,
@@ -23,10 +32,14 @@ import {
   slDelete,
   slExists,
   slMove,
-  slReadText,
+  slReadContainedText,
   slResolveInside,
   slWriteText,
 } from "../SL-core/SL-utils.js";
+import {
+  slReadOwnedArtifactMarkdown,
+  slSynchronizeUsageProjectionUnlocked,
+} from "../SL-core/SL-usage.js";
 import { slWriteIndex } from "../SL-index/SL-index.js";
 
 function slHasActiveIncomingReference(
@@ -36,7 +49,7 @@ function slHasActiveIncomingReference(
   return registry.artifacts.some(
     (artifact) =>
       artifact.id !== targetId &&
-      SL_ACTIVE_STATUSES.has(artifact.status) &&
+      SL_REFERENCE_PROTECTING_STATUSES.has(artifact.status) &&
       (artifact.dependsOn ?? []).includes(targetId),
   );
 }
@@ -57,7 +70,7 @@ async function slAssertArtifactFileOwnership(
   let markdown;
   try {
     markdown = slParseMarkdown<Record<string, unknown>>(
-      await slReadText(absolutePath),
+      await slReadContainedText(root, artifact.path),
     );
   } catch {
     throw new Error(
@@ -91,7 +104,7 @@ async function slSetFileStatus(
     return;
   }
   const markdown = slParseMarkdown<Record<string, unknown>>(
-    await slReadText(absolutePath),
+    await slReadContainedText(root, artifact.path),
   );
   markdown.frontmatter.status = status;
   await slWriteText(
@@ -184,6 +197,19 @@ export async function slForgetArtifact(
   dryRun: boolean,
   now = new Date(),
 ): Promise<SLSweepResult> {
+  return slWithRepositoryMutationLock(root, () =>
+    slForgetArtifactUnlocked(root, id, reason, dryRun, now),
+    { dryRun },
+  );
+}
+
+async function slForgetArtifactUnlocked(
+  root: string,
+  id: string,
+  reason: "wrong" | "irrelevant" | "superseded",
+  dryRun: boolean,
+  now: Date,
+): Promise<SLSweepResult> {
   await slAssertEventPathSafe(root);
   const config = await slLoadConfig(root);
   const registry = await slLoadRegistry(root);
@@ -233,6 +259,18 @@ export async function slRestoreArtifact(
   dryRun: boolean,
   now = new Date(),
 ): Promise<SLSweepResult> {
+  return slWithRepositoryMutationLock(root, () =>
+    slRestoreArtifactUnlocked(root, id, dryRun, now),
+    { dryRun },
+  );
+}
+
+async function slRestoreArtifactUnlocked(
+  root: string,
+  id: string,
+  dryRun: boolean,
+  now: Date,
+): Promise<SLSweepResult> {
   await slAssertEventPathSafe(root);
   const registry = await slLoadRegistry(root);
   const artifact = slFindArtifact(registry, id);
@@ -247,35 +285,103 @@ export async function slRestoreArtifact(
   const changes: SLChange[] = [];
   const events: SLEvent[] = [];
   const quarantinePath = artifact.path;
-  const restoredStatus = artifact.previousStatus ?? "raw";
-  await slMove(
-    root,
-    quarantinePath,
-    artifact.originalPath,
-    dryRun,
-    changes,
-  );
-  artifact.path = artifact.originalPath;
-  artifact.status = restoredStatus;
-  delete artifact.previousStatus;
-  delete artifact.quarantinedAt;
-  delete artifact.deleteEligibleAt;
-  delete artifact.forgetReason;
-  await slSetFileStatus(root, artifact, restoredStatus, dryRun, changes);
-  events.push({
-    schemaVersion: 1,
-    timestamp: now.toISOString(),
-    artifactId: artifact.id,
-    action: "restored",
-    fromStatus: "quarantined",
-    toStatus: restoredStatus,
-    fromPath: quarantinePath,
-    toPath: artifact.path,
-  });
-  await slSaveRegistry(root, registry, dryRun, changes);
-  await slWriteIndex(root, registry, dryRun, changes);
-  await slAppendEvents(root, events, dryRun);
-  return { changes, events };
+  const promotedRestore =
+    artifact.classification === "promoted" &&
+    (artifact.artifactType === "instruction" ||
+      artifact.artifactType === "skill");
+  const promotionTargetPath = promotedRestore
+    ? artifact.promotionTargetPath ?? artifact.originalPath
+    : undefined;
+  const restorePath =
+    promotedRestore && promotionTargetPath
+      ? slPromotedProbationPath(artifact, promotionTargetPath)
+      : artifact.originalPath;
+  const restoredStatus = promotedRestore
+    ? "probation"
+    : artifact.previousStatus ?? "raw";
+  const originalRegistry = structuredClone(registry);
+  let rollback: (() => Promise<void>) | undefined;
+  let registrySaved = false;
+  if (promotedRestore) {
+    await slPreflightPromotedProbationDestination(
+      root,
+      registry,
+      artifact,
+      quarantinePath,
+      restorePath,
+    );
+  }
+  try {
+    if (promotedRestore) {
+      const snapshot = await slReadOwnedArtifactMarkdown(
+        root,
+        artifact,
+        artifact.artifactType,
+        "promoted",
+      );
+      snapshot.frontmatter.status = restoredStatus;
+      rollback = await slRewriteAndMovePromotionToProbation(
+        root,
+        registry,
+        artifact,
+        quarantinePath,
+        restorePath,
+        snapshot.content,
+        slStringifyMarkdown(snapshot.frontmatter, snapshot.body),
+        dryRun,
+        changes,
+      );
+    } else {
+      await slSetFileStatus(root, artifact, restoredStatus, dryRun, changes);
+      await slMove(
+        root,
+        quarantinePath,
+        restorePath,
+        dryRun,
+        changes,
+      );
+    }
+    artifact.path = restorePath;
+    artifact.status = restoredStatus;
+    if (promotedRestore && promotionTargetPath) {
+      artifact.promotionTargetPath = promotionTargetPath;
+      delete artifact.promotionEvaluation;
+      delete artifact.activatedAt;
+      delete artifact.originalPath;
+    }
+    delete artifact.previousStatus;
+    delete artifact.quarantinedAt;
+    delete artifact.deleteEligibleAt;
+    delete artifact.forgetReason;
+    events.push({
+      schemaVersion: 1,
+      timestamp: now.toISOString(),
+      artifactId: artifact.id,
+      action: "restored",
+      fromStatus: "quarantined",
+      toStatus: restoredStatus,
+      fromPath: quarantinePath,
+      toPath: artifact.path,
+    });
+    await slSaveRegistry(root, registry, dryRun, changes);
+    registrySaved = !dryRun;
+    await slWriteIndex(root, registry, dryRun, changes);
+    await slAppendEvents(root, events, dryRun);
+    return { changes, events };
+  } catch (error) {
+    if (!dryRun && rollback) {
+      await rollback().catch(() => undefined);
+      if (registrySaved) {
+        await slSaveRegistry(root, originalRegistry, false, []).catch(
+          () => undefined,
+        );
+        await slWriteIndex(root, originalRegistry, false, []).catch(
+          () => undefined,
+        );
+      }
+    }
+    throw error;
+  }
 }
 
 export async function slSweep(
@@ -283,10 +389,25 @@ export async function slSweep(
   dryRun: boolean,
   now = new Date(),
 ): Promise<SLSweepResult> {
+  return slWithRepositoryMutationLock(root, () =>
+    slSweepUnlocked(root, dryRun, now),
+    { dryRun },
+  );
+}
+
+async function slSweepUnlocked(
+  root: string,
+  dryRun: boolean,
+  now: Date,
+): Promise<SLSweepResult> {
   await slAssertEventPathSafe(root);
   const config = await slLoadConfig(root);
-  const registry = await slLoadRegistry(root);
   const changes: SLChange[] = [];
+  const registry = await slSynchronizeUsageProjectionUnlocked(
+    root,
+    dryRun,
+    changes,
+  );
   const events: SLEvent[] = [];
 
   for (const artifact of registry.artifacts) {
@@ -343,12 +464,12 @@ export async function slSweep(
     }
 
     const activityTimestamp =
+      artifact.usageProjection?.lastVerifiedSuccessAt ??
       artifact.lastSuccessfulUseAt ??
       artifact.lastVerifiedAt ??
       artifact.createdAt;
     const activityAge = slAgeDays(now, activityTimestamp);
-    const isPromoted =
-      artifact.classification === "promoted" || artifact.status === "promoted";
+    const isPromoted = artifact.classification === "promoted";
 
     if (artifact.status === "stale") {
       const staleAge = artifact.staleAt

@@ -1,6 +1,6 @@
 {
   "name": "sl-repo",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Repository-local capture, promotion, validation, and forgetting for GitHub Copilot agents",
   "author": {
     "name": "Fabrizio Fishkel"

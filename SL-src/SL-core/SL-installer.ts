@@ -7,6 +7,7 @@ import {
   SL_PATHS,
 } from "./SL-constants.js";
 import { slFindPackageRoot } from "./SL-package.js";
+import { slWithRepositoryMutationLock } from "./SL-mutation-lock.js";
 import {
   slLoadRegistry,
   slSaveRegistry,
@@ -49,6 +50,17 @@ export async function slInstall(
   if (!(await slExists(resolve(root, ".git")))) {
     throw new Error(`Target is not a Git repository: ${root}`);
   }
+  return slWithRepositoryMutationLock(root, () =>
+    slInstallUnlocked(root, mode, dryRun),
+    { dryRun },
+  );
+}
+
+async function slInstallUnlocked(
+  root: string,
+  mode: "init" | "update",
+  dryRun: boolean,
+): Promise<SLChange[]> {
   const packageRoot = await slFindPackageRoot(import.meta.url);
   const templateRoot = resolve(packageRoot, "SL-templates/SL-repository");
   const templateFiles = await fg("**/*", {
@@ -117,7 +129,7 @@ export async function slInstall(
       templatePath === "SL-copilot-block.md" ||
       templatePath === SL_PATHS.registry ||
       templatePath === SL_PATHS.index ||
-      templatePath === SL_PATHS.events ||
+      templatePath === SL_PATHS.legacyEvents ||
       templatePath === SL_PATHS.config
     ) {
       continue;

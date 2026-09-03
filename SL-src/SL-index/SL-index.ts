@@ -1,4 +1,8 @@
 import { SL_ACTIVE_STATUSES, SL_PATHS } from "../SL-core/SL-constants.js";
+import {
+  slIsActivePromotionStatus,
+  slPromotionEvaluationIsCurrent,
+} from "../SL-core/SL-promotion-lifecycle.js";
 import type { SLChange, SLIndex, SLRegistry } from "../SL-core/SL-types.js";
 import { slExists, slResolveInside, slWriteJson } from "../SL-core/SL-utils.js";
 
@@ -18,18 +22,25 @@ export async function slBuildIndex(
     if (!(await slExists(slResolveInside(root, artifact.path)))) {
       continue;
     }
+    if (artifact.classification === "promoted") {
+      if (!slIsActivePromotionStatus(artifact.status)) {
+        continue;
+      }
+      if (
+        artifact.status === "active" &&
+        !(await slPromotionEvaluationIsCurrent(root, artifact))
+      ) {
+        continue;
+      }
+    }
     artifacts.push({
       id: artifact.id,
       path: artifact.path,
       artifactType: artifact.artifactType,
       status: artifact.status,
       ...(artifact.trigger ? { trigger: [...artifact.trigger].sort() } : {}),
-      ...(artifact.hits !== undefined ? { hits: artifact.hits } : {}),
-      ...(artifact.retrievals !== undefined
-        ? { retrievals: artifact.retrievals }
-        : {}),
-      ...(artifact.notUsefulVotes !== undefined
-        ? { notUsefulVotes: artifact.notUsefulVotes }
+      ...(artifact.usageProjection
+        ? { usageProjection: artifact.usageProjection }
         : {}),
       relatedTo: [...artifact.relatedTo].sort(),
       ...(artifact.dependsOn

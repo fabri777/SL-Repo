@@ -14,10 +14,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          registry-url: https://npm.pkg.github.com
-      - run: npm exec --yes --package=@fabri777/sl-repo@0.1.0 -- sl-repo validate .
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Check out SL Repo runtime
+        uses: actions/checkout@v4
+        with:
+          repository: fabri777/SL-Repo
+          ref: 29dcce4836ccbae45b4c1b5bc2cd9b0dfe4b3098
+          token: ${{ secrets.SL_REPO_TOKEN }}
+          path: .SL-tool
+          persist-credentials: false
+      - name: Build SL Repo runtime
+        run: |
+          npm ci --prefix .SL-tool
+          npm run build --prefix .SL-tool
+      - name: Validate contracts, events, projections, and index
+        run: node .SL-tool/dist/SL-src/SL-cli/SL-cli.js validate .

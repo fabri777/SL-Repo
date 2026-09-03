@@ -8,8 +8,11 @@ export const SL_PATHS = {
   config: ".github/SL-learning/SL-config.yml",
   registry: ".github/SL-learning/SL-registry.json",
   index: ".github/SL-learning/SL-index.json",
-  events: ".github/SL-learning/SL-events.jsonl",
+  legacyEvents: ".github/SL-learning/SL-events.jsonl",
+  lifecycleEvents: ".github/SL-learning/SL-lifecycle-events",
+  usageEvents: ".github/SL-learning/SL-usage-events",
   lessons: ".github/SL-learning/SL-lessons",
+  probation: ".github/SL-learning/SL-probation",
   quarantine: ".github/SL-learning/SL-quarantine",
   copilotInstructions: ".github/copilot-instructions.md",
 } as const;
@@ -33,6 +36,11 @@ export const SL_ACTIVE_STATUSES = new Set([
   "distilled",
   "promotion-candidate",
   "promoted",
+]);
+
+export const SL_REFERENCE_PROTECTING_STATUSES = new Set([
+  ...SL_ACTIVE_STATUSES,
+  "probation",
 ]);
 
 export const SL_SECRET_PATTERNS: Array<{ code: string; pattern: RegExp }> = [

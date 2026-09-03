@@ -1,19 +1,30 @@
+import { randomUUID } from "node:crypto";
 import { SL_ACTIVE_STATUSES } from "./SL-constants.js";
-import { slParseMarkdown, slStringifyMarkdown } from "./SL-frontmatter.js";
+import { slWithRepositoryMutationLock } from "./SL-mutation-lock.js";
 import {
-  slAppendEvents,
-  slAssertEventPathSafe,
   slFindArtifact,
   slLoadRegistry,
-  slSaveRegistry,
 } from "./SL-registry.js";
-import type { SLChange, SLEvent } from "./SL-types.js";
+import type { SLChange } from "./SL-types.js";
 import {
-  slReadText,
-  slResolveInside,
-  slWriteText,
-} from "./SL-utils.js";
-import { slWriteIndex } from "../SL-index/SL-index.js";
+  slArtifactUsageContentHash,
+  slArtifactVersion,
+  slAssertVoteApplicationMutation,
+  slCreateUsageEvent,
+  slLoadUsageOwnershipSnapshots,
+  slLoadUsageEvents,
+  slReadOwnedArtifactMarkdown,
+  slSynchronizeUsageProjectionUnlocked,
+  slWriteUsageOperationEvent,
+} from "./SL-usage.js";
+
+export interface SLVoteContext {
+  taskRunId?: string;
+  applicationId?: string;
+  idempotencyKey?: string;
+  verifierType?: string;
+  evidenceRef?: string;
+}
 
 export async function slVoteOnLesson(
   root: string,
@@ -21,8 +32,22 @@ export async function slVoteOnLesson(
   vote: "useful" | "not-useful",
   dryRun: boolean,
   now = new Date(),
+  context: SLVoteContext = {},
 ): Promise<SLChange[]> {
-  await slAssertEventPathSafe(root);
+  return slWithRepositoryMutationLock(root, () =>
+    slVoteOnLessonUnlocked(root, id, vote, dryRun, now, context),
+    { dryRun },
+  );
+}
+
+async function slVoteOnLessonUnlocked(
+  root: string,
+  id: string,
+  vote: "useful" | "not-useful",
+  dryRun: boolean,
+  now: Date,
+  context: SLVoteContext,
+): Promise<SLChange[]> {
   const registry = await slLoadRegistry(root);
   const artifact = slFindArtifact(registry, id);
   if (
@@ -35,61 +60,56 @@ export async function slVoteOnLesson(
     throw new Error("Only active lesson evidence can receive reuse votes.");
   }
 
-  const markdown = slParseMarkdown<Record<string, unknown>>(
-    await slReadText(slResolveInside(root, artifact.path)),
+  const snapshot = await slReadOwnedArtifactMarkdown(
+    root,
+    artifact,
+    "lesson",
+    "evidence",
   );
-  if (
-    markdown.frontmatter.id !== id ||
-    markdown.frontmatter.managedBy !== "SL-Repo"
-  ) {
-    throw new Error(`Lesson ${id} file ownership does not match the registry.`);
-  }
 
   const timestamp = now.toISOString();
-  const retrievals = (artifact.retrievals ?? 0) + 1;
-  artifact.retrievals = retrievals;
-  artifact.lastRetrievedAt = timestamp;
-  markdown.frontmatter.retrievals = retrievals;
-  markdown.frontmatter.lastRetrievedAt = timestamp;
-
-  if (vote === "useful") {
-    const hits = (artifact.hits ?? 0) + 1;
-    artifact.hits = hits;
-    artifact.lastSuccessfulUseAt = timestamp;
-    artifact.lastVerifiedAt = timestamp;
-    markdown.frontmatter.hits = hits;
-    markdown.frontmatter.lastSuccessfulUseAt = timestamp;
-    markdown.frontmatter.lastVerifiedAt = timestamp.slice(0, 10);
-    if (artifact.status !== "promoted") {
-      artifact.status =
-        hits >= 3 ? "promotion-candidate" : hits >= 2 ? "distilled" : "raw";
-      markdown.frontmatter.status = artifact.status;
-    }
-  } else {
-    const notUsefulVotes = (artifact.notUsefulVotes ?? 0) + 1;
-    artifact.notUsefulVotes = notUsefulVotes;
-    markdown.frontmatter.notUsefulVotes = notUsefulVotes;
-  }
-
+  const artifactContentHash = slArtifactUsageContentHash(
+    snapshot.content,
+  );
+  const artifactVersion = slArtifactVersion(artifactContentHash);
+  const applicationId = context.applicationId ?? `vote-${randomUUID()}`;
+  const taskRunId = context.taskRunId ?? applicationId;
+  const usageEvent = slCreateUsageEvent({
+    artifactId: id,
+    artifactContentHash,
+    taskRunId,
+    applicationId,
+    stage: "verified",
+    outcome: vote === "useful" ? "success" : "failure",
+    verifierType: context.verifierType ?? "lesson-vote",
+    timestamp,
+    idempotencyKey:
+      context.idempotencyKey ??
+      `lesson-vote:${id}:${artifactVersion}:${applicationId}`,
+    ...(context.evidenceRef ? { evidenceRef: context.evidenceRef } : {}),
+  });
+  const existingUsageEvents = await slLoadUsageEvents(root);
+  slAssertVoteApplicationMutation(existingUsageEvents, usageEvent);
+  const projectedEvents = existingUsageEvents.some(
+    (event) => event.eventId === usageEvent.eventId,
+  )
+    ? existingUsageEvents
+    : [...existingUsageEvents, usageEvent];
+  await slLoadUsageOwnershipSnapshots(root, registry, projectedEvents);
   const changes: SLChange[] = [];
-  await slWriteText(
+  changes.push(
+    await slWriteUsageOperationEvent(
+      root,
+      usageEvent,
+      existingUsageEvents,
+      dryRun,
+    ),
+  );
+  await slSynchronizeUsageProjectionUnlocked(
     root,
-    artifact.path,
-    slStringifyMarkdown(markdown.frontmatter, markdown.body),
     dryRun,
     changes,
+    projectedEvents,
   );
-  await slSaveRegistry(root, registry, dryRun, changes);
-  await slWriteIndex(root, registry, dryRun, changes);
-  const event: SLEvent = {
-    schemaVersion: 1,
-    timestamp,
-    artifactId: id,
-    action: "voted",
-    reason: vote,
-    toStatus: artifact.status,
-    toPath: artifact.path,
-  };
-  await slAppendEvents(root, [event], dryRun);
   return changes;
 }
