@@ -39,12 +39,12 @@ knowledge remains ordinary Git content.
 Authenticate GitHub as `fabri777`, then run:
 
 ```powershell
-npm exec --yes --package=github:fabri777/SL-Repo#29dcce4836ccbae45b4c1b5bc2cd9b0dfe4b3098 -c "sl-repo init C:\path\to\target"
+npm exec --yes --package=github:fabri777/SL-Repo#00610f1e8b9c857be0623cda4a89352240ae12cd -c "sl-repo init C:\path\to\target"
 ```
 
 The generated workflows do not depend on an unpublished package. They check
 out the reviewed source snapshot
-`29dcce4836ccbae45b4c1b5bc2cd9b0dfe4b3098` into `.SL-tool`, build it, and
+`00610f1e8b9c857be0623cda4a89352240ae12cd` into `.SL-tool`, build it, and
 invoke the built CLI. The full commit SHA is immutable; the workflows must
 never use `main`, another branch, or a moving tag for runtime acquisition.
 Because the source repository is private, configure a repository secret named

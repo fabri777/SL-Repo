@@ -23,7 +23,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: fabri777/SL-Repo
-          ref: 29dcce4836ccbae45b4c1b5bc2cd9b0dfe4b3098
+          ref: 00610f1e8b9c857be0623cda4a89352240ae12cd
           token: ${{ secrets.SL_REPO_TOKEN }}
           path: .SL-tool
           persist-credentials: false
