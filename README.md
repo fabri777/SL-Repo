@@ -59,7 +59,7 @@ npm link
 An authenticated Git installation can also invoke the package directly:
 
 ```powershell
-npm exec --yes --package=github:fabri777/SL-Repo#00610f1e8b9c857be0623cda4a89352240ae12cd -c "sl-repo --help"
+npm exec --yes --package=github:fabri777/SL-Repo#31db40599b54df8b491d65d99a12ed6449a98ee6 -c "sl-repo --help"
 ```
 
 ## Install into a repository

@@ -42,7 +42,7 @@ import {
 
 const repositories: string[] = [];
 const CAPTURED_AT = new Date("2026-01-01T00:00:00.000Z");
-const SL_RUNTIME_COMMIT = "00610f1e8b9c857be0623cda4a89352240ae12cd";
+const SL_RUNTIME_COMMIT = "31db40599b54df8b491d65d99a12ed6449a98ee6";
 const CHECKOUT_ACTION =
   "actions/checkout@11d5960a326750d5838078e36cf38b85af677262";
 const SETUP_NODE_ACTION =
