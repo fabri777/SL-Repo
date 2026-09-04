@@ -242,9 +242,11 @@ describe("SL plugin package", () => {
     ]);
   });
 
-  test("pins every action in source and consumer retention workflows", async () => {
+  test("pins every action in source and consumer workflows", async () => {
     const workflowPaths = [
+      ".github/workflows/SL-ci.yml",
       ".github/workflows/SL-forget.yml",
+      "SL-templates/SL-repository/.github/workflows/SL-learning-validation.yml",
       "SL-templates/SL-repository/.github/workflows/SL-learning-forget.yml",
     ];
 

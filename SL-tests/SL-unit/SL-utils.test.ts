@@ -13,7 +13,7 @@ describe("SL utilities", () => {
   });
 
   test("rejects paths outside the repository", () => {
-    expect(() => slResolveInside("C:\\repo", "..\\secret.txt")).toThrow(
+    expect(() => slResolveInside("repository", "../secret.txt")).toThrow(
       "Path escapes repository root",
     );
   });

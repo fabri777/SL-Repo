@@ -721,7 +721,7 @@ describe("SL telemetry integration", () => {
         .map((step) => [step.name!, step]),
     );
     const validationCheckouts = validation.jobs.validate.steps.filter(
-      (step) => step.uses === "actions/checkout@v4",
+      (step) => step.uses === CHECKOUT_ACTION,
     );
     const planningCheckouts = forgetting.jobs.plan.steps.filter(
       (step) => step.uses?.startsWith("actions/checkout@"),
@@ -749,7 +749,7 @@ describe("SL telemetry integration", () => {
     }
     expect(validationSteps.get("Check out SL Repo runtime")).toEqual({
       name: "Check out SL Repo runtime",
-      uses: "actions/checkout@v4",
+      uses: CHECKOUT_ACTION,
       with: {
         repository: "fabri777/SL-Repo",
         ref: SL_RUNTIME_COMMIT,

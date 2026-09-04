@@ -1,4 +1,6 @@
-import { basename } from "node:path";
+import { randomUUID } from "node:crypto";
+import { mkdir, open, readFile, rename, rm } from "node:fs/promises";
+import { basename, dirname } from "node:path";
 import {
   SL_PATHS,
   SL_REFERENCE_PROTECTING_STATUSES,
@@ -7,10 +9,11 @@ import { slLoadConfig } from "../SL-core/SL-config.js";
 import { slParseMarkdown, slStringifyMarkdown } from "../SL-core/SL-frontmatter.js";
 import { slWithRepositoryMutationLock } from "../SL-core/SL-mutation-lock.js";
 import {
-  slPreflightPromotedProbationDestination,
   slPromotedProbationPath,
+  slRewriteAndMoveEvidenceFromQuarantine,
   slRewriteAndMovePromotionToProbation,
 } from "../SL-core/SL-promotion-path.js";
+import type { SLArtifactTransferHooks } from "../SL-core/SL-promotion-path.js";
 import {
   slAppendEvents,
   slAssertEventPathSafe,
@@ -29,6 +32,7 @@ import type {
 import {
   slAddDays,
   slAgeDays,
+  slAssertRealPathInside,
   slDelete,
   slExists,
   slMove,
@@ -41,6 +45,50 @@ import {
   slSynchronizeUsageProjectionUnlocked,
 } from "../SL-core/SL-usage.js";
 import { slWriteIndex } from "../SL-index/SL-index.js";
+
+type SLIndexSnapshot =
+  | { exists: false }
+  | { exists: true; content: Buffer };
+
+async function slSnapshotIndex(root: string): Promise<SLIndexSnapshot> {
+  await slAssertRealPathInside(root, SL_PATHS.index);
+  const indexPath = slResolveInside(root, SL_PATHS.index);
+  if (!(await slExists(indexPath))) {
+    return { exists: false };
+  }
+  return { exists: true, content: await readFile(indexPath) };
+}
+
+async function slRestoreIndexSnapshot(
+  root: string,
+  snapshot: SLIndexSnapshot,
+): Promise<void> {
+  await slAssertRealPathInside(root, SL_PATHS.index);
+  const indexPath = slResolveInside(root, SL_PATHS.index);
+  if (!snapshot.exists) {
+    if (await slExists(indexPath)) {
+      await rm(indexPath);
+    }
+    return;
+  }
+
+  await mkdir(dirname(indexPath), { recursive: true });
+  const temporaryPath = `${indexPath}.SL-tmp-${randomUUID()}`;
+  let handle: Awaited<ReturnType<typeof open>> | undefined;
+  try {
+    handle = await open(temporaryPath, "wx");
+    await handle.writeFile(snapshot.content);
+    await handle.close();
+    handle = undefined;
+    await rename(temporaryPath, indexPath);
+  } catch (error) {
+    if (handle) {
+      await handle.close().catch(() => undefined);
+    }
+    await rm(temporaryPath, { force: true }).catch(() => undefined);
+    throw error;
+  }
+}
 
 function slHasActiveIncomingReference(
   registry: SLRegistry,
@@ -258,9 +306,10 @@ export async function slRestoreArtifact(
   id: string,
   dryRun: boolean,
   now = new Date(),
+  transferHooks: SLArtifactTransferHooks = {},
 ): Promise<SLSweepResult> {
   return slWithRepositoryMutationLock(root, () =>
-    slRestoreArtifactUnlocked(root, id, dryRun, now),
+    slRestoreArtifactUnlocked(root, id, dryRun, now, transferHooks),
     { dryRun },
   );
 }
@@ -270,6 +319,7 @@ async function slRestoreArtifactUnlocked(
   id: string,
   dryRun: boolean,
   now: Date,
+  transferHooks: SLArtifactTransferHooks,
 ): Promise<SLSweepResult> {
   await slAssertEventPathSafe(root);
   const registry = await slLoadRegistry(root);
@@ -300,26 +350,20 @@ async function slRestoreArtifactUnlocked(
     ? "probation"
     : artifact.previousStatus ?? "raw";
   const originalRegistry = structuredClone(registry);
+  const indexSnapshot = dryRun ? undefined : await slSnapshotIndex(root);
   let rollback: (() => Promise<void>) | undefined;
   let registrySaved = false;
-  if (promotedRestore) {
-    await slPreflightPromotedProbationDestination(
-      root,
-      registry,
-      artifact,
-      quarantinePath,
-      restorePath,
-    );
-  }
   try {
+    const snapshot = promotedRestore
+      ? await slReadOwnedArtifactMarkdown(
+          root,
+          artifact,
+          artifact.artifactType,
+          "promoted",
+        )
+      : await slReadOwnedArtifactMarkdown(root, artifact, undefined, "evidence");
+    snapshot.frontmatter.status = restoredStatus;
     if (promotedRestore) {
-      const snapshot = await slReadOwnedArtifactMarkdown(
-        root,
-        artifact,
-        artifact.artifactType,
-        "promoted",
-      );
-      snapshot.frontmatter.status = restoredStatus;
       rollback = await slRewriteAndMovePromotionToProbation(
         root,
         registry,
@@ -330,15 +374,20 @@ async function slRestoreArtifactUnlocked(
         slStringifyMarkdown(snapshot.frontmatter, snapshot.body),
         dryRun,
         changes,
+        transferHooks,
       );
     } else {
-      await slSetFileStatus(root, artifact, restoredStatus, dryRun, changes);
-      await slMove(
+      rollback = await slRewriteAndMoveEvidenceFromQuarantine(
         root,
+        registry,
+        artifact,
         quarantinePath,
         restorePath,
+        snapshot.content,
+        slStringifyMarkdown(snapshot.frontmatter, snapshot.body),
         dryRun,
         changes,
+        transferHooks,
       );
     }
     artifact.path = restorePath;
@@ -369,14 +418,33 @@ async function slRestoreArtifactUnlocked(
     await slAppendEvents(root, events, dryRun);
     return { changes, events };
   } catch (error) {
-    if (!dryRun && rollback) {
-      await rollback().catch(() => undefined);
+    if (!dryRun) {
+      const rollbackErrors: unknown[] = [];
+      if (rollback) {
+        try {
+          await rollback();
+        } catch (rollbackError) {
+          rollbackErrors.push(rollbackError);
+        }
+      }
       if (registrySaved) {
-        await slSaveRegistry(root, originalRegistry, false, []).catch(
-          () => undefined,
-        );
-        await slWriteIndex(root, originalRegistry, false, []).catch(
-          () => undefined,
+        try {
+          await slSaveRegistry(root, originalRegistry, false, []);
+        } catch (rollbackError) {
+          rollbackErrors.push(rollbackError);
+        }
+        if (indexSnapshot) {
+          try {
+            await slRestoreIndexSnapshot(root, indexSnapshot);
+          } catch (rollbackError) {
+            rollbackErrors.push(rollbackError);
+          }
+        }
+      }
+      if (rollbackErrors.length > 0) {
+        throw new AggregateError(
+          [error, ...rollbackErrors],
+          "Artifact restore failed and rollback could not complete.",
         );
       }
     }
