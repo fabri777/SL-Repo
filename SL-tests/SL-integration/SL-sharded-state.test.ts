@@ -37,6 +37,7 @@ import {
   slWriteUsageEvent,
 } from "../../SL-src/SL-core/SL-usage.js";
 import { slValidateRepository } from "../../SL-src/SL-validation/SL-validation.js";
+import { slSweep } from "../../SL-src/SL-forgetting/SL-forgetting.js";
 import {
   slCreateTestRepository,
   slRemoveTestRepository,
@@ -75,6 +76,142 @@ describe("SL scope-sharded state", () => {
       SERVICE_B,
       SERVICE_A,
     ]);
+  });
+
+  test.each([
+    {
+      name: "within one shard",
+      mode: "within" as const,
+      message: "within registry shard",
+    },
+    {
+      name: "across shards",
+      mode: "across" as const,
+      message: "across registry shards",
+    },
+  ])("rejects duplicate artifact IDs $name while reading", async ({ mode, message }) => {
+    const root = await slCreateTestRepository();
+    repositories.push(root);
+    await slInstall(root, "init", false);
+    const orders = await slCaptureLesson(root, {
+      title: "Duplicate orders artifact",
+      kind: "win",
+      scope: "orders",
+      stateScope: SERVICE_A,
+      triggers: ["duplicate orders"],
+      dryRun: false,
+      now: FIXED_NOW,
+    });
+    await slCaptureLesson(root, {
+      title: "Duplicate billing artifact",
+      kind: "win",
+      scope: "billing",
+      stateScope: SERVICE_B,
+      triggers: ["duplicate billing"],
+      dryRun: false,
+      now: FIXED_NOW,
+    });
+    const ordersPath = repositoryPath(
+      root,
+      slScopeCatalogEntry(SERVICE_A).registryPath,
+    );
+    const billingPath = repositoryPath(
+      root,
+      slScopeCatalogEntry(SERVICE_B).registryPath,
+    );
+    const ordersShard = JSON.parse(
+      await readFile(ordersPath, "utf8"),
+    );
+    const targetPath = mode === "within" ? ordersPath : billingPath;
+    const targetShard = JSON.parse(
+      await readFile(targetPath, "utf8"),
+    );
+    targetShard.artifacts.push(
+      structuredClone(
+        ordersShard.artifacts.find(
+          (artifact: { id: string }) => artifact.id === orders.id,
+        ),
+      ),
+    );
+    await writeFile(
+      targetPath,
+      `${JSON.stringify(targetShard, null, 2)}\n`,
+      "utf8",
+    );
+
+    await expect(slLoadRegistry(root)).rejects.toThrow(message);
+  });
+
+  test("accepts an identity-equivalent legacy registry overlay", async () => {
+    const root = await slCreateTestRepository();
+    repositories.push(root);
+    await slInstall(root, "init", false);
+    const lesson = await slCaptureLesson(root, {
+      title: "Equivalent legacy overlay",
+      kind: "win",
+      scope: "legacy",
+      triggers: ["equivalent overlay"],
+      dryRun: false,
+      now: FIXED_NOW,
+    });
+    const artifact = (await slLoadRegistry(root)).artifacts.find(
+      (candidate) => candidate.id === lesson.id,
+    )!;
+    const legacyArtifact = structuredClone(artifact);
+    delete legacyArtifact.scope;
+    legacyArtifact.status = "stale";
+    legacyArtifact.staleAt = "2026-09-04T09:00:00.000Z";
+    await writeFile(
+      repositoryPath(root, ".github/SL-learning/SL-registry.json"),
+      `${JSON.stringify(
+        { schemaVersion: 1, artifacts: [legacyArtifact] },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+
+    expect(
+      (await slLoadRegistry(root)).artifacts.find(
+        (candidate) => candidate.id === lesson.id,
+      ),
+    ).toMatchObject({
+      status: "raw",
+      scope: { id: "SL-SCOPE-ROOT", path: "." },
+    });
+  });
+
+  test("rejects a conflicting legacy registry overlay", async () => {
+    const root = await slCreateTestRepository();
+    repositories.push(root);
+    await slInstall(root, "init", false);
+    const lesson = await slCaptureLesson(root, {
+      title: "Conflicting legacy overlay",
+      kind: "win",
+      scope: "legacy",
+      triggers: ["conflicting overlay"],
+      dryRun: false,
+      now: FIXED_NOW,
+    });
+    const artifact = (await slLoadRegistry(root)).artifacts.find(
+      (candidate) => candidate.id === lesson.id,
+    )!;
+    const legacyArtifact = structuredClone(artifact);
+    delete legacyArtifact.scope;
+    legacyArtifact.artifactType = "skill";
+    await writeFile(
+      repositoryPath(root, ".github/SL-learning/SL-registry.json"),
+      `${JSON.stringify(
+        { schemaVersion: 1, artifacts: [legacyArtifact] },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+
+    await expect(slLoadRegistry(root)).rejects.toThrow(
+      `Conflicting legacy registry/shard overlay for artifact ${lesson.id}.`,
+    );
   });
 
   test("updates one service shard without rewriting another service or the root catalog", async () => {
@@ -275,6 +412,92 @@ describe("SL scope-sharded state", () => {
       successRate: null,
       successRateReason: "rates-are-reported-per-scope",
     });
+  });
+
+  test("uses cross-scope verified success only for current-version lifecycle freshness", async () => {
+    const root = await slCreateTestRepository();
+    repositories.push(root);
+    await slInstall(root, "init", false);
+    const lesson = await slCaptureLesson(root, {
+      title: "Cross-scope lifecycle freshness",
+      kind: "win",
+      scope: "orders",
+      stateScope: SERVICE_A,
+      triggers: ["cross-scope freshness"],
+      dryRun: false,
+      now: FIXED_NOW,
+    });
+    const content = await readFile(
+      repositoryPath(root, lesson.path),
+      "utf8",
+    );
+    const artifactContentHash = slArtifactUsageContentHash(content);
+    const owningScopeFailure = slCreateUsageEvent({
+      artifactId: lesson.id,
+      artifactContentHash,
+      taskRunId: "owning-scope-task",
+      applicationId: "owning-scope-application",
+      stage: "verified",
+      outcome: "failure",
+      verifierType: "test-suite",
+      timestamp: "2026-09-04T09:00:00.000Z",
+      idempotencyKey: "owning-scope-failure",
+      scope: SERVICE_A,
+    });
+    const owningScopeSuccess = slCreateUsageEvent({
+      artifactId: lesson.id,
+      artifactContentHash,
+      taskRunId: "owning-scope-success-task",
+      applicationId: "owning-scope-success-application",
+      stage: "verified",
+      outcome: "success",
+      verifierType: "test-suite",
+      timestamp: "2026-09-04T09:30:00.000Z",
+      idempotencyKey: "owning-scope-success",
+      scope: SERVICE_A,
+    });
+    const consumingScopeSuccess = slCreateUsageEvent({
+      artifactId: lesson.id,
+      artifactContentHash,
+      taskRunId: "consuming-scope-task",
+      applicationId: "consuming-scope-application",
+      stage: "verified",
+      outcome: "success",
+      verifierType: "test-suite",
+      timestamp: "2027-08-15T10:00:00.000Z",
+      idempotencyKey: "consuming-scope-success",
+      scope: SERVICE_B,
+    });
+    await slWriteUsageEvent(root, owningScopeFailure, false);
+    await slWriteUsageEvent(root, owningScopeSuccess, false);
+    await slWriteUsageEvent(root, consumingScopeSuccess, false);
+
+    await slSynchronizeUsageProjection(root, false);
+    await slSweep(root, false, new Date("2027-09-01T00:00:00.000Z"));
+
+    const artifact = (await slLoadRegistry(root)).artifacts.find(
+      (candidate) => candidate.id === lesson.id,
+    );
+    expect(artifact).toMatchObject({
+      status: "raw",
+      lastSuccessfulUseAt: "2027-08-15T10:00:00.000Z",
+      usageProjection: {
+        scope: SERVICE_A,
+        verifiedSuccessCount: 1,
+        verifiedFailureCount: 1,
+        verifiedSuccessRate: 0.5,
+      },
+    });
+    expect(await slProjectUsage(root, lesson.id)).toEqual([
+      expect.objectContaining({
+        scope: SERVICE_B,
+        verifiedSuccessRate: 1,
+      }),
+      expect.objectContaining({
+        scope: SERVICE_A,
+        verifiedSuccessRate: 0.5,
+      }),
+    ]);
   });
 
   test("tracks the current artifact version separately from older scope metrics", async () => {

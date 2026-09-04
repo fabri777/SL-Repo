@@ -1,6 +1,6 @@
 {
   "name": "@fabri777/sl-repo",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": false,
   "description": "Repository-local self-learning lifecycle for GitHub Copilot agents",
   "type": "module",
@@ -14,6 +14,7 @@
     "SL-templates",
     "SL-plugin",
     "SL-tests",
+    "CHANGELOG.md",
     "README.md",
     "SECURITY.md"
   ],

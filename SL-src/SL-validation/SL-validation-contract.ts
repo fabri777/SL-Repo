@@ -16,6 +16,7 @@ import type {
 } from "../SL-core/SL-types.js";
 import {
   slAssertRealPathInside,
+  slCompareOrdinal,
   slExists,
   slNormalizePath,
   slReadContainedText,
@@ -193,9 +194,11 @@ async function slContractValidator(): Promise<
 }
 
 function slSameStrings(left: string[], right: string[]): boolean {
+  const sortedLeft = [...left].sort(slCompareOrdinal);
+  const sortedRight = [...right].sort(slCompareOrdinal);
   return (
     left.length === right.length &&
-    [...left].sort().every((value, index) => value === [...right].sort()[index])
+    sortedLeft.every((value, index) => value === sortedRight[index])
   );
 }
 
@@ -238,7 +241,7 @@ function slCanonicalJson(value: SLJsonValue | string | number | boolean): string
   }
   if (value !== null && typeof value === "object") {
     return `{${Object.entries(value)
-      .sort(([left], [right]) => left.localeCompare(right))
+      .sort(([left], [right]) => slCompareOrdinal(left, right))
       .map(
         ([key, entry]) =>
           `${JSON.stringify(key)}:${slCanonicalJson(entry)}`,
@@ -372,7 +375,7 @@ export function slFindValidationContractConflicts(
 ): SLContractConflict[] {
   const conflicts: SLContractConflict[] = [];
   const ordered = [...contracts].sort((left, right) =>
-    left.artifactId.localeCompare(right.artifactId),
+    slCompareOrdinal(left.artifactId, right.artifactId),
   );
   for (let leftIndex = 0; leftIndex < ordered.length; leftIndex += 1) {
     const left = ordered[leftIndex];

@@ -20,6 +20,7 @@ import type {
   SLScopeResolution,
 } from "./SL-types.js";
 import {
+  slCompareOrdinal,
   slExists,
   slReadContainedText,
   slResolveInside,
@@ -123,6 +124,7 @@ export async function slRetrieveArtifacts(
   }
 
   const scopedGuidance: SLScopedGuidance[] = [];
+  const governedContracts: SLActiveValidationContract[] = [];
   const legacyContracts: SLActiveValidationContract[] = [];
   for (const { artifact } of selected) {
     const artifactPath = artifact.path;
@@ -145,6 +147,10 @@ export async function slRetrieveArtifacts(
     const governedScope =
       artifact.promotionEvaluation?.governance?.targetScope;
     if (governedScope) {
+      governedContracts.push({
+        artifactId: artifact.id,
+        contract: evaluation.contract,
+      });
       scopedGuidance.push({
         artifactId: artifact.id,
         scope: governedScope,
@@ -164,6 +170,18 @@ export async function slRetrieveArtifacts(
   ) {
     throw new Error(
       "Unresolved active guidance conflict exists at retrieval time.",
+    );
+  }
+  const legacyGovernedConflicts = legacyContracts.flatMap((legacy) =>
+    governedContracts.flatMap((governed) =>
+      slFindValidationContractConflicts([legacy, governed]),
+    ),
+  );
+  if (legacyGovernedConflicts.length > 0) {
+    throw new Error(
+      `Unresolved legacy/governed retrieval conflict: ${legacyGovernedConflicts
+        .map((conflict) => conflict.message)
+        .join("; ")}`,
     );
   }
   if (scopedGuidance.length > 1) {
@@ -203,12 +221,14 @@ export async function slRetrieveArtifacts(
         ...(artifact.dependsOn ?? []),
         ...(artifact.relatedTo ?? []),
       ].filter((value, index, values) => values.indexOf(value) === index),
-      ...(artifact.trigger ? { trigger: [...artifact.trigger].sort() } : {}),
+      ...(artifact.trigger
+        ? { trigger: [...artifact.trigger].sort(slCompareOrdinal) }
+        : {}),
     }))
     .sort(
       (left, right) =>
         left.precedence - right.precedence ||
-        left.id.localeCompare(right.id),
+        slCompareOrdinal(left.id, right.id),
     );
   return {
     path: resolution.normalizedPath,

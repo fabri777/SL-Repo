@@ -1,6 +1,8 @@
 import { describe, expect, test } from "vitest";
 import {
   slAgeDays,
+  slCanonicalJson,
+  slCompareOrdinal,
   slResolveInside,
   slSlugify,
 } from "../../SL-src/SL-core/SL-utils.js";
@@ -25,5 +27,22 @@ describe("SL utilities", () => {
         "2026-01-01T00:00:00.000Z",
       ),
     ).toBe(91);
+  });
+
+  test("orders Unicode strings by locale-independent UTF-16 code units", () => {
+    expect(
+      ["é", "a", "😀", "Z"].sort(slCompareOrdinal),
+    ).toEqual(["Z", "a", "é", "😀"]);
+  });
+
+  test("canonicalizes Unicode object keys in ordinal order", () => {
+    expect(
+      slCanonicalJson({
+        "é": 1,
+        a: 2,
+        "😀": 3,
+        Z: 4,
+      }),
+    ).toBe('{"Z":4,"a":2,"é":1,"😀":3}');
   });
 });

@@ -91,7 +91,7 @@ describe("SL plugin package", () => {
 
     expect(manifest).toEqual({
       name: "sl-repo",
-      version: "0.2.0",
+      version: "0.3.0",
       description:
         "Repository-local capture, promotion, validation, and forgetting for GitHub Copilot agents",
       author: {
@@ -124,11 +124,13 @@ describe("SL plugin package", () => {
       "SL-templates",
       "SL-plugin",
       "SL-tests",
+      "CHANGELOG.md",
       "README.md",
       "SECURITY.md",
     ]);
 
     const requiredFiles = [
+      "CHANGELOG.md",
       "SECURITY.md",
       "SL-docs/SL-install.md",
       "SL-docs/SL-migration-0.2.md",

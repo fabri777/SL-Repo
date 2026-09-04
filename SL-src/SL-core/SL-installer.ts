@@ -17,6 +17,7 @@ import type { SLChange, SLRegistryArtifact } from "./SL-types.js";
 import { SL_DEFAULT_SCOPE } from "./SL-state.js";
 import {
   slExists,
+  slCompareOrdinal,
   slNormalizePath,
   slReadText,
   slResolveInside,
@@ -85,7 +86,7 @@ async function slInstallUnlocked(
   const managedTemplatePaths = new Set<string>();
   const changedTemplatePaths = new Set<string>();
 
-  for (const templatePathValue of templateFiles.sort()) {
+  for (const templatePathValue of templateFiles.sort(slCompareOrdinal)) {
     const templatePath = slNormalizePath(templatePathValue);
     if (templatePath === "SL-copilot-block.md") {
       continue;
@@ -133,7 +134,7 @@ async function slInstallUnlocked(
     }
   }
 
-  for (const schemaFile of schemaFiles.sort()) {
+  for (const schemaFile of schemaFiles.sort(slCompareOrdinal)) {
     const targetPath = `${SL_PATHS.learningRoot}/SL-schemas/${schemaFile}`;
     const targetAbsolutePath = slResolveInside(root, targetPath);
     const existingEntry = existingRegistry.artifacts.find(
@@ -184,7 +185,7 @@ async function slInstallUnlocked(
     ...schemaFiles.map(
       (schemaFile) => `${SL_PATHS.learningRoot}/SL-schemas/${schemaFile}`,
     ),
-  ].sort();
+  ].sort(slCompareOrdinal);
   for (const templatePath of managedSystemPaths) {
     if (
       templatePath === "SL-copilot-block.md" ||

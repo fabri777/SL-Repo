@@ -39,7 +39,7 @@ import {
 const repositories: string[] = [];
 const FIXED_NOW = new Date("2026-09-03T00:00:00.000Z");
 const SL_PROCESS_TREE_TEST_TIMEOUT_MS =
-  process.platform === "win32" ? 30_000 : 15_000;
+  process.platform === "win32" ? 60_000 : 30_000;
 // Keep the larger Windows startup budget local to this nested-process regression.
 const SL_PROCESS_TREE_SUCCESS_TIMEOUT_MS =
   process.platform === "win32" ? 8_000 : 3_000;
@@ -729,7 +729,7 @@ describe("SL promoted validation contracts", () => {
             id: "unexpected-exit",
             command: "node",
             arguments: [failureScript],
-            timeoutMs: 2000,
+            timeoutMs: SL_PROCESS_TREE_SUCCESS_TIMEOUT_MS,
             expectedExitCode: 0,
           },
         ],

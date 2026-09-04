@@ -15,6 +15,7 @@ import {
   type SLPromotionGovernanceInput,
   type SLScopedGuidance,
 } from "../../SL-src/SL-core/SL-promotion-governance.js";
+import { slBuildPromotionGovernanceContext } from "../../SL-src/SL-core/SL-promotion-context.js";
 import {
   slActivatePromotion,
   slEvaluatePromotionReadiness,
@@ -25,10 +26,19 @@ import {
   slPromotionArtifactVersion,
 } from "../../SL-src/SL-core/SL-promotion-lifecycle.js";
 import { slLoadRegistry } from "../../SL-src/SL-core/SL-registry.js";
+import {
+  slLoadScopeCatalog,
+  slPromotionScopeRef,
+  slScopeDescriptor,
+} from "../../SL-src/SL-core/SL-scope.js";
 import type {
   SLPromotionPolicy,
   SLPromotionScopeRef,
 } from "../../SL-src/SL-core/SL-types.js";
+import {
+  slFinishUsage,
+  slStartUsage,
+} from "../../SL-src/SL-core/SL-usage.js";
 import { slValidateRepository } from "../../SL-src/SL-validation/SL-validation.js";
 import {
   slCreateTestRepository,
@@ -44,6 +54,7 @@ import {
 const repositories: string[] = [];
 const FIXED_NOW = new Date("2026-09-04T08:00:00.000Z");
 const SOURCE_VERSION = `sha256:${"a".repeat(64)}`;
+const INTEGRATION_SCOPE_ID = "SL-SCOPE-SERVICE-A";
 
 const ROOT_SCOPE: SLPromotionScopeRef = {
   id: "repo:root",
@@ -161,11 +172,41 @@ async function slPrepareGovernedPromotion(): Promise<{
   const config = parse(await readFile(configPath, "utf8"));
   config.promotion.mode = "monorepo";
   await writeFile(configPath, stringify(config), "utf8");
+  await writeFile(
+    join(root, ".github", "SL-learning", "SL-scope-catalog.yml"),
+    stringify({
+      schemaVersion: 1,
+      scopes: [
+        {
+          id: "SL-SCOPE-ROOT",
+          displayName: "Repository",
+          kind: "repository",
+          includePaths: ["**"],
+          excludePaths: [],
+          dependencyScopeIds: [],
+          ownerAliases: ["@example/platform"],
+        },
+        {
+          id: INTEGRATION_SCOPE_ID,
+          displayName: "Service A",
+          kind: "service",
+          includePaths: ["services/a/**"],
+          excludePaths: [],
+          parentScopeId: "SL-SCOPE-ROOT",
+          dependencyScopeIds: [],
+          ownerAliases: ["@example/service-a"],
+        },
+      ],
+    }),
+    "utf8",
+  );
+  const catalog = await slLoadScopeCatalog(root);
 
   const source = await slCaptureLesson(root, {
     title: "Scoped integration source",
     kind: "win",
     scope: SERVICE_A_SCOPE.id,
+    scopeId: INTEGRATION_SCOPE_ID,
     triggers: ["scoped-governance"],
     dryRun: false,
     now: FIXED_NOW,
@@ -177,6 +218,25 @@ async function slPrepareGovernedPromotion(): Promise<{
   const sourceVersion = slPromotionArtifactVersion(
     slPromotionArtifactContentHash(sourceContent),
   );
+  const usage = await slStartUsage(root, source.id, {
+    applicationId: "scoped-integration-application",
+    taskRunId: "scoped-integration-task",
+    idempotencyKey: "scoped-integration-start",
+    scope: slScopeDescriptor(
+      catalog.scopes.find(
+        (scope) => scope.id === INTEGRATION_SCOPE_ID,
+      )!,
+    ),
+    now: new Date("2026-09-04T08:10:00.000Z"),
+  });
+  await slFinishUsage(root, usage.receiptId, {
+    outcome: "success",
+    verified: true,
+    verifierType: "test-suite",
+    evidenceRef: "run:scoped-integration",
+    idempotencyKey: "scoped-integration-finish",
+    now: new Date("2026-09-04T08:20:00.000Z"),
+  });
   const artifactId = "SL-SCOPED-INTEGRATION";
   const artifactPath =
     `.github/instructions/${artifactId}.instructions.md`;
@@ -204,38 +264,16 @@ async function slPrepareGovernedPromotion(): Promise<{
     artifactPath,
     false,
     FIXED_NOW,
+    { targetScopeId: INTEGRATION_SCOPE_ID },
   );
-  const governance: SLPromotionGovernanceContext = {
-    targetScope: SERVICE_A_SCOPE,
-    sourceScopes: [
-      {
-        artifactId: source.id,
-        artifactVersion: sourceVersion,
-        scope: SERVICE_A_SCOPE,
-      },
-    ],
-    artifactScope: {
-      artifactId,
-      scope: SERVICE_A_SCOPE,
+  const governance = await slBuildPromotionGovernanceContext(
+    root,
+    artifactId,
+    {
+      targetScopeId: INTEGRATION_SCOPE_ID,
+      ownerApprovalRefs: ["review:scoped-integration"],
     },
-    evidence: [
-      {
-        sourceArtifactId: source.id,
-        artifactVersion: sourceVersion,
-        applicationScope: SERVICE_A_SCOPE,
-        outcome: "verified-success",
-        evidenceRef: "run:scoped-integration",
-      },
-    ],
-    approvals: [
-      {
-        kind: "owner-set-approval",
-        scopeId: SERVICE_A_SCOPE.id,
-        ownerSetId: SERVICE_A_SCOPE.ownerSetId,
-        evidenceRef: "review:scoped-integration",
-      },
-    ],
-  };
+  );
   await slEvaluatePromotionReadiness(root, artifactId, {
     governance,
     now: new Date("2026-09-04T09:00:00.000Z"),
@@ -524,12 +562,12 @@ describe("SL monorepo promotion governance", () => {
 
     expect(evaluation?.status).toBe("passed");
     expect(evaluation?.governance).toMatchObject({
-      targetScope: { id: SERVICE_A_SCOPE.id },
+      targetScope: { id: INTEGRATION_SCOPE_ID },
       sourceScopes: [
         {
           artifactId: prepared.sourceId,
           artifactVersion: prepared.sourceVersion,
-          scope: { id: SERVICE_A_SCOPE.id },
+          scope: { id: INTEGRATION_SCOPE_ID },
         },
       ],
       ownerApprovals: [
@@ -539,6 +577,75 @@ describe("SL monorepo promotion governance", () => {
       ],
     });
     expect(await slValidateRepository(prepared.root)).toEqual([]);
+  });
+
+  test("rejects a requested governance target that differs from persisted artifact scope", async () => {
+    const prepared = await slPrepareGovernedPromotion();
+
+    await expect(
+      slBuildPromotionGovernanceContext(
+        prepared.root,
+        prepared.artifactId,
+        { targetScopeId: "SL-SCOPE-ROOT" },
+      ),
+    ).rejects.toThrow(
+      `Promotion target scope SL-SCOPE-ROOT does not match persisted artifact scope ${INTEGRATION_SCOPE_ID}.`,
+    );
+  });
+
+  test("rejects evaluation governance that differs from persisted artifact scope", async () => {
+    const prepared = await slPrepareGovernedPromotion();
+    const rootScope = slPromotionScopeRef(
+      await slLoadScopeCatalog(prepared.root),
+      "SL-SCOPE-ROOT",
+    );
+    const mismatched = structuredClone(prepared.governance);
+    mismatched.targetScope = rootScope;
+    mismatched.artifactScope.scope = rootScope;
+
+    await expect(
+      slEvaluatePromotionReadiness(
+        prepared.root,
+        prepared.artifactId,
+        {
+          governance: mismatched,
+          now: new Date("2026-09-04T09:30:00.000Z"),
+        },
+      ),
+    ).rejects.toThrow(
+      `Promotion target scope SL-SCOPE-ROOT does not match persisted artifact scope ${INTEGRATION_SCOPE_ID}.`,
+    );
+  });
+
+  test("rejects activation governance that differs from persisted artifact scope", async () => {
+    const prepared = await slPrepareGovernedPromotion();
+    const rootScope = slPromotionScopeRef(
+      await slLoadScopeCatalog(prepared.root),
+      "SL-SCOPE-ROOT",
+    );
+    const mismatched = structuredClone(prepared.governance);
+    mismatched.targetScope = rootScope;
+    mismatched.artifactScope.scope = rootScope;
+
+    await expect(
+      slActivatePromotion(
+        prepared.root,
+        prepared.artifactId,
+        false,
+        new Date("2026-09-04T10:00:00.000Z"),
+        { governance: mismatched },
+      ),
+    ).rejects.toThrow(
+      `Promotion target scope SL-SCOPE-ROOT does not match persisted artifact scope ${INTEGRATION_SCOPE_ID}.`,
+    );
+    expect(
+      (await slLoadRegistry(prepared.root)).artifacts.find(
+        (artifact) => artifact.id === prepared.artifactId,
+      ),
+    ).toMatchObject({
+      status: "probation",
+      scope: { id: INTEGRATION_SCOPE_ID, path: "services/a" },
+    });
   });
 
   test("invalidates activation after promotion policy changes", async () => {

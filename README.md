@@ -8,6 +8,14 @@ experience -> lesson -> verified reuse -> instruction or skill
                    \-> stale -> quarantine -> deletion
 ```
 
+## Release 0.3.0
+
+Version 0.3.0 adds production monorepo support: hierarchical scope catalogs,
+scope-sharded registries/indexes/usage projections, governed scope-aware
+promotion, cross-scope usage freshness, deterministic ordinal serialization,
+and exact restore rollback across generated state shards. Legacy 0.2 root
+state remains a read-only compatibility input.
+
 ## Why Self Learning for Copilot Repositories
 
 Self Learning for Copilot Repositories reduces the time and token cost of
@@ -173,9 +181,13 @@ sl-repo promotion-activate SL-PROMOTED-ID C:\path\to\repository
 In monorepo mode, local promotion defaults to the source scope. Promotion to a
 shared/root scope is rebuilt from immutable verified-use evidence and requires
 the configured number of distinct non-root scopes plus target-owner approval.
+The registered artifact scope is immutable for evaluation and activation:
+callers cannot evaluate narrower governance and leave broader persisted
+guidance behind.
 An explicit narrower-scope override must name the broader artifact, scope, and
 declaration key and carry its own review reference. Peer conflicts and
-undeclared contradictions fail closed.
+undeclared contradictions fail closed. Retrieval also compares legacy active
+contracts with governed active guidance and rejects contradictory overlaps.
 
 Executable contract checks remain disabled unless explicitly requested with
 `--execute-checks`; they are trusted commands from the reviewed repository,
@@ -207,6 +219,7 @@ different workloads, verifiers, or sample sizes can produce a deceptive rate.
 See the complete operational references:
 
 - [Architecture and source-of-truth boundaries](SL-docs/SL-architecture.md)
+- [Release history](CHANGELOG.md)
 - [Scope catalog and precedence](SL-docs/SL-scopes.md)
 - [Sharded state and merge workflow](SL-docs/SL-state-layout.md)
 - [Monorepo operations and troubleshooting](SL-docs/SL-monorepo-operations.md)

@@ -20,6 +20,7 @@ import type {
 } from "./SL-types.js";
 import {
   slAssertRealPathInside,
+  slCompareOrdinal,
   slExists,
   slReadContainedText,
   slReadJson,
@@ -120,7 +121,7 @@ export function slScopeDescriptors(
   catalog: SLScopeCatalog,
 ): SLScopeDescriptor[] {
   return [...catalog.scopes]
-    .sort((left, right) => left.id.localeCompare(right.id))
+    .sort((left, right) => slCompareOrdinal(left.id, right.id))
     .map(slScopeDescriptor);
 }
 
@@ -148,7 +149,7 @@ export function slPromotionScopeRef(
   }
   const root = ancestors.length === 0;
   const ownerSetHash = createHash("sha256")
-    .update(JSON.stringify([...scope.ownerAliases].sort()))
+    .update(JSON.stringify([...scope.ownerAliases].sort(slCompareOrdinal)))
     .digest("hex")
     .slice(0, 16)
     .toUpperCase();
@@ -442,7 +443,7 @@ function slDetectGraphCycles(
     const relatedScopeIds = [
       ...(scope.parentScopeId ? [scope.parentScopeId] : []),
       ...scope.dependencyScopeIds,
-    ].sort();
+    ].sort(slCompareOrdinal);
     for (const relatedScopeId of relatedScopeIds) {
       if (scopes.has(relatedScopeId)) {
         visit(relatedScopeId);
@@ -453,7 +454,7 @@ function slDetectGraphCycles(
     visited.add(scopeId);
   };
 
-  for (const scopeId of [...scopes.keys()].sort()) {
+  for (const scopeId of [...scopes.keys()].sort(slCompareOrdinal)) {
     visit(scopeId);
   }
   return issues;
@@ -778,7 +779,9 @@ export class SLScopeResolver {
       if (!current) {
         return;
       }
-      for (const dependencyScopeId of [...current.dependencyScopeIds].sort()) {
+      for (const dependencyScopeId of [
+        ...current.dependencyScopeIds,
+      ].sort(slCompareOrdinal)) {
         if (seen.has(dependencyScopeId)) {
           continue;
         }
@@ -805,7 +808,7 @@ export class SLScopeResolver {
         this.hierarchyDepth(right) - this.hierarchyDepth(left);
       return depthDifference !== 0
         ? depthDifference
-        : left.localeCompare(right);
+        : slCompareOrdinal(left, right);
     });
   }
 
@@ -819,7 +822,7 @@ export class SLScopeResolver {
       const precedence = this.compareMatches(right, left);
       return precedence !== 0
         ? precedence
-        : left.scope.id.localeCompare(right.scope.id);
+        : slCompareOrdinal(left.scope.id, right.scope.id);
     });
     const primary = matches[0];
     if (!primary) {
@@ -831,7 +834,9 @@ export class SLScopeResolver {
     if (equalPrecedence.length > 1) {
       throw new SLScopeAmbiguityError(
         normalizedPath,
-        equalPrecedence.map((match) => match.scope.id).sort(),
+        equalPrecedence
+          .map((match) => match.scope.id)
+          .sort(slCompareOrdinal),
       );
     }
 

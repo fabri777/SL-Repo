@@ -81,6 +81,13 @@ export async function slReadJson<T>(path: string): Promise<T> {
   return JSON.parse(await slReadText(path)) as T;
 }
 
+export function slCompareOrdinal(left: string, right: string): number {
+  if (left === right) {
+    return 0;
+  }
+  return left < right ? -1 : 1;
+}
+
 export function slCanonicalJson(value: unknown): string {
   function canonicalize(entry: unknown): unknown {
     if (Array.isArray(entry)) {
@@ -89,7 +96,7 @@ export function slCanonicalJson(value: unknown): string {
     if (entry !== null && typeof entry === "object") {
       return Object.fromEntries(
         Object.entries(entry as Record<string, unknown>)
-          .sort(([left], [right]) => left.localeCompare(right))
+          .sort(([left], [right]) => slCompareOrdinal(left, right))
           .map(([key, child]) => [key, canonicalize(child)]),
       );
     }

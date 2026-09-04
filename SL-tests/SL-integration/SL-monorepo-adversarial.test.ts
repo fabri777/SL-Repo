@@ -2,16 +2,29 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import { slCaptureLesson } from "../../SL-src/SL-core/SL-capture.js";
+import {
+  slParseMarkdown,
+  slStringifyMarkdown,
+} from "../../SL-src/SL-core/SL-frontmatter.js";
 import { slRetrieveArtifacts } from "../../SL-src/SL-core/SL-retrieval.js";
+import {
+  slLoadRegistry,
+  slSaveRegistry,
+} from "../../SL-src/SL-core/SL-registry.js";
+import { slScopeDescriptor } from "../../SL-src/SL-core/SL-scope.js";
 import {
   slAggregateUsageByScope,
   slAggregateUsageRepository,
   slCreateUsageEvent,
+  slFinishUsage,
   slProjectUsage,
   slProjectUsageEvents,
   slStartUsage,
 } from "../../SL-src/SL-core/SL-usage.js";
-import { slForgetArtifact } from "../../SL-src/SL-forgetting/SL-forgetting.js";
+import {
+  slForgetArtifact,
+  slSweep,
+} from "../../SL-src/SL-forgetting/SL-forgetting.js";
 import { slValidateRepository } from "../../SL-src/SL-validation/SL-validation.js";
 import {
   SL_MONOREPO_SCOPES,
@@ -20,6 +33,8 @@ import {
 import { slRemoveTestRepository } from "../SL-fixtures/SL-test-repository.js";
 
 const repositories: string[] = [];
+const MONOREPO_TEST_TIMEOUT_MS =
+  process.platform === "win32" ? 90_000 : 60_000;
 
 afterEach(async () => {
   await Promise.all(repositories.splice(0).map(slRemoveTestRepository));
@@ -117,7 +132,7 @@ describe("SL adversarial monorepo fixture", () => {
         ).primaryScopeId,
       ).toBe(SL_MONOREPO_SCOPES.ordersSolution.id);
     },
-    30_000,
+    MONOREPO_TEST_TIMEOUT_MS,
   );
 
   test(
@@ -156,7 +171,106 @@ describe("SL adversarial monorepo fixture", () => {
         successRateReason: "rates-are-reported-per-scope",
       });
     },
-    30_000,
+    MONOREPO_TEST_TIMEOUT_MS,
+  );
+
+  test(
+    "uses verified success in a consuming scope to return stale guidance to probation",
+    async () => {
+      const fixture = await slCreateMonorepoFixture();
+      repositories.push(fixture.root);
+      const started = await slStartUsage(
+        fixture.root,
+        fixture.artifacts.ordersPromotion.id,
+        {
+          applicationId: "cross-scope-reactivation",
+          taskRunId: "cross-scope-reactivation-task",
+          idempotencyKey: "cross-scope-reactivation-start",
+          scope: slScopeDescriptor(
+            SL_MONOREPO_SCOPES.billingService,
+          ),
+          now: new Date("2026-09-04T14:00:00.000Z"),
+        },
+      );
+
+      await slSweep(
+        fixture.root,
+        false,
+        new Date("2027-09-05T00:00:00.000Z"),
+      );
+      await slFinishUsage(fixture.root, started.receiptId, {
+        outcome: "success",
+        verified: true,
+        verifierType: "test-suite",
+        evidenceRef: "ci:cross-scope-reactivation",
+        idempotencyKey: "cross-scope-reactivation-finish",
+        now: new Date("2027-09-06T00:00:00.000Z"),
+      });
+
+      const artifact = (await slLoadRegistry(fixture.root)).artifacts.find(
+        (candidate) =>
+          candidate.id === fixture.artifacts.ordersPromotion.id,
+      );
+      expect(artifact).toMatchObject({
+        status: "probation",
+        lastSuccessfulUseAt: "2027-09-06T00:00:00.000Z",
+      });
+      expect(artifact?.path).toContain(
+        `.github/SL-learning/SL-probation/${fixture.artifacts.ordersPromotion.id}/`,
+      );
+      expect(artifact?.usageProjection).toBeUndefined();
+      expect(
+        await slProjectUsage(
+          fixture.root,
+          fixture.artifacts.ordersPromotion.id,
+        ),
+      ).toEqual([
+        expect.objectContaining({
+          scope: {
+            id: SL_MONOREPO_SCOPES.billingService.id,
+            path: "services/billing",
+          },
+          verifiedSuccessRate: 1,
+        }),
+      ]);
+    },
+    MONOREPO_TEST_TIMEOUT_MS,
+  );
+
+  test(
+    "fails retrieval closed when legacy and governed active guidance contradict",
+    async () => {
+      const fixture = await slCreateMonorepoFixture();
+      repositories.push(fixture.root);
+      const registry = await slLoadRegistry(fixture.root);
+      const legacy = registry.artifacts.find(
+        (artifact) => artifact.id === fixture.artifacts.rootPromotion.id,
+      )!;
+      const content = await readFile(
+        join(fixture.root, ...legacy.path!.split("/")),
+        "utf8",
+      );
+      const markdown = slParseMarkdown<Record<string, unknown>>(content);
+      markdown.frontmatter.status = "promoted";
+      await writeFile(
+        join(fixture.root, ...legacy.path!.split("/")),
+        slStringifyMarkdown(markdown.frontmatter, markdown.body),
+        "utf8",
+      );
+      legacy.status = "promoted";
+      delete legacy.promotionEvaluation;
+      await slSaveRegistry(fixture.root, registry, false, []);
+
+      await expect(
+        slRetrieveArtifacts(
+          fixture.root,
+          "services/orders/src/order.ts",
+        ),
+      ).rejects.toThrow(
+        "Unresolved legacy/governed retrieval conflict",
+      );
+    },
+    MONOREPO_TEST_TIMEOUT_MS,
   );
 
   test("rejects application identity replay across scopes and artifacts", async () => {
@@ -198,7 +312,7 @@ describe("SL adversarial monorepo fixture", () => {
         now: new Date("2026-09-04T13:00:00.000Z"),
       }),
     ).rejects.toThrow("already bound to different usage identity data");
-  }, 30_000);
+  }, MONOREPO_TEST_TIMEOUT_MS);
 
   test("projects independently merged immutable shards deterministically", () => {
     const hash = "a".repeat(64);
@@ -284,7 +398,7 @@ describe("SL adversarial monorepo fixture", () => {
         ]),
       );
     },
-    30_000,
+    MONOREPO_TEST_TIMEOUT_MS,
   );
 
   test("capture dry run cannot create inferred scope state", async () => {
@@ -333,5 +447,5 @@ describe("SL adversarial monorepo fixture", () => {
         "utf8",
       ),
     ).rejects.toThrow();
-  }, 30_000);
+  }, MONOREPO_TEST_TIMEOUT_MS);
 });

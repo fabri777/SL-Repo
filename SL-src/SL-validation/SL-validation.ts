@@ -47,6 +47,7 @@ import {
 import {
   slExists,
   slAssertRealPathInside,
+  slCompareOrdinal,
   slNormalizePath,
   slReadJson,
   slReadText,
@@ -750,7 +751,7 @@ export async function slValidateRepository(root: string): Promise<SLValidationIs
       message: error instanceof Error ? error.message : String(error),
     });
   }
-  for (const usageFileValue of usageFiles.sort()) {
+  for (const usageFileValue of usageFiles.sort(slCompareOrdinal)) {
     const usageFile = slNormalizePath(usageFileValue);
     if (!usageFile.endsWith(".json")) {
       issues.push({
@@ -957,7 +958,7 @@ export async function slValidateRepository(root: string): Promise<SLValidationIs
       message: error instanceof Error ? error.message : String(error),
     });
   }
-  for (const lifecycleFileValue of lifecycleFiles.sort()) {
+  for (const lifecycleFileValue of lifecycleFiles.sort(slCompareOrdinal)) {
     const lifecycleFile = slNormalizePath(lifecycleFileValue);
     if (!lifecycleFile.endsWith(".json")) {
       issues.push({
@@ -1214,7 +1215,7 @@ export async function slValidateRepository(root: string): Promise<SLValidationIs
                 key &&
               artifact.usageProjection,
           )
-          .sort((left, right) => left.id.localeCompare(right.id))
+          .sort((left, right) => slCompareOrdinal(left.id, right.id))
           .map((artifact) => [
             artifact.id,
             artifact.usageProjection!.artifactVersion,

@@ -16,7 +16,12 @@ import type {
   SLScopeUsageProjection,
   SLUsageProjection,
 } from "../SL-core/SL-types.js";
-import { slExists, slResolveInside, slWriteJson } from "../SL-core/SL-utils.js";
+import {
+  slCompareOrdinal,
+  slExists,
+  slResolveInside,
+  slWriteJson,
+} from "../SL-core/SL-utils.js";
 
 export async function slBuildIndex(
   root: string,
@@ -54,14 +59,16 @@ export async function slBuildIndex(
       path: artifact.path,
       artifactType: artifact.artifactType,
       status: artifact.status,
-      ...(artifact.trigger ? { trigger: [...artifact.trigger].sort() } : {}),
-      relatedTo: [...artifact.relatedTo].sort(),
+      ...(artifact.trigger
+        ? { trigger: [...artifact.trigger].sort(slCompareOrdinal) }
+        : {}),
+      relatedTo: [...artifact.relatedTo].sort(slCompareOrdinal),
       ...(artifact.dependsOn
-        ? { dependsOn: [...artifact.dependsOn].sort() }
+        ? { dependsOn: [...artifact.dependsOn].sort(slCompareOrdinal) }
         : {}),
     });
   }
-  artifacts.sort((left, right) => left.id.localeCompare(right.id));
+  artifacts.sort((left, right) => slCompareOrdinal(left.id, right.id));
   return { schemaVersion: 2, scope: normalizedScope, artifacts };
 }
 
@@ -79,7 +86,7 @@ export async function slBuildScopeIndexes(
   }
   const indexes = new Map<string, SLIndex>();
   for (const [key, scope] of [...scopes.entries()].sort(([left], [right]) =>
-    left.localeCompare(right),
+    slCompareOrdinal(left, right),
   )) {
     indexes.set(key, await slBuildIndex(root, registry, scope));
   }
@@ -131,7 +138,7 @@ export async function slWriteIndex(
                 slScopeKey(artifact.scope ?? SL_DEFAULT_SCOPE) === key &&
                 artifact.usageProjection,
             )
-            .sort((left, right) => left.id.localeCompare(right.id))
+            .sort((left, right) => slCompareOrdinal(left.id, right.id))
             .map((artifact) => [
               artifact.id,
               artifact.usageProjection!.artifactVersion,
@@ -144,8 +151,11 @@ export async function slWriteIndex(
           )
           .sort(
             (left, right) =>
-              left.artifactId.localeCompare(right.artifactId) ||
-              left.artifactVersion.localeCompare(right.artifactVersion),
+              slCompareOrdinal(left.artifactId, right.artifactId) ||
+              slCompareOrdinal(
+                left.artifactVersion,
+                right.artifactVersion,
+              ),
           ),
       };
       await slWriteJson(

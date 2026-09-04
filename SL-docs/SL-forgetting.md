@@ -23,9 +23,16 @@ continue to restore their prior safe lifecycle status.
 
 Before retention decisions, SL rebuilds current-version usage projections from
 immutable events. Only verified success extends `lastSuccessfulUseAt` and the
-verification horizon; retrieval alone does not. Before deletion, SL checks
-ownership, pinning, active references, source evidence, registry consistency,
-and the quarantine grace period.
+verification horizon; retrieval alone does not. The freshness timestamp is the
+maximum current-version verified success across all consuming scopes, while
+success rates remain scope-local. Before deletion, SL checks ownership,
+pinning, active references, source evidence, registry consistency, and the
+quarantine grace period.
+
+Restore is transactional across the artifact file, scope registry shards,
+scope index/projection shards, the root state catalog, and immutable lifecycle
+event append. A failed restore reinstates each prior file byte-for-byte or
+restores its prior absence.
 
 These checks are repository-wide, not shard-local. A lesson in a library scope
 cannot be forgotten while an active or probationary service/root artifact

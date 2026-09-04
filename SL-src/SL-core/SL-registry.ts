@@ -27,6 +27,7 @@ import {
 import {
   slAssertRealPathInside,
   slCanonicalJson,
+  slCompareOrdinal,
   slExists,
   slReadJson,
   slResolveInside,
@@ -41,25 +42,84 @@ export function slEmptyRegistry(): SLRegistry {
   return { schemaVersion: 1, artifacts: [] };
 }
 
+function slNormalizedRegistryArtifact(
+  artifact: SLRegistryArtifact,
+  fallbackScope = SL_DEFAULT_SCOPE,
+): SLRegistryArtifact {
+  return {
+    ...artifact,
+    scope: slNormalizeScope(artifact.scope ?? fallbackScope),
+  };
+}
+
+function slRegistryArtifactIdentity(
+  artifact: SLRegistryArtifact,
+): unknown {
+  return {
+    id: artifact.id,
+    artifactType: artifact.artifactType,
+    classification: artifact.classification,
+    managedBy: artifact.managedBy,
+    createdAt: artifact.createdAt,
+    scope: slNormalizeScope(artifact.scope ?? SL_DEFAULT_SCOPE),
+    ownedPath:
+      artifact.promotionTargetPath ??
+      artifact.originalPath ??
+      artifact.path,
+    dependsOn: [...(artifact.dependsOn ?? [])].sort(slCompareOrdinal),
+  };
+}
+
+function slRegistryArtifactsIdentityEquivalent(
+  left: SLRegistryArtifact,
+  right: SLRegistryArtifact,
+): boolean {
+  return (
+    slCanonicalJson(slRegistryArtifactIdentity(left)) ===
+    slCanonicalJson(slRegistryArtifactIdentity(right))
+  );
+}
+
 export async function slLoadRegistry(root: string): Promise<SLRegistry> {
   const path = slResolveInside(root, SL_PATHS.registry);
   const legacy = (await slExists(path))
     ? await slReadJson<SLRegistry>(path)
     : slEmptyRegistry();
   const artifacts = new Map<string, SLRegistryArtifact>();
+  const legacyIds = new Set<string>();
   for (const artifact of legacy.artifacts) {
-    artifacts.set(artifact.id, {
-      ...artifact,
-      scope: slNormalizeScope(artifact.scope ?? SL_DEFAULT_SCOPE),
-    });
+    if (legacyIds.has(artifact.id)) {
+      throw new Error(
+        `Duplicate artifact ID ${artifact.id} in legacy registry ${SL_PATHS.registry}.`,
+      );
+    }
+    legacyIds.add(artifact.id);
+    artifacts.set(
+      artifact.id,
+      slNormalizedRegistryArtifact(artifact),
+    );
   }
   const scopeRegistries = await slLoadScopeRegistries(root);
   for (const shard of scopeRegistries) {
     for (const artifact of shard.artifacts) {
-      artifacts.set(artifact.id, {
-        ...artifact,
-        scope: slNormalizeScope(artifact.scope ?? shard.scope),
-      });
+      const normalized = slNormalizedRegistryArtifact(
+        artifact,
+        shard.scope,
+      );
+      const legacyArtifact = artifacts.get(artifact.id);
+      if (
+        legacyArtifact &&
+        legacyIds.has(artifact.id) &&
+        !slRegistryArtifactsIdentityEquivalent(
+          legacyArtifact,
+          normalized,
+        )
+      ) {
+        throw new Error(
+          `Conflicting legacy registry/shard overlay for artifact ${artifact.id}.`,
+        );
+      }
+      artifacts.set(artifact.id, normalized);
     }
   }
   const catalog = await slLoadStateCatalog(root);
@@ -85,7 +145,13 @@ export async function slLoadRegistry(root: string): Promise<SLRegistry> {
     }
   }
   for (const artifact of artifacts.values()) {
-    const candidates = projections.get(artifact.id) ?? [];
+    const artifactScopeKey = slScopeKey(
+      artifact.scope ?? SL_DEFAULT_SCOPE,
+    );
+    const candidates = (projections.get(artifact.id) ?? []).filter(
+      (projection) =>
+        slScopeKey(projection.scope) === artifactScopeKey,
+    );
     const currentVersion = currentVersions.get(artifact.id);
     candidates.sort((left, right) => {
       const leftTimestamp =
@@ -101,8 +167,8 @@ export async function slLoadRegistry(root: string): Promise<SLRegistry> {
         right.lastVerifiedFailureAt ??
         "";
       return (
-        rightTimestamp.localeCompare(leftTimestamp) ||
-        right.artifactVersion.localeCompare(left.artifactVersion)
+        slCompareOrdinal(rightTimestamp, leftTimestamp) ||
+        slCompareOrdinal(right.artifactVersion, left.artifactVersion)
       );
     });
     const selected =
@@ -116,7 +182,7 @@ export async function slLoadRegistry(root: string): Promise<SLRegistry> {
   return {
     schemaVersion: 1,
     artifacts: [...artifacts.values()].sort((left, right) =>
-      left.id.localeCompare(right.id),
+      slCompareOrdinal(left.id, right.id),
     ),
   };
 }
@@ -126,6 +192,7 @@ export async function slLoadScopeRegistries(
 ): Promise<SLScopeRegistry[]> {
   const catalog = await slLoadStateCatalog(root);
   const shards: SLScopeRegistry[] = [];
+  const artifactOwners = new Map<string, string>();
   for (const entry of catalog.scopes) {
     slAssertCatalogEntryPaths(entry);
     await slAssertRealPathInside(root, entry.registryPath);
@@ -134,6 +201,22 @@ export async function slLoadScopeRegistries(
       continue;
     }
     const shard = await slReadJson<SLScopeRegistry>(path);
+    const shardArtifactIds = new Set<string>();
+    for (const artifact of shard.artifacts) {
+      if (shardArtifactIds.has(artifact.id)) {
+        throw new Error(
+          `Duplicate artifact ID ${artifact.id} within registry shard ${entry.registryPath}.`,
+        );
+      }
+      shardArtifactIds.add(artifact.id);
+      const owner = artifactOwners.get(artifact.id);
+      if (owner) {
+        throw new Error(
+          `Duplicate artifact ID ${artifact.id} across registry shards ${owner} and ${entry.registryPath}.`,
+        );
+      }
+      artifactOwners.set(artifact.id, entry.registryPath);
+    }
     shards.push({
       schemaVersion: 1,
       scope: slNormalizeScope(shard.scope),
@@ -141,7 +224,7 @@ export async function slLoadScopeRegistries(
     });
   }
   return shards.sort((left, right) =>
-    slScopeKey(left.scope).localeCompare(slScopeKey(right.scope)),
+    slCompareOrdinal(slScopeKey(left.scope), slScopeKey(right.scope)),
   );
 }
 
@@ -151,7 +234,9 @@ export async function slSaveRegistry(
   dryRun: boolean,
   changes: SLChange[],
 ): Promise<void> {
-  registry.artifacts.sort((left, right) => left.id.localeCompare(right.id));
+  registry.artifacts.sort((left, right) =>
+    slCompareOrdinal(left.id, right.id),
+  );
   const catalog = await slLoadStateCatalog(root);
   const scopes = new Map(
     catalog.scopes.map((entry) => [slScopeKey(entry.scope), entry.scope]),
@@ -179,7 +264,7 @@ export async function slSaveRegistry(
   );
   for (const entry of nextCatalog.scopes) {
     const artifacts = artifactsByScope.get(slScopeKey(entry.scope)) ?? [];
-    artifacts.sort((left, right) => left.id.localeCompare(right.id));
+    artifacts.sort((left, right) => slCompareOrdinal(left.id, right.id));
     const shard: SLScopeRegistry = {
       schemaVersion: 1,
       scope: entry.scope,

@@ -49,6 +49,7 @@ import {
 import {
   slAssertRealPathInside,
   slCanonicalJson,
+  slCompareOrdinal,
   slExists,
   slNormalizePath,
   slReadContainedText,
@@ -173,7 +174,7 @@ function slCanonicalValue(value: unknown): unknown {
   if (value !== null && typeof value === "object") {
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>)
-        .sort(([left], [right]) => left.localeCompare(right))
+        .sort(([left], [right]) => slCompareOrdinal(left, right))
         .map(([key, entry]) => [key, slCanonicalValue(entry)]),
     );
   }
@@ -228,7 +229,7 @@ export function slArtifactUsageContentHash(content: string): string {
   const contentFrontmatter = Object.fromEntries(
     Object.entries(markdown.frontmatter)
       .filter(([key]) => !SL_NON_CONTENT_FRONTMATTER_FIELDS.has(key))
-      .sort(([left], [right]) => left.localeCompare(right)),
+      .sort(([left], [right]) => slCompareOrdinal(left, right)),
   );
   return slArtifactContentHash(
     JSON.stringify({
@@ -673,7 +674,7 @@ function slIdempotentEventContent(
   void timestamp;
   return Object.fromEntries(
     Object.entries(content).sort(([left], [right]) =>
-      left.localeCompare(right),
+      slCompareOrdinal(left, right),
     ),
   ) as Omit<SLUsageApplicationEvent, "timestamp">;
 }
@@ -775,7 +776,9 @@ export async function slLoadUsageEvents(root: string): Promise<SLUsageEvent[]> {
     },
   );
   const events: SLUsageEvent[] = [];
-  for (const relativePath of paths.map(slNormalizePath).sort()) {
+  for (const relativePath of paths
+    .map(slNormalizePath)
+    .sort(slCompareOrdinal)) {
     const eventPath = relativePath;
     await slAssertRealPathInside(root, eventPath);
     const event = await slReadJson<SLUsageEvent>(
@@ -1300,7 +1303,7 @@ export function slProjectUsageEvents(
 ): SLUsageProjection[] {
   const eventsById = new Map<string, SLUsageEvent>();
   for (const event of [...inputEvents].sort((left, right) =>
-    left.eventId.localeCompare(right.eventId),
+    slCompareOrdinal(left.eventId, right.eventId),
   )) {
     slValidateUsageEvent(event);
     const existing = eventsById.get(event.eventId);
@@ -1320,7 +1323,7 @@ export function slProjectUsageEvents(
 
   const eventsByIdempotencyKey = new Map<string, SLUsageEvent>();
   for (const event of [...eventsById.values()].sort((left, right) =>
-    left.eventId.localeCompare(right.eventId),
+    slCompareOrdinal(left.eventId, right.eventId),
   )) {
     if (!eventsByIdempotencyKey.has(event.idempotencyKey)) {
       eventsByIdempotencyKey.set(event.idempotencyKey, event);
@@ -1339,8 +1342,8 @@ export function slProjectUsageEvents(
   for (const events of grouped.values()) {
     events.sort(
       (left, right) =>
-        left.timestamp.localeCompare(right.timestamp) ||
-        left.eventId.localeCompare(right.eventId),
+        slCompareOrdinal(left.timestamp, right.timestamp) ||
+        slCompareOrdinal(left.eventId, right.eventId),
     );
     const first = events[0];
     if (!first) {
@@ -1547,9 +1550,9 @@ export function slProjectUsageEvents(
 
   return projections.sort(
     (left, right) =>
-      slScopeKey(left.scope).localeCompare(slScopeKey(right.scope)) ||
-      left.artifactId.localeCompare(right.artifactId) ||
-      left.artifactVersion.localeCompare(right.artifactVersion),
+      slCompareOrdinal(slScopeKey(left.scope), slScopeKey(right.scope)) ||
+      slCompareOrdinal(left.artifactId, right.artifactId) ||
+      slCompareOrdinal(left.artifactVersion, right.artifactVersion),
   );
 }
 
@@ -1638,9 +1641,44 @@ async function slCurrentUsageProjection(
   );
 }
 
+function slCurrentVersionLastVerifiedSuccessAt(
+  artifact: SLRegistryArtifact,
+  projections: SLUsageProjection[],
+  ownershipSnapshots: Map<string, SLOwnedMarkdownSnapshot>,
+): string | undefined {
+  if (
+    artifact.classification === "system" ||
+    !artifact.path ||
+    !["lesson", "instruction", "skill"].includes(artifact.artifactType)
+  ) {
+    return undefined;
+  }
+  const snapshot = ownershipSnapshots.get(artifact.id);
+  if (!snapshot) {
+    return undefined;
+  }
+  const artifactVersion = slArtifactVersion(
+    slArtifactUsageContentHash(snapshot.content),
+  );
+  let latest: string | undefined;
+  for (const projection of projections) {
+    if (
+      projection.artifactId === artifact.id &&
+      projection.artifactVersion === artifactVersion
+    ) {
+      latest = slMaxTimestamp(
+        latest,
+        projection.lastVerifiedSuccessAt,
+      );
+    }
+  }
+  return latest;
+}
+
 function slDerivedEvidenceStatus(
   artifact: SLRegistryArtifact,
-  projection: SLUsageProjection,
+  projection: SLUsageProjection | undefined,
+  lastVerifiedSuccessAt: string | undefined,
 ): SLRegistryArtifact["status"] {
   if (
     ["promoted", "superseded", "quarantined", "deleted"].includes(
@@ -1652,12 +1690,15 @@ function slDerivedEvidenceStatus(
   if (
     artifact.status === "stale" &&
     (
-      !projection.lastVerifiedSuccessAt ||
+      !lastVerifiedSuccessAt ||
       !artifact.staleAt ||
-      projection.lastVerifiedSuccessAt <= artifact.staleAt
+      lastVerifiedSuccessAt <= artifact.staleAt
     )
   ) {
     return "stale";
+  }
+  if (!projection) {
+    return artifact.status === "stale" ? "raw" : artifact.status;
   }
   if (projection.verifiedSuccessCount >= 3) {
     return "promotion-candidate";
@@ -1670,7 +1711,7 @@ function slDerivedEvidenceStatus(
 
 function slDerivedPromotedStatus(
   artifact: SLRegistryArtifact,
-  projection: SLUsageProjection,
+  lastVerifiedSuccessAt: string | undefined,
 ): SLRegistryArtifact["status"] {
   const inactiveAt =
     artifact.status === "stale"
@@ -1680,9 +1721,9 @@ function slDerivedPromotedStatus(
         : undefined;
   if (
     !["stale", "quarantined"].includes(artifact.status) ||
-    !projection.lastVerifiedSuccessAt ||
+    !lastVerifiedSuccessAt ||
     !inactiveAt ||
-    projection.lastVerifiedSuccessAt <= inactiveAt
+    lastVerifiedSuccessAt <= inactiveAt
   ) {
     return artifact.status;
   }
@@ -1700,33 +1741,48 @@ export async function slApplyUsageProjection(
     (await slLoadUsageOwnershipSnapshots(root, registry, events));
   const projections = slProjectUsageEvents(events);
   for (const artifact of registry.artifacts) {
+    const lastVerifiedSuccessAt =
+      slCurrentVersionLastVerifiedSuccessAt(
+        artifact,
+        projections,
+        snapshots,
+      );
     const projection = await slCurrentUsageProjection(
       artifact,
       projections,
       snapshots,
     );
     if (!projection) {
-      if (artifact.status !== "deleted") {
-        delete artifact.usageProjection;
+      if (artifact.status === "deleted") {
+        continue;
       }
-      continue;
-    }
-    artifact.usageProjection = projection;
-    if (projection.lastRetrievedAt) {
-      artifact.lastRetrievedAt = projection.lastRetrievedAt;
-    } else {
+      delete artifact.usageProjection;
       delete artifact.lastRetrievedAt;
+    } else {
+      artifact.usageProjection = projection;
+      if (projection.lastRetrievedAt) {
+        artifact.lastRetrievedAt = projection.lastRetrievedAt;
+      } else {
+        delete artifact.lastRetrievedAt;
+      }
     }
-    if (projection.lastVerifiedSuccessAt) {
-      artifact.lastSuccessfulUseAt = projection.lastVerifiedSuccessAt;
+    if (lastVerifiedSuccessAt) {
+      artifact.lastSuccessfulUseAt = lastVerifiedSuccessAt;
     } else {
       delete artifact.lastSuccessfulUseAt;
     }
 
     const nextStatus =
       artifact.classification === "evidence"
-        ? slDerivedEvidenceStatus(artifact, projection)
-        : slDerivedPromotedStatus(artifact, projection);
+        ? slDerivedEvidenceStatus(
+            artifact,
+            projection,
+            lastVerifiedSuccessAt,
+          )
+        : slDerivedPromotedStatus(
+            artifact,
+            lastVerifiedSuccessAt,
+          );
     if (artifact.status !== nextStatus) {
       artifact.status = nextStatus;
       if (
@@ -2048,7 +2104,7 @@ export function slAggregateUsageByScope(
     );
   }
   return [...aggregates.values()].sort((left, right) =>
-    slScopeKey(left.scope).localeCompare(slScopeKey(right.scope)),
+    slCompareOrdinal(slScopeKey(left.scope), slScopeKey(right.scope)),
   );
 }
 

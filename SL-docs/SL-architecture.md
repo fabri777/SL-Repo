@@ -52,6 +52,9 @@ scenario, conflict, executable, approval, and content-version gates pass.
 Stale or quarantined promoted guidance returns to that probation area after
 fresh verified usage or undo. It is not indexed again until a new evaluation
 and activation recheck current evidence and conflicts.
+Evaluation and activation require the governed target scope to exactly match
+the artifact's persisted scope and the current scope catalog; they never
+retarget an artifact implicitly.
 
 Raw lessons remain eligible for explicit retrieval while active. Promotion
 increases reliable automatic delivery through normal instruction/skill
@@ -62,6 +65,8 @@ Usage telemetry is receipt-based rather than implicit. A skill can record its
 own application, but instruction usage requires an agent or host integration
 to call `use start` and `use finish`. SL records association and verification;
 it does not claim that the selected artifact caused an observed improvement.
+Rates remain segmented by application scope. Lifecycle freshness uses the
+latest current-version verified success across every consuming scope.
 
 SL Repo defines future `org` and `company` scopes in documentation only. It
 does not copy local lessons to a central service.

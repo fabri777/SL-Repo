@@ -9,6 +9,7 @@ import type {
 } from "./SL-types.js";
 import {
   slAssertRealPathInside,
+  slCompareOrdinal,
   slExists,
   slReadJson,
   slResolveInside,
@@ -130,7 +131,7 @@ export function slBuildStateCatalog(
   return {
     schemaVersion: 1,
     scopes: [...byKey.values()].sort((left, right) =>
-      slScopeKey(left.scope).localeCompare(slScopeKey(right.scope)),
+      slCompareOrdinal(slScopeKey(left.scope), slScopeKey(right.scope)),
     ),
   };
 }

@@ -19,6 +19,7 @@ import {
   slPromotionArtifactContentHash,
   slPromotionArtifactVersion,
 } from "./SL-promotion-lifecycle.js";
+import { slResolveArtifactPromotionTargetScope } from "./SL-promotion-context.js";
 import {
   slAppendEvents,
   slAssertEventPathSafe,
@@ -37,11 +38,15 @@ import type {
   SLRegistryArtifact,
 } from "./SL-types.js";
 import { SL_DEFAULT_SCOPE, slNormalizeScope } from "./SL-state.js";
-import { slResolveScopeDescriptor } from "./SL-scope.js";
+import {
+  slLoadScopeCatalog,
+  slResolveScopeDescriptor,
+} from "./SL-scope.js";
 import { slArtifactContentHash } from "./SL-usage.js";
 import {
   slAssertRealPathInside,
   slCanonicalJson,
+  slCompareOrdinal,
   slExists,
   slMove,
   slNormalizePath,
@@ -155,16 +160,48 @@ function slApprovalValid(
   });
 }
 
+async function slAssertPersistedPromotionGovernanceScope(
+  root: string,
+  artifact: SLRegistryArtifact,
+  governance: Pick<
+    SLPromotionGovernanceContext,
+    "targetScope" | "artifactScope"
+  >,
+): Promise<void> {
+  if (governance.artifactScope.artifactId !== artifact.id) {
+    throw new Error(
+      "Promotion artifact scope must identify the probationary artifact.",
+    );
+  }
+  const expectedTarget = slResolveArtifactPromotionTargetScope(
+    await slLoadScopeCatalog(root),
+    artifact,
+    governance.targetScope.id,
+  );
+  if (
+    slCanonicalJson(governance.targetScope) !==
+      slCanonicalJson(expectedTarget) ||
+    slCanonicalJson(governance.artifactScope.scope) !==
+      slCanonicalJson(expectedTarget)
+  ) {
+    throw new Error(
+      "Promotion governance target scope must exactly match the persisted artifact scope.",
+    );
+  }
+}
+
 async function slCurrentSourceScopes(
   root: string,
   registry: SLRegistry,
   artifact: SLRegistryArtifact,
   governance: SLPromotionGovernanceContext,
 ): Promise<SLPromotionGovernanceContext["sourceScopes"]> {
-  const expectedSourceIds = [...(artifact.dependsOn ?? [])].sort();
+  const expectedSourceIds = [...(artifact.dependsOn ?? [])].sort(
+    slCompareOrdinal,
+  );
   const suppliedSourceIds = governance.sourceScopes
     .map((source) => source.artifactId)
-    .sort();
+    .sort(slCompareOrdinal);
   if (
     expectedSourceIds.length !== suppliedSourceIds.length ||
     expectedSourceIds.some(
@@ -246,11 +283,11 @@ async function slBuildGovernanceInput(
       "Scoped promotion governance requires promotion.mode: monorepo.",
     );
   }
-  if (context.artifactScope.artifactId !== artifact.id) {
-    throw new Error(
-      "Promotion artifact scope must identify the probationary artifact.",
-    );
-  }
+  await slAssertPersistedPromotionGovernanceScope(
+    root,
+    artifact,
+    context,
+  );
   const sourceScopes = await slCurrentSourceScopes(
     root,
     registry,
@@ -943,6 +980,13 @@ export async function slActivatePromotion(
     if (!evaluation || evaluation.status !== "passed") {
       throw new Error(
         `Artifact ${artifactId} does not have a passing promotion evaluation.`,
+      );
+    }
+    if (evaluation.governance) {
+      await slAssertPersistedPromotionGovernanceScope(
+        root,
+        artifact,
+        evaluation.governance,
       );
     }
 

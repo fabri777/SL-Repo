@@ -21,6 +21,17 @@ import {
   slLoadRegistry,
   slSaveRegistry,
 } from "../SL-core/SL-registry.js";
+import {
+  slLoadScopeCatalog,
+  slScopeDescriptors,
+} from "../SL-core/SL-scope.js";
+import {
+  SL_DEFAULT_SCOPE,
+  slBuildStateCatalog,
+  slLoadStateCatalog,
+  slNormalizeScope,
+  slScopeKey,
+} from "../SL-core/SL-state.js";
 import type {
   SLChange,
   SLEvent,
@@ -33,6 +44,7 @@ import {
   slAddDays,
   slAgeDays,
   slAssertRealPathInside,
+  slCompareOrdinal,
   slDelete,
   slExists,
   slMove,
@@ -46,47 +58,112 @@ import {
 } from "../SL-core/SL-usage.js";
 import { slWriteIndex } from "../SL-index/SL-index.js";
 
-type SLIndexSnapshot =
-  | { exists: false }
-  | { exists: true; content: Buffer };
+type SLFileSnapshot =
+  | { path: string; exists: false }
+  | { path: string; exists: true; content: Buffer };
 
-async function slSnapshotIndex(root: string): Promise<SLIndexSnapshot> {
-  await slAssertRealPathInside(root, SL_PATHS.index);
-  const indexPath = slResolveInside(root, SL_PATHS.index);
-  if (!(await slExists(indexPath))) {
-    return { exists: false };
+async function slSnapshotFile(
+  root: string,
+  relativePath: string,
+): Promise<SLFileSnapshot> {
+  await slAssertRealPathInside(root, relativePath);
+  const path = slResolveInside(root, relativePath);
+  if (!(await slExists(path))) {
+    return { path: relativePath, exists: false };
   }
-  return { exists: true, content: await readFile(indexPath) };
+  return {
+    path: relativePath,
+    exists: true,
+    content: await readFile(path),
+  };
 }
 
-async function slRestoreIndexSnapshot(
+async function slRestoreFileSnapshot(
   root: string,
-  snapshot: SLIndexSnapshot,
+  snapshot: SLFileSnapshot,
 ): Promise<void> {
-  await slAssertRealPathInside(root, SL_PATHS.index);
-  const indexPath = slResolveInside(root, SL_PATHS.index);
+  await slAssertRealPathInside(root, snapshot.path);
+  const path = slResolveInside(root, snapshot.path);
   if (!snapshot.exists) {
-    if (await slExists(indexPath)) {
-      await rm(indexPath);
-    }
+    await rm(path, { force: true });
     return;
   }
 
-  await mkdir(dirname(indexPath), { recursive: true });
-  const temporaryPath = `${indexPath}.SL-tmp-${randomUUID()}`;
+  await mkdir(dirname(path), { recursive: true });
+  const temporaryPath = `${path}.SL-tmp-${randomUUID()}`;
   let handle: Awaited<ReturnType<typeof open>> | undefined;
   try {
     handle = await open(temporaryPath, "wx");
     await handle.writeFile(snapshot.content);
     await handle.close();
     handle = undefined;
-    await rename(temporaryPath, indexPath);
+    await rename(temporaryPath, path);
   } catch (error) {
     if (handle) {
       await handle.close().catch(() => undefined);
     }
     await rm(temporaryPath, { force: true }).catch(() => undefined);
     throw error;
+  }
+}
+
+async function slRestoreStatePaths(
+  root: string,
+  registry: SLRegistry,
+): Promise<string[]> {
+  const currentCatalog = await slLoadStateCatalog(root);
+  const scopes = new Map(
+    currentCatalog.scopes.map((entry) => [
+      slScopeKey(entry.scope),
+      entry.scope,
+    ]),
+  );
+  for (const scope of slScopeDescriptors(await slLoadScopeCatalog(root))) {
+    scopes.set(slScopeKey(scope), scope);
+  }
+  for (const artifact of registry.artifacts) {
+    const scope = slNormalizeScope(artifact.scope ?? SL_DEFAULT_SCOPE);
+    scopes.set(slScopeKey(scope), scope);
+  }
+  const plannedCatalog = slBuildStateCatalog(scopes.values());
+  const paths = new Set<string>([
+    SL_PATHS.registry,
+    SL_PATHS.index,
+    SL_PATHS.stateCatalog,
+  ]);
+  for (const entry of plannedCatalog.scopes) {
+    paths.add(entry.registryPath);
+    paths.add(entry.indexPath);
+    paths.add(entry.projectionPath);
+  }
+  return [...paths].sort(slCompareOrdinal);
+}
+
+async function slSnapshotRestoreState(
+  root: string,
+  registry: SLRegistry,
+): Promise<SLFileSnapshot[]> {
+  const snapshots: SLFileSnapshot[] = [];
+  for (const path of await slRestoreStatePaths(root, registry)) {
+    snapshots.push(await slSnapshotFile(root, path));
+  }
+  return snapshots;
+}
+
+async function slRestoreStateSnapshots(
+  root: string,
+  snapshots: SLFileSnapshot[],
+): Promise<void> {
+  const ordered = [
+    ...snapshots.filter(
+      (snapshot) => snapshot.path !== SL_PATHS.stateCatalog,
+    ),
+    ...snapshots.filter(
+      (snapshot) => snapshot.path === SL_PATHS.stateCatalog,
+    ),
+  ];
+  for (const snapshot of ordered) {
+    await slRestoreFileSnapshot(root, snapshot);
   }
 }
 
@@ -349,10 +426,10 @@ async function slRestoreArtifactUnlocked(
   const restoredStatus = promotedRestore
     ? "probation"
     : artifact.previousStatus ?? "raw";
-  const originalRegistry = structuredClone(registry);
-  const indexSnapshot = dryRun ? undefined : await slSnapshotIndex(root);
+  const stateSnapshots = dryRun
+    ? []
+    : await slSnapshotRestoreState(root, registry);
   let rollback: (() => Promise<void>) | undefined;
-  let registrySaved = false;
   try {
     const snapshot = promotedRestore
       ? await slReadOwnedArtifactMarkdown(
@@ -413,7 +490,6 @@ async function slRestoreArtifactUnlocked(
       toPath: artifact.path,
     });
     await slSaveRegistry(root, registry, dryRun, changes);
-    registrySaved = !dryRun;
     await slWriteIndex(root, registry, dryRun, changes);
     await slAppendEvents(root, events, dryRun);
     return { changes, events };
@@ -427,19 +503,10 @@ async function slRestoreArtifactUnlocked(
           rollbackErrors.push(rollbackError);
         }
       }
-      if (registrySaved) {
-        try {
-          await slSaveRegistry(root, originalRegistry, false, []);
-        } catch (rollbackError) {
-          rollbackErrors.push(rollbackError);
-        }
-        if (indexSnapshot) {
-          try {
-            await slRestoreIndexSnapshot(root, indexSnapshot);
-          } catch (rollbackError) {
-            rollbackErrors.push(rollbackError);
-          }
-        }
+      try {
+        await slRestoreStateSnapshots(root, stateSnapshots);
+      } catch (rollbackError) {
+        rollbackErrors.push(rollbackError);
       }
       if (rollbackErrors.length > 0) {
         throw new AggregateError(
@@ -532,8 +599,8 @@ async function slSweepUnlocked(
     }
 
     const activityTimestamp =
-      artifact.usageProjection?.lastVerifiedSuccessAt ??
       artifact.lastSuccessfulUseAt ??
+      artifact.usageProjection?.lastVerifiedSuccessAt ??
       artifact.lastVerifiedAt ??
       artifact.createdAt;
     const activityAge = slAgeDays(now, activityTimestamp);

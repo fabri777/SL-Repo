@@ -15,7 +15,7 @@ import {
   SL_SECRET_PATTERNS,
   SL_USER_PATH_PATTERN,
 } from "./SL-constants.js";
-import { slCanonicalJson } from "./SL-utils.js";
+import { slCanonicalJson, slCompareOrdinal } from "./SL-utils.js";
 import {
   slValidationScopesOverlap,
   type SLValidationContract,
@@ -189,7 +189,7 @@ function slAssertPolicy(policy: SLPromotionPolicy): void {
 function slSortedScope(scope: SLPromotionScopeRef): SLPromotionScopeRef {
   return {
     ...scope,
-    ancestorScopeIds: [...scope.ancestorScopeIds].sort(),
+    ancestorScopeIds: [...scope.ancestorScopeIds].sort(slCompareOrdinal),
   };
 }
 
@@ -205,7 +205,7 @@ function slNormalizeContext(
         scope: slSortedScope(source.scope),
       }))
       .sort((left, right) =>
-        left.artifactId.localeCompare(right.artifactId),
+        slCompareOrdinal(left.artifactId, right.artifactId),
       ),
     artifactScope: {
       ...input.artifactScope,
@@ -217,12 +217,13 @@ function slNormalizeContext(
         applicationScope: slSortedScope(evidence.applicationScope),
       }))
       .sort((left, right) =>
-        [
-          left.sourceArtifactId,
-          left.artifactVersion,
-          left.applicationScope.id,
-          left.evidenceRef,
-        ].join("\0").localeCompare(
+        slCompareOrdinal(
+          [
+            left.sourceArtifactId,
+            left.artifactVersion,
+            left.applicationScope.id,
+            left.evidenceRef,
+          ].join("\0"),
           [
             right.sourceArtifactId,
             right.artifactVersion,
@@ -232,10 +233,10 @@ function slNormalizeContext(
         ),
       ),
     approvals: [...input.approvals].sort((left, right) =>
-      left.evidenceRef.localeCompare(right.evidenceRef),
+      slCompareOrdinal(left.evidenceRef, right.evidenceRef),
     ),
     activeGuidance: [...(input.activeGuidance ?? [])].sort((left, right) =>
-      left.artifactId.localeCompare(right.artifactId),
+      slCompareOrdinal(left.artifactId, right.artifactId),
     ),
   };
 }
@@ -283,14 +284,15 @@ function slEvidenceSummary(
       evidenceRefs: [
         ...group.verifiedSuccessRefs,
         ...group.verifiedFailureRefs,
-      ].sort(),
+      ].sort(slCompareOrdinal),
     }))
     .sort((left, right) =>
-      [
-        left.scopeId,
-        left.sourceArtifactId,
-        left.artifactVersion,
-      ].join("\0").localeCompare(
+      slCompareOrdinal(
+        [
+          left.scopeId,
+          left.sourceArtifactId,
+          left.artifactVersion,
+        ].join("\0"),
         [
           right.scopeId,
           right.sourceArtifactId,
@@ -488,7 +490,7 @@ export function slEvaluateScopedGuidanceConflicts(
   slAssertPolicy(policy);
   const resolutions: SLPromotionConflictResolution[] = [];
   const ordered = [...guidance].sort((left, right) =>
-    left.artifactId.localeCompare(right.artifactId),
+    slCompareOrdinal(left.artifactId, right.artifactId),
   );
   for (const item of ordered) {
     slAssertScope(item.scope);

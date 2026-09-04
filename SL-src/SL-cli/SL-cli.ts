@@ -21,6 +21,7 @@ import {
 import { slRetrieveArtifacts } from "../SL-core/SL-retrieval.js";
 import type { SLChange } from "../SL-core/SL-types.js";
 import {
+  slCompareOrdinal,
   slNormalizePath,
   slPrintChanges,
   slSlugify,
@@ -119,7 +120,7 @@ async function slEvaluationArtifactId(
 const program = new Command()
   .name("sl-repo")
   .description("Repository-local self-learning lifecycle")
-  .version("0.2.0");
+  .version("0.3.0");
 
 for (const mode of ["init", "update"] as const) {
   program
@@ -194,7 +195,9 @@ program
         {},
       );
       console.log(`Artifacts: ${registry.artifacts.length}`);
-      for (const [status, count] of Object.entries(counts).sort()) {
+      for (const [status, count] of Object.entries(counts).sort(
+        ([left], [right]) => slCompareOrdinal(left, right),
+      )) {
         console.log(`  ${status}: ${count}`);
       }
       console.log(`Issues: ${issues.length}`);

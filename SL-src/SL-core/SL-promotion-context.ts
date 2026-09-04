@@ -9,9 +9,19 @@ import {
 import {
   slFindScopeDefinition,
   slLoadScopeCatalog,
+  slScopeDescriptor,
   slPromotionScopeRef,
 } from "./SL-scope.js";
-import { SL_DEFAULT_SCOPE, slNormalizeScope } from "./SL-state.js";
+import {
+  SL_DEFAULT_SCOPE,
+  slNormalizeScope,
+  slScopeKey,
+} from "./SL-state.js";
+import type {
+  SLPromotionScopeRef,
+  SLRegistryArtifact,
+  SLScopeCatalog,
+} from "./SL-types.js";
 import {
   slArtifactUsageContentHash,
   slArtifactVersion,
@@ -22,6 +32,32 @@ import { slReadContainedText } from "./SL-utils.js";
 export interface SLBuildPromotionGovernanceContextOptions {
   targetScopeId?: string;
   ownerApprovalRefs?: string[];
+}
+
+export function slResolveArtifactPromotionTargetScope(
+  catalog: SLScopeCatalog,
+  artifact: SLRegistryArtifact,
+  requestedTargetScopeId: string,
+): SLPromotionScopeRef {
+  const artifactScope = slNormalizeScope(
+    artifact.scope ?? SL_DEFAULT_SCOPE,
+  );
+  if (requestedTargetScopeId !== artifactScope.id) {
+    throw new Error(
+      `Promotion target scope ${requestedTargetScopeId} does not match persisted artifact scope ${artifactScope.id}.`,
+    );
+  }
+  const targetDefinition = slFindScopeDefinition(
+    catalog,
+    requestedTargetScopeId,
+  );
+  const catalogScope = slScopeDescriptor(targetDefinition);
+  if (slScopeKey(artifactScope) !== slScopeKey(catalogScope)) {
+    throw new Error(
+      `Persisted artifact scope ${artifactScope.id} does not match its governance catalog scope.`,
+    );
+  }
+  return slPromotionScopeRef(catalog, requestedTargetScopeId);
 }
 
 export async function slBuildPromotionGovernanceContext(
@@ -42,8 +78,11 @@ export async function slBuildPromotionGovernanceContext(
     artifact.scope ?? SL_DEFAULT_SCOPE,
   );
   const targetScopeId = options.targetScopeId ?? artifactScope.id;
-  slFindScopeDefinition(catalog, targetScopeId);
-  const targetScope = slPromotionScopeRef(catalog, targetScopeId);
+  const targetScope = slResolveArtifactPromotionTargetScope(
+    catalog,
+    artifact,
+    targetScopeId,
+  );
   const sourceScopes = await Promise.all(
     sourceIds.map(async (sourceId) => {
       const source = slFindArtifact(registry, sourceId);

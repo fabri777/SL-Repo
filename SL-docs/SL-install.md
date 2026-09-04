@@ -6,6 +6,9 @@
 - Node.js 20 or newer
 - A Git repository to receive the SL layer
 
+SL Repo 0.3.0 supports both single repositories and hierarchical monorepos.
+Existing 0.2 root state is migrated additively into deterministic scope shards.
+
 ## From a local development clone
 
 ```powershell
@@ -80,9 +83,10 @@ To update the runtime pin, maintainers must:
    distributing an update.
 
 Packed artifact contents include `dist/`, `SL-schemas/`, `SL-templates/`,
-`SL-plugin/`, `SL-tests/`, `SL-docs/`, `README.md`, and `SECURITY.md`. This
-keeps the runtime, validation schemas, reusable fixtures/tests, secured
-consumer templates, plugin skills, and linked documentation together.
+`SL-plugin/`, `SL-tests/`, `SL-docs/`, `CHANGELOG.md`, `README.md`, and
+`SECURITY.md`. This keeps the runtime, validation schemas, reusable
+fixtures/tests, secured consumer templates, plugin skills, release history,
+and linked documentation together.
 
 After installation or update, run:
 
@@ -95,5 +99,6 @@ sl-repo validate C:\path\to\target
 projections, and refreshes the discovery index.
 
 For a 0.2 repository, follow
-[Migration from 0.2](SL-migration-0.2.md). Update is additive: legacy registry,
-index, counter, and unscoped event inputs remain readable and are not deleted.
+[Migration from 0.2 to 0.3](SL-migration-0.2.md). Update is additive: legacy
+registry, index, counter, and unscoped event inputs remain readable and are
+not deleted.

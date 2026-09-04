@@ -28,6 +28,7 @@ import {
   slCreateTestRepository,
   slRemoveTestRepository,
 } from "../SL-fixtures/SL-test-repository.js";
+import { slCreateMonorepoFixture } from "../SL-fixtures/SL-monorepo-fixture.js";
 
 const repositories: string[] = [];
 const CAPTURED_AT = new Date("2026-01-01T00:00:00.000Z");
@@ -62,6 +63,17 @@ async function getArtifact(
     throw new Error(`Missing test artifact ${id}`);
   }
   return artifact;
+}
+
+async function readOptionalFile(path: string): Promise<Buffer | null> {
+  try {
+    return await readFile(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return null;
+    }
+    throw error;
+  }
 }
 
 describe("SL forgetting", () => {
@@ -368,6 +380,140 @@ describe("SL forgetting", () => {
       expect(await readFile(absoluteEventPath)).toEqual(originalEventContent);
       expect(await getArtifact(root, id)).toEqual(quarantined);
     },
+  );
+
+  test(
+    "restore failure rolls back every monorepo shard and root state file exactly",
+    async () => {
+      const fixture = await slCreateMonorepoFixture();
+      repositories.push(fixture.root);
+      const id = fixture.artifacts.billingLesson.id;
+      await slForgetArtifact(
+        fixture.root,
+        id,
+        "wrong",
+        false,
+        new Date("2026-09-04T13:00:00.000Z"),
+      );
+      const quarantined = await getArtifact(fixture.root, id);
+      const stateCatalogPath = join(
+        fixture.root,
+        ".github",
+        "SL-learning",
+        "SL-state-catalog.json",
+      );
+      const stateCatalog = JSON.parse(
+        await readFile(stateCatalogPath, "utf8"),
+      ) as {
+        scopes: Array<{
+          registryPath: string;
+          indexPath: string;
+          projectionPath: string;
+        }>;
+      };
+      const firstScope = stateCatalog.scopes[0]!;
+      const secondScope = stateCatalog.scopes[1]!;
+      const firstRegistryPath = join(
+        fixture.root,
+        ...firstScope.registryPath.split("/"),
+      );
+      const firstIndexPath = join(
+        fixture.root,
+        ...firstScope.indexPath.split("/"),
+      );
+      const secondIndexPath = join(
+        fixture.root,
+        ...secondScope.indexPath.split("/"),
+      );
+      await writeFile(
+        stateCatalogPath,
+        `${(await readFile(stateCatalogPath, "utf8")).trimEnd()}  \r\n`,
+        "utf8",
+      );
+      await writeFile(
+        firstRegistryPath,
+        `${(await readFile(firstRegistryPath, "utf8")).trimEnd()} \r\n`,
+        "utf8",
+      );
+      await writeFile(
+        firstIndexPath,
+        '{"schemaVersion":2,"drifted":true}\r\n',
+        "utf8",
+      );
+      await rm(secondIndexPath, { force: true });
+
+      const relativeStatePaths = [
+        ".github/SL-learning/SL-registry.json",
+        ".github/SL-learning/SL-index.json",
+        ".github/SL-learning/SL-state-catalog.json",
+        ...stateCatalog.scopes.flatMap((scope) => [
+          scope.registryPath,
+          scope.indexPath,
+          scope.projectionPath,
+        ]),
+      ];
+      const before = new Map<string, Buffer | null>();
+      for (const relativePath of relativeStatePaths) {
+        before.set(
+          relativePath,
+          await readOptionalFile(
+            join(fixture.root, ...relativePath.split("/")),
+          ),
+        );
+      }
+      const now = new Date("2026-09-04T14:00:00.000Z");
+      const eventPath = slLifecycleEventPath(
+        slCreateLifecycleEvent({
+          schemaVersion: 1,
+          timestamp: now.toISOString(),
+          artifactId: id,
+          action: "restored",
+          fromStatus: "quarantined",
+          toStatus: "raw",
+          fromPath: quarantined.path,
+          toPath: quarantined.originalPath!,
+        }),
+      );
+      const absoluteEventPath = join(
+        fixture.root,
+        ...eventPath.split("/"),
+      );
+      const eventCollision = Buffer.from('{"collision":true}\r\n', "utf8");
+      await mkdir(dirname(absoluteEventPath), { recursive: true });
+      await writeFile(absoluteEventPath, eventCollision);
+
+      await expect(
+        slRestoreArtifact(fixture.root, id, false, now),
+      ).rejects.toThrow(
+        `Immutable SL lifecycle event collision: ${eventPath}`,
+      );
+
+      for (const [relativePath, content] of before) {
+        const current = await readOptionalFile(
+          join(fixture.root, ...relativePath.split("/")),
+        );
+        expect(current).toEqual(content);
+      }
+      expect(await readFile(absoluteEventPath)).toEqual(eventCollision);
+      expect(await getArtifact(fixture.root, id)).toEqual(quarantined);
+      expect(
+        slParseMarkdown<Record<string, unknown>>(
+          await readFile(
+            join(fixture.root, ...quarantined.path!.split("/")),
+            "utf8",
+          ),
+        ).frontmatter.status,
+      ).toBe("quarantined");
+      await expect(
+        readFile(
+          join(
+            fixture.root,
+            ...quarantined.originalPath!.split("/"),
+          ),
+        ),
+      ).rejects.toThrow();
+    },
+    30_000,
   );
 
   test("never ages pinned evidence", async () => {

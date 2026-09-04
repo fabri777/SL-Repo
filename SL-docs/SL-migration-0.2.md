@@ -1,4 +1,4 @@
-# Migration from SL Repo 0.2
+# Migration from SL Repo 0.2 to 0.3
 
 ## Before updating
 
@@ -23,6 +23,11 @@ creates deterministic root-scope shards, imports legacy mutable counters once
 as an immutable baseline, reads legacy unscoped events, and leaves legacy files
 unchanged. Existing artifacts default to `SL-SCOPE-ROOT` until deliberately
 moved to a declared scope.
+
+During compatibility reads, a legacy record may overlay its shard successor
+only when immutable artifact identity is equivalent. Duplicate IDs inside a
+shard, across shards, or in conflicting legacy/shard records fail before any
+state mutation.
 
 ## Compatibility and rollback
 
