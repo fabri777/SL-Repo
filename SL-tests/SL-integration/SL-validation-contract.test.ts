@@ -21,6 +21,7 @@ import { slLoadRegistry } from "../../SL-src/SL-core/SL-registry.js";
 import {
   slEvaluate,
   slFindValidationContractConflicts,
+  slParseLivePosixProcessGroups,
   type SLValidationContract,
 } from "../../SL-src/SL-validation/SL-validation-contract.js";
 import { slValidateRepository } from "../../SL-src/SL-validation/SL-validation.js";
@@ -747,14 +748,19 @@ describe("SL promoted validation contracts", () => {
     });
 
     expect(evaluation.status).toBe("failed");
-    expect(evaluation.checks).toContainEqual({
+    const timeoutCheck = evaluation.checks.find(
+      (check) => check.id === "executable:timeout",
+    );
+    expect(timeoutCheck).toMatchObject({
       id: "executable:timeout",
       kind: "executable",
       status: "failed",
-      message: "Executable check exceeded 250ms.",
       exitCode: null,
       timedOut: true,
     });
+    expect(timeoutCheck?.message).toMatch(
+      /^Executable check exceeded 250ms(?:\.|, but process-tree termination could not be confirmed: .+)$/,
+    );
     expect(evaluation.checks).toContainEqual({
       id: "executable:unexpected-exit",
       kind: "executable",
@@ -764,6 +770,22 @@ describe("SL promoted validation contracts", () => {
       timedOut: false,
     });
   }, 30000);
+
+  test("parses live POSIX process groups and excludes zombies", () => {
+    const snapshot = slParseLivePosixProcessGroups(
+      "  101 Ss\n202 Z+\n  303 R<\n",
+    );
+
+    expect(snapshot).toEqual({
+      processGroupIds: new Set([101, 303]),
+    });
+  });
+
+  test("rejects malformed POSIX process snapshot rows", () => {
+    expect(slParseLivePosixProcessGroups("101\n")).toEqual({
+      error: "POSIX process snapshot contained an unrecognized row: 101",
+    });
+  });
 
   test.each([
     {

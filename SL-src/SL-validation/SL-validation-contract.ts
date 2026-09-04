@@ -30,6 +30,8 @@ const SL_EXECUTABLE_CLEANUP_TIMEOUT_MS =
   process.platform === "win32" ? 12000 : 2000;
 const SL_EXECUTABLE_FORCE_CLOSE_TIMEOUT_MS = 500;
 const SL_EXECUTABLE_CLEANUP_POLL_MS = 25;
+const SL_POSIX_PROCESS_QUERY_TIMEOUT_MS = 500;
+const SL_POSIX_PROCESS_QUERY_MAX_BYTES = 4 * 1024 * 1024;
 const SL_WINDOWS_PROCESS_QUERY_TIMEOUT_MS = 10_000;
 const SL_WINDOWS_PROCESS_QUERY_MAX_BYTES = 4 * 1024 * 1024;
 const SL_WINDOWS_TASKKILL_MAX_BYTES = 64 * 1024;
@@ -648,7 +650,10 @@ async function slContainPosixProcessGroup(
   directChildCompleted: boolean,
 ): Promise<string | undefined> {
   let terminationError: string | undefined;
-  const groupState = slProcessGroupState(pid);
+  const groupState = await slReadPosixProcessGroupState(
+    pid,
+    SL_POSIX_PROCESS_QUERY_TIMEOUT_MS,
+  );
   if (typeof groupState === "string") {
     return groupState;
   }
@@ -680,16 +685,112 @@ async function slContainPosixProcessGroup(
   return failures.length > 0 ? failures.join("; ") : undefined;
 }
 
-function slProcessGroupState(pid: number): boolean | string {
-  try {
-    process.kill(-pid, 0);
-    return true;
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    return code === "ESRCH"
-      ? false
-      : `process group ${pid} exit could not be checked: ${(error as Error).message}`;
+export function slParseLivePosixProcessGroups(
+  output: string,
+): { processGroupIds: Set<number> } | { error: string } {
+  const processGroupIds = new Set<number>();
+  for (const line of output.split(/\r?\n/)) {
+    if (!line.trim()) {
+      continue;
+    }
+    const match = /^\s*(\d+)\s+(\S+)\s*$/.exec(line);
+    if (!match) {
+      return {
+        error: `POSIX process snapshot contained an unrecognized row: ${line.trim()}`,
+      };
+    }
+    const processGroupId = Number.parseInt(match[1]!, 10);
+    const status = match[2]!;
+    if (
+      !Number.isSafeInteger(processGroupId) ||
+      processGroupId <= 0
+    ) {
+      return {
+        error: `POSIX process snapshot contained an invalid process group ID: ${match[1]}`,
+      };
+    }
+    if (!status.startsWith("Z")) {
+      processGroupIds.add(processGroupId);
+    }
   }
+  return { processGroupIds };
+}
+
+async function slReadPosixProcessGroupState(
+  pid: number,
+  timeoutMs: number,
+): Promise<boolean | string> {
+  const query = spawn(
+    "/bin/ps",
+    ["-ax", "-o", "pgid=,stat="],
+    {
+      shell: false,
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+    },
+  );
+  let output = "";
+  let errorOutput = "";
+  let exceededBuffer = false;
+  query.stdout.setEncoding("utf8");
+  query.stderr.setEncoding("utf8");
+  query.stdout.on("data", (chunk: string) => {
+    output += chunk;
+    if (output.length > SL_POSIX_PROCESS_QUERY_MAX_BYTES) {
+      exceededBuffer = true;
+      query.kill("SIGKILL");
+    }
+  });
+  query.stderr.on("data", (chunk: string) => {
+    errorOutput += chunk;
+    if (errorOutput.length > SL_POSIX_PROCESS_QUERY_MAX_BYTES) {
+      exceededBuffer = true;
+      query.kill("SIGKILL");
+    }
+  });
+  const outcomePromise = new Promise<
+    | { kind: "close"; exitCode: number | null }
+    | { kind: "error"; error: Error }
+  >((resolveOutcome) => {
+    query.once("close", (exitCode) => {
+      resolveOutcome({ kind: "close", exitCode });
+    });
+    query.once("error", (error) => {
+      resolveOutcome({ kind: "error", error });
+    });
+  });
+  const outcome = await slWaitForPromise(outcomePromise, timeoutMs);
+  if (!outcome.completed) {
+    query.kill("SIGKILL");
+    const forcedClose = await slWaitForPromise(
+      outcomePromise,
+      SL_EXECUTABLE_FORCE_CLOSE_TIMEOUT_MS,
+    );
+    if (!forcedClose.completed) {
+      query.stdout.destroy();
+      query.stderr.destroy();
+      query.unref();
+    }
+    return `POSIX process snapshot did not finish within ${timeoutMs}ms${
+      forcedClose.completed
+        ? ""
+        : ` and did not close within ${SL_EXECUTABLE_FORCE_CLOSE_TIMEOUT_MS}ms after termination`
+    }`;
+  }
+  if (exceededBuffer) {
+    return "POSIX process snapshot exceeded its output limit";
+  }
+  if (outcome.value.kind === "error") {
+    return `POSIX process snapshot could not start: ${outcome.value.error.message}`;
+  }
+  if (outcome.value.exitCode !== 0) {
+    const detail = errorOutput.trim();
+    return `POSIX process snapshot exited with code ${String(outcome.value.exitCode)}${detail ? `: ${detail}` : ""}`;
+  }
+  const snapshot = slParseLivePosixProcessGroups(output);
+  return "error" in snapshot
+    ? snapshot.error
+    : snapshot.processGroupIds.has(pid);
 }
 
 interface SLWindowsProcessEntry {
@@ -1112,14 +1213,18 @@ async function slWaitForProcessGroupExit(
 ): Promise<string | undefined> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    try {
-      process.kill(-pid, 0);
-    } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code;
-      if (code === "ESRCH") {
-        return undefined;
-      }
-      return `process group ${pid} exit could not be checked: ${(error as Error).message}`;
+    const groupState = await slReadPosixProcessGroupState(
+      pid,
+      Math.min(
+        SL_POSIX_PROCESS_QUERY_TIMEOUT_MS,
+        Math.max(1, deadline - Date.now()),
+      ),
+    );
+    if (typeof groupState === "string") {
+      return `process group ${pid} exit could not be checked: ${groupState}`;
+    }
+    if (!groupState) {
+      return undefined;
     }
     await new Promise((resolveDelay) => {
       setTimeout(resolveDelay, SL_EXECUTABLE_CLEANUP_POLL_MS);
