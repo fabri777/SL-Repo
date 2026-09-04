@@ -29,6 +29,7 @@ import type {
   SLRegistry,
   SLRegistryArtifact,
 } from "./SL-types.js";
+import { SL_DEFAULT_SCOPE, slNormalizeScope } from "./SL-state.js";
 import { slArtifactContentHash } from "./SL-usage.js";
 import {
   slAssertRealPathInside,
@@ -472,6 +473,7 @@ async function slRegisterPromotionUnlocked(
     pinned: false,
     relatedTo: [sourceId],
     dependsOn: [sourceId],
+    scope: slNormalizeScope(source.scope ?? SL_DEFAULT_SCOPE),
   };
   slUpsertArtifact(registry, promoted);
   await slSaveRegistry(root, registry, dryRun, changes);

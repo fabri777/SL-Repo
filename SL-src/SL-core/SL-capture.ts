@@ -12,7 +12,9 @@ import type {
   SLChange,
   SLEvent,
   SLRegistryArtifact,
+  SLScopeDescriptor,
 } from "./SL-types.js";
+import { SL_DEFAULT_SCOPE, slNormalizeScope } from "./SL-state.js";
 import {
   slDateOnly,
   slExists,
@@ -29,6 +31,7 @@ export interface SLCaptureOptions {
   triggers: string[];
   dryRun: boolean;
   now?: Date;
+  stateScope?: SLScopeDescriptor;
 }
 
 export async function slCaptureLesson(
@@ -132,6 +135,7 @@ async function slCaptureLessonUnlocked(
     hits: 0,
     retrievals: 0,
     notUsefulVotes: 0,
+    scope: slNormalizeScope(options.stateScope ?? SL_DEFAULT_SCOPE),
   };
   slUpsertArtifact(registry, artifact);
   await slSaveRegistry(root, registry, options.dryRun, changes);

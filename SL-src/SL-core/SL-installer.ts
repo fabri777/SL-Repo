@@ -14,6 +14,7 @@ import {
   slUpsertArtifact,
 } from "./SL-registry.js";
 import type { SLChange, SLRegistryArtifact } from "./SL-types.js";
+import { SL_DEFAULT_SCOPE } from "./SL-state.js";
 import {
   slExists,
   slNormalizePath,
@@ -180,6 +181,7 @@ async function slInstallUnlocked(
           : timestamp,
       pinned: true,
       relatedTo: [],
+      scope: SL_DEFAULT_SCOPE,
     };
     registry.artifacts = registry.artifacts.filter(
       (candidate) =>

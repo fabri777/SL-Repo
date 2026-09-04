@@ -33,8 +33,19 @@ import type {
   SLUsageEvent,
   SLUsageOutcome,
   SLUsageProjection,
+  SLUsageRepositoryAggregate,
+  SLScopeDescriptor,
+  SLUsageScopeAggregate,
   SLUsageStage,
 } from "./SL-types.js";
+import {
+  SL_DEFAULT_SCOPE,
+  slArtifactShardName,
+  slLoadStateCatalog,
+  slNormalizeScope,
+  slScopeCatalogEntry,
+  slScopeKey,
+} from "./SL-state.js";
 import {
   slAssertRealPathInside,
   slCanonicalJson,
@@ -90,6 +101,7 @@ export interface SLCreateUsageEventInput {
   timestamp: string;
   idempotencyKey: string;
   evidenceRef?: string;
+  scope?: SLScopeDescriptor;
 }
 
 export interface SLStartUsageOptions {
@@ -404,6 +416,7 @@ export function slCreateUsageEvent(
     verifierType: input.verifierType,
     timestamp: input.timestamp,
     ...(input.evidenceRef ? { evidenceRef: input.evidenceRef } : {}),
+    scope: slNormalizeScope(input.scope ?? SL_DEFAULT_SCOPE),
   };
   slValidateUsageEvent(event);
   return event;
@@ -464,6 +477,7 @@ export function slCreateLegacyUsageBaseline(
     outcome: "unknown",
     verifierType: "legacy-counter-migration",
     timestamp,
+    scope: slNormalizeScope(artifact.scope ?? SL_DEFAULT_SCOPE),
     legacyCounts: {
       retrievalCount,
       applicationCount,
@@ -522,6 +536,12 @@ export function slValidateUsageEvent(event: SLUsageEvent): void {
   slAssertTimestamp("timestamp", event.timestamp);
   if (event.evidenceRef) {
     slAssertEvidenceRef(event.evidenceRef);
+  }
+  if (event.scope) {
+    const normalizedScope = slNormalizeScope(event.scope);
+    if (slScopeKey(event.scope) !== slScopeKey(normalizedScope)) {
+      throw new Error("scope must be normalized.");
+    }
   }
   if (event.eventType === "legacy-baseline") {
     for (const [name, value] of Object.entries(event.legacyCounts)) {
@@ -583,6 +603,10 @@ export function slValidateUsageEvent(event: SLUsageEvent): void {
 
 export function slUsageEventPath(event: SLUsageEvent): string {
   const month = event.timestamp.slice(0, 7);
+  if (event.scope) {
+    const scopeEntry = slScopeCatalogEntry(event.scope);
+    return `${scopeEntry.usageEventsPath}/${slArtifactShardName(event.artifactId)}/${month}/SL-usage-${event.eventId.slice("SL-USE-".length)}.json`;
+  }
   return `${SL_PATHS.usageEvents}/${month}/SL-usage-${event.eventId.slice("SL-USE-".length)}.json`;
 }
 
@@ -719,18 +743,32 @@ export async function slWriteUsageOperationEvent(
 }
 
 export async function slLoadUsageEvents(root: string): Promise<SLUsageEvent[]> {
-  await slAssertRealPathInside(root, SL_PATHS.usageEvents);
-  const usageRoot = slResolveInside(root, SL_PATHS.usageEvents);
-  if (!(await slExists(usageRoot))) {
-    return [];
+  await slAssertRealPathInside(root, SL_PATHS.learningRoot);
+  const legacyUsageRoot = slResolveInside(root, SL_PATHS.usageEvents);
+  if (await slExists(legacyUsageRoot)) {
+    await slAssertRealPathInside(root, SL_PATHS.usageEvents);
   }
-  const paths = await fg("**/*.json", {
-    cwd: usageRoot,
-    onlyFiles: true,
-  });
+  const catalog = await slLoadStateCatalog(root);
+  for (const entry of catalog.scopes) {
+    const usageRoot = slResolveInside(root, entry.usageEventsPath);
+    if (await slExists(usageRoot)) {
+      await slAssertRealPathInside(root, entry.usageEventsPath);
+    }
+  }
+  const paths = await fg(
+    [
+      `${SL_PATHS.usageEvents}/**/*.json`,
+      `${SL_PATHS.scopeRoot}/*/SL-usage-events/**/*.json`,
+    ],
+    {
+      cwd: root,
+      onlyFiles: true,
+      followSymbolicLinks: false,
+    },
+  );
   const events: SLUsageEvent[] = [];
-  for (const relativePath of paths.sort()) {
-    const eventPath = `${SL_PATHS.usageEvents}/${slNormalizePath(relativePath)}`;
+  for (const relativePath of paths.map(slNormalizePath).sort()) {
+    const eventPath = relativePath;
     await slAssertRealPathInside(root, eventPath);
     const event = await slReadJson<SLUsageEvent>(
       slResolveInside(root, eventPath),
@@ -748,6 +786,7 @@ function slUsageArtifactIdentity(
   artifactId: string;
   artifactVersion: string;
   artifactContentHash: string;
+  scope: SLScopeDescriptor;
 } {
   if (
     !["lesson", "instruction", "skill"].includes(artifact.artifactType) ||
@@ -766,6 +805,7 @@ function slUsageArtifactIdentity(
     artifactId: artifact.id,
     artifactContentHash,
     artifactVersion: slArtifactVersion(artifactContentHash),
+    scope: slNormalizeScope(artifact.scope ?? SL_DEFAULT_SCOPE),
   };
 }
 
@@ -787,6 +827,7 @@ function slAssertApplicationIdentity(
     artifactContentHash: string;
     taskRunId: string;
     applicationId: string;
+    scope?: SLScopeDescriptor;
   },
 ): void {
   for (const event of events) {
@@ -794,7 +835,9 @@ function slAssertApplicationIdentity(
       event.artifactId !== identity.artifactId ||
       event.artifactVersion !== identity.artifactVersion ||
       event.artifactContentHash !== identity.artifactContentHash ||
-      event.taskRunId !== identity.taskRunId
+      event.taskRunId !== identity.taskRunId ||
+      slScopeKey(event.scope ?? SL_DEFAULT_SCOPE) !==
+        slScopeKey(identity.scope ?? SL_DEFAULT_SCOPE)
     ) {
       throw new Error(
         `Application ID ${identity.applicationId} is already bound to different usage identity data.`,
@@ -1125,6 +1168,7 @@ async function slFinishUsageUnlocked(
     artifactContentHash: first.artifactContentHash,
     taskRunId: first.taskRunId,
     applicationId: first.applicationId,
+    scope: slNormalizeScope(first.scope ?? SL_DEFAULT_SCOPE),
   });
   slAssertUniqueApplicationStages(applicationEvents, first.applicationId);
 
@@ -1173,6 +1217,7 @@ async function slFinishUsageUnlocked(
     timestamp: (options.now ?? new Date()).toISOString(),
     idempotencyKey,
     ...(options.evidenceRef ? { evidenceRef: options.evidenceRef } : {}),
+    scope: slNormalizeScope(first.scope ?? SL_DEFAULT_SCOPE),
   });
   const otherTerminalEvents = applicationEvents.filter(
     (candidate) =>
@@ -1267,7 +1312,7 @@ export function slProjectUsageEvents(
 
   const grouped = new Map<string, SLUsageEvent[]>();
   for (const event of eventsByIdempotencyKey.values()) {
-    const key = `${event.artifactId}\0${event.artifactVersion}`;
+    const key = `${slScopeKey(event.scope ?? SL_DEFAULT_SCOPE)}\0${event.artifactId}\0${event.artifactVersion}`;
     const events = grouped.get(key) ?? [];
     events.push(event);
     grouped.set(key, events);
@@ -1289,6 +1334,9 @@ export function slProjectUsageEvents(
     let baselineVerifiedSuccessCount = 0;
     let baselineVerifiedFailureCount = 0;
     let baselineUnknownCount = 0;
+    let baselineOutcomeSuccessCount = 0;
+    let baselineOutcomeFailureCount = 0;
+    let baselineOutcomeUnknownCount = 0;
     let lastRetrievedAt: string | undefined;
     let lastAppliedAt: string | undefined;
     let lastVerifiedSuccessAt: string | undefined;
@@ -1317,6 +1365,18 @@ export function slProjectUsageEvents(
           baselineUnknownCount,
           event.legacyCounts.unknownCount,
         );
+        baselineOutcomeSuccessCount = Math.max(
+          baselineOutcomeSuccessCount,
+          event.legacyCounts.verifiedSuccessCount,
+        );
+        baselineOutcomeFailureCount = Math.max(
+          baselineOutcomeFailureCount,
+          event.legacyCounts.verifiedFailureCount,
+        );
+        baselineOutcomeUnknownCount = Math.max(
+          baselineOutcomeUnknownCount,
+          event.legacyCounts.unknownCount,
+        );
         lastRetrievedAt = slMaxTimestamp(
           lastRetrievedAt,
           event.legacyLastRetrievedAt ?? event.timestamp,
@@ -1337,6 +1397,10 @@ export function slProjectUsageEvents(
     let verifiedSuccessCount = baselineVerifiedSuccessCount;
     let verifiedFailureCount = baselineVerifiedFailureCount;
     let unknownCount = baselineUnknownCount;
+    let outcomeSuccessCount = baselineOutcomeSuccessCount;
+    let outcomeFailureCount = baselineOutcomeFailureCount;
+    let outcomePartialCount = 0;
+    let outcomeUnknownCount = baselineOutcomeUnknownCount;
 
     for (const applicationEvents of applications.values()) {
       retrievalCount += 1;
@@ -1366,6 +1430,29 @@ export function slProjectUsageEvents(
       const verifiedEvents = applicationEvents.filter(
         (event) => event.stage === "verified",
       );
+      const terminalEvents = applicationEvents.filter((event) =>
+        ["outcome", "verified"].includes(event.stage),
+      );
+      const terminalOutcomes = new Set(
+        terminalEvents.map((event) => event.outcome),
+      );
+      if (terminalEvents.length > 0) {
+        if (terminalOutcomes.size === 1 && terminalOutcomes.has("success")) {
+          outcomeSuccessCount += 1;
+        } else if (
+          terminalOutcomes.size === 1 &&
+          terminalOutcomes.has("failure")
+        ) {
+          outcomeFailureCount += 1;
+        } else if (
+          terminalOutcomes.size === 1 &&
+          terminalOutcomes.has("partial")
+        ) {
+          outcomePartialCount += 1;
+        } else {
+          outcomeUnknownCount += 1;
+        }
+      }
       const verifiedOutcomes = new Set(
         verifiedEvents.map((event) => event.outcome),
       );
@@ -1400,12 +1487,32 @@ export function slProjectUsageEvents(
     );
     const verifiedDenominator =
       verifiedSuccessCount + verifiedFailureCount;
+    const outcomeCount =
+      outcomeSuccessCount +
+      outcomeFailureCount +
+      outcomePartialCount +
+      outcomeUnknownCount;
+    const outcomeResolvedCount =
+      outcomeSuccessCount + outcomeFailureCount + outcomePartialCount;
     projections.push({
+      scope: slNormalizeScope(first.scope ?? SL_DEFAULT_SCOPE),
       artifactId: first.artifactId,
       artifactVersion: first.artifactVersion,
       artifactContentHash: first.artifactContentHash,
       retrievalCount,
       applicationCount,
+      applicationRate:
+        retrievalCount === 0 ? null : applicationCount / retrievalCount,
+      outcomeCount,
+      outcomeSuccessCount,
+      outcomeFailureCount,
+      outcomePartialCount,
+      outcomeUnknownCount,
+      outcomeSuccessRate:
+        outcomeResolvedCount === 0
+          ? null
+          : outcomeSuccessCount / outcomeResolvedCount,
+      verifiedCount: verifiedDenominator,
       resolvedCount: verifiedDenominator,
       verifiedSuccessCount,
       verifiedFailureCount,
@@ -1423,6 +1530,7 @@ export function slProjectUsageEvents(
 
   return projections.sort(
     (left, right) =>
+      slScopeKey(left.scope).localeCompare(slScopeKey(right.scope)) ||
       left.artifactId.localeCompare(right.artifactId) ||
       left.artifactVersion.localeCompare(right.artifactVersion),
   );
@@ -1469,7 +1577,10 @@ async function slCurrentUsageProjection(
     return undefined;
   }
   const artifactProjections = projections.filter(
-    (projection) => projection.artifactId === artifact.id,
+    (projection) =>
+      projection.artifactId === artifact.id &&
+      slScopeKey(projection.scope) ===
+        slScopeKey(artifact.scope ?? SL_DEFAULT_SCOPE),
   );
   if (artifactProjections.length === 0) {
     return undefined;
@@ -1492,11 +1603,20 @@ async function slCurrentUsageProjection(
       artifactContentHash,
       retrievalCount: 0,
       applicationCount: 0,
+      applicationRate: null,
+      outcomeCount: 0,
+      outcomeSuccessCount: 0,
+      outcomeFailureCount: 0,
+      outcomePartialCount: 0,
+      outcomeUnknownCount: 0,
+      outcomeSuccessRate: null,
+      verifiedCount: 0,
       resolvedCount: 0,
       verifiedSuccessCount: 0,
       verifiedFailureCount: 0,
       unknownCount: 0,
       verifiedSuccessRate: null,
+      scope: slNormalizeScope(artifact.scope ?? SL_DEFAULT_SCOPE),
     }
   );
 }
@@ -1797,7 +1917,13 @@ export async function slSynchronizeUsageProjectionUnlocked(
     }
     await slSaveRegistry(root, registry, dryRun, changes);
     registrySaved = !dryRun;
-    await slWriteIndex(root, registry, dryRun, changes);
+    await slWriteIndex(
+      root,
+      registry,
+      dryRun,
+      changes,
+      slProjectUsageEvents(events),
+    );
     return registry;
   } catch (error) {
     if (!dryRun) {
@@ -1837,9 +1963,123 @@ export async function slSynchronizeUsageProjection(
 export async function slProjectUsage(
   root: string,
   artifactId?: string,
+  scope?: SLScopeDescriptor,
 ): Promise<SLUsageProjection[]> {
   const projections = slProjectUsageEvents(await slLoadUsageEvents(root));
-  return artifactId
-    ? projections.filter((projection) => projection.artifactId === artifactId)
-    : projections;
+  return projections.filter(
+    (projection) =>
+      (!artifactId || projection.artifactId === artifactId) &&
+      (!scope ||
+        slScopeKey(projection.scope) ===
+          slScopeKey(slNormalizeScope(scope))),
+  );
+}
+
+function slRate(numerator: number, denominator: number): number | null {
+  return denominator === 0 ? null : numerator / denominator;
+}
+
+export function slAggregateUsageByScope(
+  projections: SLUsageProjection[],
+): SLUsageScopeAggregate[] {
+  const aggregates = new Map<string, SLUsageScopeAggregate>();
+  for (const projection of projections) {
+    const scope = slNormalizeScope(projection.scope);
+    const key = slScopeKey(scope);
+    const aggregate = aggregates.get(key) ?? {
+      scope,
+      retrievalCount: 0,
+      applicationCount: 0,
+      outcomeCount: 0,
+      outcomeSuccessCount: 0,
+      outcomeFailureCount: 0,
+      outcomePartialCount: 0,
+      outcomeUnknownCount: 0,
+      verifiedCount: 0,
+      verifiedSuccessCount: 0,
+      verifiedFailureCount: 0,
+      applicationRate: null,
+      outcomeSuccessRate: null,
+      verifiedSuccessRate: null,
+    };
+    aggregate.retrievalCount += projection.retrievalCount;
+    aggregate.applicationCount += projection.applicationCount;
+    aggregate.outcomeCount += projection.outcomeCount;
+    aggregate.outcomeSuccessCount += projection.outcomeSuccessCount;
+    aggregate.outcomeFailureCount += projection.outcomeFailureCount;
+    aggregate.outcomePartialCount += projection.outcomePartialCount;
+    aggregate.outcomeUnknownCount += projection.outcomeUnknownCount;
+    aggregate.verifiedCount += projection.verifiedCount;
+    aggregate.verifiedSuccessCount += projection.verifiedSuccessCount;
+    aggregate.verifiedFailureCount += projection.verifiedFailureCount;
+    aggregates.set(key, aggregate);
+  }
+  for (const aggregate of aggregates.values()) {
+    aggregate.applicationRate = slRate(
+      aggregate.applicationCount,
+      aggregate.retrievalCount,
+    );
+    aggregate.outcomeSuccessRate = slRate(
+      aggregate.outcomeSuccessCount,
+      aggregate.outcomeSuccessCount +
+        aggregate.outcomeFailureCount +
+        aggregate.outcomePartialCount,
+    );
+    aggregate.verifiedSuccessRate = slRate(
+      aggregate.verifiedSuccessCount,
+      aggregate.verifiedSuccessCount + aggregate.verifiedFailureCount,
+    );
+  }
+  return [...aggregates.values()].sort((left, right) =>
+    slScopeKey(left.scope).localeCompare(slScopeKey(right.scope)),
+  );
+}
+
+export function slAggregateUsageRepository(
+  projections: SLUsageProjection[],
+): SLUsageRepositoryAggregate {
+  const scopes = slAggregateUsageByScope(projections);
+  return {
+    aggregation: "repository-counts-only",
+    scopeCount: scopes.length,
+    retrievalCount: scopes.reduce(
+      (sum, scope) => sum + scope.retrievalCount,
+      0,
+    ),
+    applicationCount: scopes.reduce(
+      (sum, scope) => sum + scope.applicationCount,
+      0,
+    ),
+    outcomeCount: scopes.reduce((sum, scope) => sum + scope.outcomeCount, 0),
+    outcomeSuccessCount: scopes.reduce(
+      (sum, scope) => sum + scope.outcomeSuccessCount,
+      0,
+    ),
+    outcomeFailureCount: scopes.reduce(
+      (sum, scope) => sum + scope.outcomeFailureCount,
+      0,
+    ),
+    outcomePartialCount: scopes.reduce(
+      (sum, scope) => sum + scope.outcomePartialCount,
+      0,
+    ),
+    outcomeUnknownCount: scopes.reduce(
+      (sum, scope) => sum + scope.outcomeUnknownCount,
+      0,
+    ),
+    verifiedCount: scopes.reduce(
+      (sum, scope) => sum + scope.verifiedCount,
+      0,
+    ),
+    verifiedSuccessCount: scopes.reduce(
+      (sum, scope) => sum + scope.verifiedSuccessCount,
+      0,
+    ),
+    verifiedFailureCount: scopes.reduce(
+      (sum, scope) => sum + scope.verifiedFailureCount,
+      0,
+    ),
+    successRate: null,
+    successRateReason: "rates-are-reported-per-scope",
+  };
 }

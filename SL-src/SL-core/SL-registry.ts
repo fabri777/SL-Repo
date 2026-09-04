@@ -8,7 +8,18 @@ import type {
   SLLifecycleEvent,
   SLRegistry,
   SLRegistryArtifact,
+  SLScopeRegistry,
+  SLScopeUsageProjection,
+  SLUsageProjection,
 } from "./SL-types.js";
+import {
+  SL_DEFAULT_SCOPE,
+  slAssertCatalogEntryPaths,
+  slLoadStateCatalog,
+  slNormalizeScope,
+  slScopeKey,
+  slWriteStateCatalog,
+} from "./SL-state.js";
 import {
   slAssertRealPathInside,
   slCanonicalJson,
@@ -28,10 +39,106 @@ export function slEmptyRegistry(): SLRegistry {
 
 export async function slLoadRegistry(root: string): Promise<SLRegistry> {
   const path = slResolveInside(root, SL_PATHS.registry);
-  if (!(await slExists(path))) {
-    return slEmptyRegistry();
+  const legacy = (await slExists(path))
+    ? await slReadJson<SLRegistry>(path)
+    : slEmptyRegistry();
+  const artifacts = new Map<string, SLRegistryArtifact>();
+  for (const artifact of legacy.artifacts) {
+    artifacts.set(artifact.id, {
+      ...artifact,
+      scope: slNormalizeScope(artifact.scope ?? SL_DEFAULT_SCOPE),
+    });
   }
-  return slReadJson<SLRegistry>(path);
+  const scopeRegistries = await slLoadScopeRegistries(root);
+  for (const shard of scopeRegistries) {
+    for (const artifact of shard.artifacts) {
+      artifacts.set(artifact.id, {
+        ...artifact,
+        scope: slNormalizeScope(artifact.scope ?? shard.scope),
+      });
+    }
+  }
+  const catalog = await slLoadStateCatalog(root);
+  const projections = new Map<string, SLUsageProjection[]>();
+  const currentVersions = new Map<string, string>();
+  for (const entry of catalog.scopes) {
+    const projectionPath = slResolveInside(root, entry.projectionPath);
+    if (!(await slExists(projectionPath))) {
+      continue;
+    }
+    await slAssertRealPathInside(root, entry.projectionPath);
+    const projectionShard =
+      await slReadJson<SLScopeUsageProjection>(projectionPath);
+    for (const [artifactId, version] of Object.entries(
+      projectionShard.currentArtifactVersions ?? {},
+    )) {
+      currentVersions.set(artifactId, version);
+    }
+    for (const projection of projectionShard.projections) {
+      const values = projections.get(projection.artifactId) ?? [];
+      values.push(projection);
+      projections.set(projection.artifactId, values);
+    }
+  }
+  for (const artifact of artifacts.values()) {
+    const candidates = projections.get(artifact.id) ?? [];
+    const currentVersion = currentVersions.get(artifact.id);
+    candidates.sort((left, right) => {
+      const leftTimestamp =
+        left.lastRetrievedAt ??
+        left.lastAppliedAt ??
+        left.lastVerifiedSuccessAt ??
+        left.lastVerifiedFailureAt ??
+        "";
+      const rightTimestamp =
+        right.lastRetrievedAt ??
+        right.lastAppliedAt ??
+        right.lastVerifiedSuccessAt ??
+        right.lastVerifiedFailureAt ??
+        "";
+      return (
+        rightTimestamp.localeCompare(leftTimestamp) ||
+        right.artifactVersion.localeCompare(left.artifactVersion)
+      );
+    });
+    const selected =
+      candidates.find(
+        (projection) => projection.artifactVersion === currentVersion,
+      ) ?? candidates[0];
+    if (selected) {
+      artifact.usageProjection = selected;
+    }
+  }
+  return {
+    schemaVersion: 1,
+    artifacts: [...artifacts.values()].sort((left, right) =>
+      left.id.localeCompare(right.id),
+    ),
+  };
+}
+
+export async function slLoadScopeRegistries(
+  root: string,
+): Promise<SLScopeRegistry[]> {
+  const catalog = await slLoadStateCatalog(root);
+  const shards: SLScopeRegistry[] = [];
+  for (const entry of catalog.scopes) {
+    slAssertCatalogEntryPaths(entry);
+    await slAssertRealPathInside(root, entry.registryPath);
+    const path = slResolveInside(root, entry.registryPath);
+    if (!(await slExists(path))) {
+      continue;
+    }
+    const shard = await slReadJson<SLScopeRegistry>(path);
+    shards.push({
+      schemaVersion: 1,
+      scope: slNormalizeScope(shard.scope),
+      artifacts: shard.artifacts,
+    });
+  }
+  return shards.sort((left, right) =>
+    slScopeKey(left.scope).localeCompare(slScopeKey(right.scope)),
+  );
 }
 
 export async function slSaveRegistry(
@@ -41,7 +148,44 @@ export async function slSaveRegistry(
   changes: SLChange[],
 ): Promise<void> {
   registry.artifacts.sort((left, right) => left.id.localeCompare(right.id));
-  await slWriteJson(root, SL_PATHS.registry, registry, dryRun, changes);
+  const catalog = await slLoadStateCatalog(root);
+  const scopes = new Map(
+    catalog.scopes.map((entry) => [slScopeKey(entry.scope), entry.scope]),
+  );
+  const artifactsByScope = new Map<string, SLRegistryArtifact[]>();
+  for (const artifact of registry.artifacts) {
+    const scope = slNormalizeScope(artifact.scope ?? SL_DEFAULT_SCOPE);
+    artifact.scope = scope;
+    const key = slScopeKey(scope);
+    scopes.set(key, scope);
+    const persistedArtifact = structuredClone(artifact);
+    delete persistedArtifact.usageProjection;
+    const artifacts = artifactsByScope.get(key) ?? [];
+    artifacts.push(persistedArtifact);
+    artifactsByScope.set(key, artifacts);
+  }
+  const nextCatalog = await slWriteStateCatalog(
+    root,
+    scopes.values(),
+    dryRun,
+    changes,
+  );
+  for (const entry of nextCatalog.scopes) {
+    const artifacts = artifactsByScope.get(slScopeKey(entry.scope)) ?? [];
+    artifacts.sort((left, right) => left.id.localeCompare(right.id));
+    const shard: SLScopeRegistry = {
+      schemaVersion: 1,
+      scope: entry.scope,
+      artifacts,
+    };
+    await slWriteJson(
+      root,
+      entry.registryPath,
+      shard,
+      dryRun,
+      changes,
+    );
+  }
 }
 
 export function slFindArtifact(

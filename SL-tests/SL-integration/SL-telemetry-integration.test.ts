@@ -19,6 +19,10 @@ import {
 } from "../../SL-src/SL-core/SL-promotion.js";
 import { slLoadRegistry } from "../../SL-src/SL-core/SL-registry.js";
 import {
+  SL_DEFAULT_SCOPE,
+  slScopeCatalogEntry,
+} from "../../SL-src/SL-core/SL-state.js";
+import {
   slArtifactUsageContentHash,
   slCreateUsageEvent,
   slFinishUsage,
@@ -39,6 +43,10 @@ import {
   slWriteTestJson,
   slWriteTestPromotedArtifact,
 } from "../SL-fixtures/SL-validation-contract.js";
+
+function slDefaultIndexPath(root: string): string {
+  return join(root, ...slScopeCatalogEntry(SL_DEFAULT_SCOPE).indexPath.split("/"));
+}
 
 const repositories: string[] = [];
 const CAPTURED_AT = new Date("2026-01-01T00:00:00.000Z");
@@ -214,7 +222,7 @@ describe("SL telemetry integration", () => {
 
     const probationIndex = JSON.parse(
       await readFile(
-        join(root, ".github", "SL-learning", "SL-index.json"),
+        slDefaultIndexPath(root),
         "utf8",
       ),
     ) as { artifacts: Array<{ id: string }> };
@@ -250,7 +258,7 @@ describe("SL telemetry integration", () => {
     );
     const activeIndex = JSON.parse(
       await readFile(
-        join(root, ".github", "SL-learning", "SL-index.json"),
+        slDefaultIndexPath(root),
         "utf8",
       ),
     ) as {
@@ -266,9 +274,6 @@ describe("SL telemetry integration", () => {
     expect(activeIndex.artifacts).toContainEqual(
       expect.objectContaining({
         id: artifactId,
-        usageProjection: expect.objectContaining({
-          verifiedSuccessCount: 1,
-        }),
       }),
     );
   });
@@ -321,7 +326,6 @@ describe("SL telemetry integration", () => {
     expect(drift).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ code: "usage-projection-drift" }),
-        expect.objectContaining({ code: "index-drift" }),
       ]),
     );
 
@@ -360,6 +364,7 @@ describe("SL telemetry integration", () => {
       "2026-02",
       "SL-usage-DUPLICATE.json",
     );
+    await mkdir(dirname(duplicatePath), { recursive: true });
     await copyFile(
       join(root, ...validChange.path.split("/")),
       duplicatePath,

@@ -108,6 +108,7 @@ export interface SLRegistryArtifact {
   activatedAt?: string;
   promotionEvaluation?: SLPromotionEvaluation;
   usageProjection?: SLUsageProjection;
+  scope?: SLScopeDescriptor;
 }
 
 export interface SLRegistry {
@@ -121,14 +122,46 @@ export interface SLIndexArtifact {
   artifactType: SLArtifactType;
   status: SLStatus;
   trigger?: string[];
-  usageProjection?: SLUsageProjection;
   relatedTo: string[];
   dependsOn?: string[];
 }
 
 export interface SLIndex {
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
+  scope?: SLScopeDescriptor;
   artifacts: SLIndexArtifact[];
+}
+
+export interface SLScopeDescriptor {
+  id: string;
+  path: string;
+}
+
+export interface SLScopeCatalogEntry {
+  scope: SLScopeDescriptor;
+  shard: string;
+  registryPath: string;
+  indexPath: string;
+  projectionPath: string;
+  usageEventsPath: string;
+}
+
+export interface SLStateCatalog {
+  schemaVersion: 1;
+  scopes: SLScopeCatalogEntry[];
+}
+
+export interface SLScopeRegistry {
+  schemaVersion: 1;
+  scope: SLScopeDescriptor;
+  artifacts: SLRegistryArtifact[];
+}
+
+export interface SLScopeUsageProjection {
+  schemaVersion: 1;
+  scope: SLScopeDescriptor;
+  currentArtifactVersions: Record<string, string>;
+  projections: SLUsageProjection[];
 }
 
 export interface SLEvent {
@@ -210,6 +243,7 @@ export interface SLUsageEventBase {
   verifierType: string;
   timestamp: string;
   evidenceRef?: string;
+  scope?: SLScopeDescriptor;
 }
 
 export interface SLUsageApplicationEvent extends SLUsageEventBase {
@@ -234,11 +268,20 @@ export type SLUsageEvent =
   | SLLegacyUsageBaselineEvent;
 
 export interface SLUsageProjection {
+  scope: SLScopeDescriptor;
   artifactId: string;
   artifactVersion: string;
   artifactContentHash: string;
   retrievalCount: number;
   applicationCount: number;
+  applicationRate: number | null;
+  outcomeCount: number;
+  outcomeSuccessCount: number;
+  outcomeFailureCount: number;
+  outcomePartialCount: number;
+  outcomeUnknownCount: number;
+  outcomeSuccessRate: number | null;
+  verifiedCount: number;
   resolvedCount: number;
   verifiedSuccessCount: number;
   verifiedFailureCount: number;
@@ -248,6 +291,40 @@ export interface SLUsageProjection {
   lastAppliedAt?: string;
   lastVerifiedSuccessAt?: string;
   lastVerifiedFailureAt?: string;
+}
+
+export interface SLUsageScopeAggregate {
+  scope: SLScopeDescriptor;
+  retrievalCount: number;
+  applicationCount: number;
+  outcomeCount: number;
+  outcomeSuccessCount: number;
+  outcomeFailureCount: number;
+  outcomePartialCount: number;
+  outcomeUnknownCount: number;
+  verifiedCount: number;
+  verifiedSuccessCount: number;
+  verifiedFailureCount: number;
+  applicationRate: number | null;
+  outcomeSuccessRate: number | null;
+  verifiedSuccessRate: number | null;
+}
+
+export interface SLUsageRepositoryAggregate {
+  aggregation: "repository-counts-only";
+  scopeCount: number;
+  retrievalCount: number;
+  applicationCount: number;
+  outcomeCount: number;
+  outcomeSuccessCount: number;
+  outcomeFailureCount: number;
+  outcomePartialCount: number;
+  outcomeUnknownCount: number;
+  verifiedCount: number;
+  verifiedSuccessCount: number;
+  verifiedFailureCount: number;
+  successRate: null;
+  successRateReason: "rates-are-reported-per-scope";
 }
 
 export interface SLChange {

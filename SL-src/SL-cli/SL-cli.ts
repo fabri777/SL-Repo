@@ -14,9 +14,15 @@ import {
   SLScopeResolver,
 } from "../SL-core/SL-scope.js";
 import type { SLChange } from "../SL-core/SL-types.js";
-import { slNormalizePath, slPrintChanges } from "../SL-core/SL-utils.js";
+import {
+  slNormalizePath,
+  slPrintChanges,
+  slSlugify,
+} from "../SL-core/SL-utils.js";
 import { slVoteOnLesson } from "../SL-core/SL-vote.js";
 import {
+  slAggregateUsageByScope,
+  slAggregateUsageRepository,
   slFinishUsage,
   slProjectUsage,
   slStartUsage,
@@ -242,6 +248,8 @@ program
       .choices(["win", "pitfall", "mixed"])
       .default("win"),
   )
+  .option("--state-scope <path>", "Repository-relative monorepo state scope")
+  .option("--state-scope-id <id>", "Stable state scope identifier")
   .requiredOption("--scope <scope>", "Repository-defined scope")
   .option("--trigger <trigger>", "Retrieval trigger", slCollect, [])
   .option("--dry-run", "Show changes without writing")
@@ -253,6 +261,8 @@ program
         kind: "win" | "pitfall" | "mixed";
         scope: string;
         trigger: string[];
+        stateScope?: string;
+        stateScopeId?: string;
       },
     ) =>
       slRun(async () => {
@@ -262,6 +272,16 @@ program
           scope: options.scope,
           triggers: options.trigger,
           dryRun: options.dryRun ?? false,
+          ...(options.stateScope
+            ? {
+                stateScope: {
+                  id:
+                    options.stateScopeId ??
+                    (slSlugify(options.stateScope) || "scope"),
+                  path: options.stateScope,
+                },
+              }
+            : {}),
         });
         console.log(`${result.id} -> ${result.path}`);
         slPrintChanges(result.changes);
@@ -473,11 +493,18 @@ program
   .command("stats [artifact-id] [path]")
   .description("Show version-specific immutable usage statistics")
   .option("--json", "Print deterministic JSON output")
+  .addOption(
+    new Option("--aggregate <view>", "Aggregation view")
+      .choices(["artifact", "scope", "repository"])
+      .default("artifact"),
+  )
   .action(
     (
       artifactIdValue: string | undefined,
       pathValue: string | undefined,
-      options: SLJsonOptions,
+      options: SLJsonOptions & {
+        aggregate: "artifact" | "scope" | "repository";
+      },
     ) =>
       slRun(async () => {
         const artifactId =
@@ -487,8 +514,18 @@ program
             ? pathValue ?? "."
             : artifactIdValue ?? pathValue ?? ".";
         const projections = await slProjectUsage(slRoot(rootPath), artifactId);
+        const output =
+          options.aggregate === "scope"
+            ? slAggregateUsageByScope(projections)
+            : options.aggregate === "repository"
+              ? slAggregateUsageRepository(projections)
+              : projections;
         if (options.json) {
-          console.log(JSON.stringify(projections, null, 2));
+          console.log(JSON.stringify(output, null, 2));
+          return;
+        }
+        if (options.aggregate !== "artifact") {
+          console.log(JSON.stringify(output, null, 2));
           return;
         }
         if (projections.length === 0) {
@@ -499,6 +536,7 @@ program
           console.log(
             [
               `artifactId=${projection.artifactId}`,
+              `scope=${projection.scope.id}:${projection.scope.path}`,
               `artifactVersion=${projection.artifactVersion}`,
               `retrievals=${projection.retrievalCount}`,
               `applications=${projection.applicationCount}`,

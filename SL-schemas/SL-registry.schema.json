@@ -213,6 +213,9 @@
           "usageProjection": {
             "$ref": "#/$defs/usageProjection"
           },
+          "scope": {
+            "$ref": "#/$defs/scope"
+          },
           "pinned": {
             "type": "boolean"
           },
@@ -247,15 +250,39 @@
     }
   },
   "$defs": {
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "path"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
     "usageProjection": {
       "type": "object",
       "additionalProperties": false,
       "required": [
+        "scope",
         "artifactId",
         "artifactVersion",
         "artifactContentHash",
         "retrievalCount",
         "applicationCount",
+        "applicationRate",
+        "outcomeCount",
+        "outcomeSuccessCount",
+        "outcomeFailureCount",
+        "outcomePartialCount",
+        "outcomeUnknownCount",
+        "outcomeSuccessRate",
+        "verifiedCount",
         "resolvedCount",
         "verifiedSuccessCount",
         "verifiedFailureCount",
@@ -263,6 +290,9 @@
         "verifiedSuccessRate"
       ],
       "properties": {
+        "scope": {
+          "$ref": "#/$defs/scope"
+        },
         "artifactId": {
           "type": "string",
           "pattern": "^SL-[A-Z0-9][A-Z0-9-]*$"
@@ -280,6 +310,40 @@
           "minimum": 0
         },
         "applicationCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "applicationRate": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "outcomeCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "outcomeSuccessCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "outcomeFailureCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "outcomePartialCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "outcomeUnknownCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "outcomeSuccessRate": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "verifiedCount": {
           "type": "integer",
           "minimum": 0
         },

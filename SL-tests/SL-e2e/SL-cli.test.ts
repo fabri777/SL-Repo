@@ -215,7 +215,7 @@ describe("sl-repo CLI", () => {
           "--idempotency-key",
           "cli-vote",
         ]),
-      ).toContain(".github/SL-learning/SL-usage-events");
+      ).toContain("/SL-usage-events/");
       expect(runCli(["usage", lessonId, root])).toContain(
         '"verifiedSuccessCount": 1',
       );
@@ -377,12 +377,19 @@ describe("sl-repo CLI", () => {
         selected: { stage: "selected" },
         applied: { stage: "applied" },
       });
-      expect(plannedStart.changes.map((change) => change.path)).toEqual([
-        expect.stringContaining("SL-usage-events"),
-        expect.stringContaining("SL-usage-events"),
-        ".github/SL-learning/SL-registry.json",
-        ".github/SL-learning/SL-index.json",
-      ]);
+      expect(plannedStart.changes.map((change) => change.path)).toEqual(
+        expect.arrayContaining([
+          expect.stringContaining("SL-usage-events"),
+          expect.stringContaining("SL-registry.json"),
+          expect.stringContaining("SL-index.json"),
+          expect.stringContaining("SL-usage-projection.json"),
+        ]),
+      );
+      expect(
+        plannedStart.changes.filter((change) =>
+          change.path.includes("SL-usage-events"),
+        ),
+      ).toHaveLength(2);
 
       const emptyStats = JSON.parse(
         runCli(["stats", lessonId, root, "--json"]),
@@ -429,11 +436,14 @@ describe("sl-repo CLI", () => {
         stage: "verified",
         outcome: "success",
       });
-      expect(plannedFinish.changes.map((change) => change.path)).toEqual([
-        expect.stringContaining("SL-usage-events"),
-        ".github/SL-learning/SL-registry.json",
-        ".github/SL-learning/SL-index.json",
-      ]);
+      expect(plannedFinish.changes.map((change) => change.path)).toEqual(
+        expect.arrayContaining([
+          expect.stringContaining("SL-usage-events"),
+          expect.stringContaining("SL-registry.json"),
+          expect.stringContaining("SL-index.json"),
+          expect.stringContaining("SL-usage-projection.json"),
+        ]),
+      );
       const unfinishedStats = JSON.parse(
         runCli(["stats", lessonId, root, "--json"]),
       ) as Array<{ resolvedCount: number; unknownCount: number }>;

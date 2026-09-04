@@ -130,6 +130,8 @@ make command retries safe, while separate files keep concurrent branch changes
 merge-friendly. Existing mutable counters are retained and imported once as an
 immutable per-version baseline; new votes do not increment those counters.
 See [SL usage events](SL-docs/SL-usage-events.md).
+For monorepo scope shards and post-merge regeneration, see
+[SL monorepo state layout](SL-docs/SL-state-layout.md).
 
 Evaluate a promoted artifact statically by ID or registered path:
 

@@ -1,2 +1,3 @@
 /SL-lifecycle-events/**/*.json text eol=lf
 /SL-usage-events/**/*.json text eol=lf
+/SL-scopes/*/SL-usage-events/**/*.json text eol=lf

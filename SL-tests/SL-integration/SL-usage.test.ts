@@ -20,6 +20,10 @@ import {
   slUsageEventPath,
   slWriteUsageEvent,
 } from "../../SL-src/SL-core/SL-usage.js";
+import {
+  SL_DEFAULT_SCOPE,
+  slScopeCatalogEntry,
+} from "../../SL-src/SL-core/SL-state.js";
 import { slCaptureLesson } from "../../SL-src/SL-core/SL-capture.js";
 import { slInstall } from "../../SL-src/SL-core/SL-installer.js";
 import {
@@ -153,18 +157,27 @@ describe("SL usage events", () => {
       now: new Date("2026-09-03T12:00:00.000Z"),
     });
 
-    expect(firstStart.changes.map((change) => change.action)).toEqual([
-      "create",
-      "create",
-      "update",
-      "update",
+    expect(
+      firstStart.changes.filter((change) => change.action === "create"),
+    ).toEqual([
+      expect.objectContaining({ path: expect.stringContaining("SL-usage-events") }),
+      expect.objectContaining({ path: expect.stringContaining("SL-usage-events") }),
     ]);
-    expect(retryStart.changes.map((change) => change.action)).toEqual([
-      "skip",
-      "skip",
-      "skip",
-      "skip",
-    ]);
+    expect(firstStart.changes).toContainEqual(
+      expect.objectContaining({
+        action: "update",
+        path: expect.stringContaining("SL-registry.json"),
+      }),
+    );
+    expect(firstStart.changes).toContainEqual(
+      expect.objectContaining({
+        action: "update",
+        path: expect.stringContaining("SL-usage-projection.json"),
+      }),
+    );
+    expect(retryStart.changes.every((change) => change.action === "skip")).toBe(
+      true,
+    );
     expect(firstFinish.change.action).toBe("create");
     expect(retryFinish.change.action).toBe("skip");
     expect(await slLoadUsageEvents(root)).toHaveLength(3);
@@ -205,12 +218,16 @@ describe("SL usage events", () => {
       now: new Date("2026-09-03T11:00:00.000Z"),
     });
 
-    expect(result.changes.map((change) => change.action)).toEqual([
+    expect(result.changes.slice(0, 2).map((change) => change.action)).toEqual([
       "skip",
       "create",
-      "update",
-      "update",
     ]);
+    expect(result.changes).toContainEqual(
+      expect.objectContaining({
+        action: "update",
+        path: expect.stringContaining("SL-registry.json"),
+      }),
+    );
     expect(await readFile(selectedPath, "utf8")).toBe(selectedBeforeRetry);
     const events = await slLoadUsageEvents(root);
     expect(events).toHaveLength(2);
@@ -555,28 +572,32 @@ describe("SL usage events", () => {
         timestamp: FIXED_NOW.toISOString(),
       }),
     });
-    expect(plannedStart.changes).toEqual([
-      {
-        action: "create",
-        path: expect.stringContaining("SL-usage-events"),
-        detail: "planned",
-      },
-      {
-        action: "create",
-        path: expect.stringContaining("SL-usage-events"),
-        detail: "planned",
-      },
-      {
-        action: "update",
-        path: ".github/SL-learning/SL-registry.json",
-        detail: "planned",
-      },
-      {
-        action: "update",
-        path: ".github/SL-learning/SL-index.json",
-        detail: "planned",
-      },
-    ]);
+    expect(plannedStart.changes).toEqual(
+      expect.arrayContaining([
+        {
+          action: "create",
+          path: expect.stringContaining("SL-usage-events"),
+          detail: "planned",
+        },
+        {
+          action: "update",
+          path: expect.stringContaining("SL-registry.json"),
+          detail: "planned",
+        },
+        {
+          action: "update",
+          path: expect.stringContaining("SL-usage-projection.json"),
+          detail: "planned",
+        },
+      ]),
+    );
+    expect(
+      plannedStart.changes.filter(
+        (change) =>
+          change.action === "create" &&
+          change.path.includes("SL-usage-events"),
+      ),
+    ).toHaveLength(2);
     expect(await slLoadUsageEvents(root)).toEqual([]);
     expect(await slLoadRegistry(root)).toEqual(registryBeforeStart);
 
@@ -603,23 +624,25 @@ describe("SL usage events", () => {
       outcome: "success",
       timestamp: "2026-09-03T11:00:00.000Z",
     });
-    expect(plannedFinish.changes).toEqual([
-      {
-        action: "create",
-        path: expect.stringContaining("SL-usage-events"),
-        detail: "planned",
-      },
-      {
-        action: "update",
-        path: ".github/SL-learning/SL-registry.json",
-        detail: "planned",
-      },
-      {
-        action: "update",
-        path: ".github/SL-learning/SL-index.json",
-        detail: "planned",
-      },
-    ]);
+    expect(plannedFinish.changes).toEqual(
+      expect.arrayContaining([
+        {
+          action: "create",
+          path: expect.stringContaining("SL-usage-events"),
+          detail: "planned",
+        },
+        {
+          action: "update",
+          path: expect.stringContaining("SL-registry.json"),
+          detail: "planned",
+        },
+        {
+          action: "update",
+          path: expect.stringContaining("SL-usage-projection.json"),
+          detail: "planned",
+        },
+      ]),
+    );
     expect(await slLoadUsageEvents(root)).toHaveLength(2);
     expect(await slLoadRegistry(root)).toEqual(registryBeforeFinish);
   });
@@ -861,7 +884,9 @@ describe("SL usage events", () => {
     );
     expect(artifact).toMatchObject({
       status: "promotion-candidate",
-      usageProjection: {
+    });
+    expect(await slProjectUsage(root, lesson.id)).toEqual([
+      expect.objectContaining({
         retrievalCount: applicationCount,
         applicationCount,
         resolvedCount: applicationCount,
@@ -869,27 +894,24 @@ describe("SL usage events", () => {
         verifiedFailureCount: 0,
         unknownCount: 0,
         verifiedSuccessRate: 1,
-      },
-    });
+      }),
+    ]);
+    const scopeEntry = slScopeCatalogEntry(SL_DEFAULT_SCOPE);
     const index = JSON.parse(
       await readFile(
-        join(root, ".github", "SL-learning", "SL-index.json"),
+        join(root, ...scopeEntry.indexPath.split("/")),
         "utf8",
       ),
     ) as {
       artifacts: Array<{
         id: string;
         status: string;
-        usageProjection?: { verifiedSuccessCount: number };
       }>;
     };
     expect(
       index.artifacts.find((candidate) => candidate.id === lesson.id),
     ).toMatchObject({
       status: "promotion-candidate",
-      usageProjection: {
-        verifiedSuccessCount: applicationCount,
-      },
     });
     const markdown = slParseMarkdown<{ status: string }>(
       await readFile(join(root, lesson.path), "utf8"),
@@ -1061,11 +1083,20 @@ describe("SL usage events", () => {
     expect(merged).toEqual(forward);
     expect(merged).toEqual([
       {
+        scope: SL_DEFAULT_SCOPE,
         artifactId: "SL-TEST-ARTIFACT",
         artifactVersion: `sha256:${CONTENT_HASH_A}`,
         artifactContentHash: CONTENT_HASH_A,
         retrievalCount: 2,
         applicationCount: 2,
+        applicationRate: 1,
+        outcomeCount: 2,
+        outcomeSuccessCount: 1,
+        outcomeFailureCount: 1,
+        outcomePartialCount: 0,
+        outcomeUnknownCount: 0,
+        outcomeSuccessRate: 0.5,
+        verifiedCount: 2,
         resolvedCount: 2,
         verifiedSuccessCount: 1,
         verifiedFailureCount: 1,

@@ -1,9 +1,11 @@
 # SL usage events
 
 SL records retrieval, application, outcome, and verification as immutable JSON
-files under `.github/SL-learning/SL-usage-events/YYYY-MM/`. Each command or
-branch normally adds a distinct `SL-usage-*.json` file instead of editing a
-shared counter or append-only log.
+files under the owning scope and artifact shard:
+`.github/SL-learning/SL-scopes/<scope>/SL-usage-events/<artifact>/YYYY-MM/`.
+Legacy unscoped files under `.github/SL-learning/SL-usage-events/YYYY-MM/`
+remain readable. Each command or branch normally adds a distinct
+`SL-usage-*.json` file instead of editing a shared counter or append-only log.
 
 The version 1 schema is published as
 `SL-schemas/SL-usage-event.schema.json`. Every event contains:
@@ -49,7 +51,9 @@ caused the outcome.
 
 `sl-repo stats [artifact-id] [path]` and the compatibility
 `sl-repo usage <artifact-id> [path]` deterministically group events by artifact
-content version and application ID.
+content version, scope, and application ID. `--aggregate scope` reports
+scope-specific rates. `--aggregate repository` reports counts only and does
+not manufacture a global success percentage from unlike service scopes.
 
 - Retrieval counts unique applications with any stage.
 - Application counts unique applications that reached `applied`, `outcome`, or
@@ -66,15 +70,17 @@ Event IDs, idempotency keys, stage identities, and application IDs are
 deduplicated. Conflicting terminal outcomes or application identity data are
 rejected by usage operations and repository validation.
 
-`sl-repo project [path]` rebuilds registry timestamps, evidence maturity, the
-current-version `usageProjection`, and the discovery index. Usage commands do
+`sl-repo project [path]` rebuilds scope-registry timestamps, evidence maturity,
+usage projection shards, and scope discovery indexes. Usage commands do
 this automatically under the shared repository-scoped, stale-safe mutation
 lock, also used by promotion and forgetting, so cross-operation writes cannot
 overwrite a newer projection or lifecycle state. Finish operations reload
 terminal history after acquiring that lock, preventing concurrent conflicting
-outcomes for one application. The explicit command is useful after Git
-combines event files from independent branches. Repository validation reports
-projection and index drift until the deterministic rebuild is applied.
+outcomes for one application. The explicit command is useful after Git combines event files from independent
+branches. Repository validation reports projection and index drift until the
+deterministic rebuild is applied. Derived shard files are independently
+rebuildable; after resolving a merge, run `sl-repo project .` followed by
+`sl-repo validate .`.
 
 For promoted instructions and skills, a verified success newer than a stale
 or quarantine transition records freshness but does not restore discovery.

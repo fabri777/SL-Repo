@@ -16,6 +16,10 @@ import {
 } from "../../SL-src/SL-core/SL-registry.js";
 import type { SLChange, SLRegistryArtifact } from "../../SL-src/SL-core/SL-types.js";
 import {
+  SL_DEFAULT_SCOPE,
+  slScopeCatalogEntry,
+} from "../../SL-src/SL-core/SL-state.js";
+import {
   slForgetArtifact,
   slRestoreArtifact,
   slSweep,
@@ -27,6 +31,10 @@ import {
 
 const repositories: string[] = [];
 const CAPTURED_AT = new Date("2026-01-01T00:00:00.000Z");
+
+function slDefaultIndexPath(root: string): string {
+  return join(root, ...slScopeCatalogEntry(SL_DEFAULT_SCOPE).indexPath.split("/"));
+}
 
 afterEach(async () => {
   await Promise.all(repositories.splice(0).map(slRemoveTestRepository));
@@ -109,21 +117,17 @@ describe("SL forgetting", () => {
     });
     const index = JSON.parse(
       await readFile(
-        join(root, ".github", "SL-learning", "SL-index.json"),
+        slDefaultIndexPath(root),
         "utf8",
       ),
     ) as {
       artifacts: Array<{
         id: string;
         status: string;
-        usageProjection?: { verifiedSuccessCount: number };
       }>;
     };
     expect(index.artifacts.find((artifact) => artifact.id === id)).toMatchObject({
       status: "raw",
-      usageProjection: {
-        verifiedSuccessCount: 1,
-      },
     });
   });
 

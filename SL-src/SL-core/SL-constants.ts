@@ -14,6 +14,8 @@ export const SL_PATHS = {
   ],
   registry: ".github/SL-learning/SL-registry.json",
   index: ".github/SL-learning/SL-index.json",
+  stateCatalog: ".github/SL-learning/SL-state-catalog.json",
+  scopeRoot: ".github/SL-learning/SL-scopes",
   legacyEvents: ".github/SL-learning/SL-events.jsonl",
   lifecycleEvents: ".github/SL-learning/SL-lifecycle-events",
   usageEvents: ".github/SL-learning/SL-usage-events",

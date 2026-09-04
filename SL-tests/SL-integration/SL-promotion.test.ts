@@ -25,6 +25,10 @@ import {
   slSaveRegistry,
 } from "../../SL-src/SL-core/SL-registry.js";
 import { slVoteOnLesson } from "../../SL-src/SL-core/SL-vote.js";
+import {
+  SL_DEFAULT_SCOPE,
+  slScopeCatalogEntry,
+} from "../../SL-src/SL-core/SL-state.js";
 import type {
   SLChange,
   SLRegistryArtifact,
@@ -49,6 +53,17 @@ import {
 
 const repositories: string[] = [];
 const FIXED_NOW = new Date("2026-09-03T00:00:00.000Z");
+
+function slDefaultIndexPath(root: string): string {
+  return join(root, ...slScopeCatalogEntry(SL_DEFAULT_SCOPE).indexPath.split("/"));
+}
+
+function slDefaultRegistryPath(root: string): string {
+  return join(
+    root,
+    ...slScopeCatalogEntry(SL_DEFAULT_SCOPE).registryPath.split("/"),
+  );
+}
 
 afterEach(async () => {
   await Promise.all(repositories.splice(0).map(slRemoveTestRepository));
@@ -195,7 +210,7 @@ describe("SL promotion", () => {
     const artifact = await slArtifact(root, artifactId);
     const index = JSON.parse(
       await readFile(
-        join(root, ".github", "SL-learning", "SL-index.json"),
+        slDefaultIndexPath(root),
         "utf8",
       ),
     ) as { artifacts: Array<{ id: string }> };
@@ -588,7 +603,7 @@ describe("SL promotion", () => {
     ).toBe("probation");
     let index = JSON.parse(
       await readFile(
-        join(root, ".github", "SL-learning", "SL-index.json"),
+        slDefaultIndexPath(root),
         "utf8",
       ),
     ) as { artifacts: Array<{ id: string; status: string }> };
@@ -640,7 +655,7 @@ describe("SL promotion", () => {
     );
     index = JSON.parse(
       await readFile(
-        join(root, ".github", "SL-learning", "SL-index.json"),
+        slDefaultIndexPath(root),
         "utf8",
       ),
     ) as { artifacts: Array<{ id: string; status: string }> };
@@ -850,7 +865,7 @@ describe("SL promotion", () => {
     expect(restored.promotionEvaluation).toBeUndefined();
     const indexBeforeActivation = JSON.parse(
       await readFile(
-        join(root, ".github", "SL-learning", "SL-index.json"),
+        slDefaultIndexPath(root),
         "utf8",
       ),
     ) as { artifacts: Array<{ id: string }> };
@@ -910,7 +925,7 @@ describe("SL promotion", () => {
     );
     const indexAfterActivation = JSON.parse(
       await readFile(
-        join(root, ".github", "SL-learning", "SL-index.json"),
+        slDefaultIndexPath(root),
         "utf8",
       ),
     ) as { artifacts: Array<{ id: string; status: string }> };
@@ -978,7 +993,7 @@ describe("SL promotion", () => {
     });
     const index = JSON.parse(
       await readFile(
-        join(root, ".github", "SL-learning", "SL-index.json"),
+        slDefaultIndexPath(root),
         "utf8",
       ),
     ) as {
@@ -997,9 +1012,6 @@ describe("SL promotion", () => {
         expect.objectContaining({
           id: source.id,
           status: "promoted",
-          usageProjection: expect.objectContaining({
-            verifiedSuccessCount: 1,
-          }),
         }),
       ]),
     );
@@ -1023,12 +1035,7 @@ describe("SL promotion", () => {
       false,
       FIXED_NOW,
     );
-    const registryPath = join(
-      root,
-      ".github",
-      "SL-learning",
-      "SL-registry.json",
-    );
+    const registryPath = slDefaultRegistryPath(root);
     const registryBefore = await readFile(registryPath, "utf8");
 
     const readiness = await slEvaluatePromotionReadiness(root, artifactId, {
@@ -1055,7 +1062,7 @@ describe("SL promotion", () => {
         }),
         expect.objectContaining({
           action: "update",
-          path: ".github/SL-learning/SL-registry.json",
+          path: expect.stringContaining("SL-registry.json"),
           detail: "planned",
         }),
       ]),
@@ -1321,7 +1328,7 @@ describe("SL promotion", () => {
     const artifact = await slArtifact(root, artifactId);
     const index = JSON.parse(
       await readFile(
-        join(root, ".github", "SL-learning", "SL-index.json"),
+        slDefaultIndexPath(root),
         "utf8",
       ),
     ) as { artifacts: Array<{ id: string; status: string }> };
@@ -1603,7 +1610,7 @@ describe("SL promotion", () => {
 
     const index = JSON.parse(
       await readFile(
-        join(root, ".github", "SL-learning", "SL-index.json"),
+        slDefaultIndexPath(root),
         "utf8",
       ),
     ) as { artifacts: Array<{ id: string }> };
@@ -1717,7 +1724,7 @@ describe("SL promotion", () => {
     const issues = await slValidateRepository(root);
     const index = JSON.parse(
       await readFile(
-        join(root, ".github", "SL-learning", "SL-index.json"),
+        slDefaultIndexPath(root),
         "utf8",
       ),
     ) as { artifacts: Array<{ id: string }> };

@@ -9,13 +9,15 @@ SL Repo separates reasoning from deterministic enforcement.
 | Repository files | Preserve evidence and promoted knowledge in Git |
 | GitHub Actions | Re-run deterministic checks and scheduled retention |
 
-The registry is the authority for ownership and governed lifecycle state.
+Per-scope registry shards are the authority for ownership and governed
+lifecycle state. The root state catalog contains only scope descriptors and
+shard paths.
 Immutable per-event files are the authority for retrieval and verified usage.
-Registry timestamps, maturity, and `usageProjection` fields are rebuildable
-caches; mutable legacy counters are never incremented. The Markdown artifact
-preserves human-readable evidence. The generated index is a discovery
-projection with current-version metrics, paths, and metadata rather than full
-content.
+Registry timestamps and maturity are rebuildable caches; mutable legacy
+counters are never incremented. Usage metrics live in separate per-scope
+projection shards. The Markdown artifact preserves human-readable evidence.
+Each generated scope index contains discovery paths and metadata, not metrics.
+See [SL monorepo state layout](SL-state-layout.md).
 
 Hierarchical monorepo scope resolution is a separate deterministic control
 plane. A versioned scope catalog maps normalized repository paths to one
@@ -23,8 +25,9 @@ primary scope, followed by dependencies and ancestors. Existing installations
 without a catalog use a single built-in root scope. See
 [SL hierarchical monorepo scopes](SL-scopes.md).
 
-Every operation that changes whole-registry, discovery-index, or managed
-frontmatter state uses one repository-scoped mutation lock. The lock carries
+Every operation that changes registry, discovery-index, or managed frontmatter
+state uses one repository-scoped mutation lock. Scope-local writes update only
+their deterministic shard; the lock carries
 owner process, host, timestamp, and random-token metadata, refreshes its lease,
 waits for a bounded interval, and reclaims only demonstrably abandoned locks
 through atomic rename-before-remove.

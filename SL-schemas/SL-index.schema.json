@@ -10,7 +10,10 @@
   ],
   "properties": {
     "schemaVersion": {
-      "const": 1
+      "enum": [1, 2]
+    },
+    "scope": {
+      "$ref": "#/$defs/scope"
     },
     "artifacts": {
       "type": "array",
@@ -43,9 +46,6 @@
               "type": "string"
             }
           },
-          "usageProjection": {
-            "$ref": "#/$defs/usageProjection"
-          },
           "relatedTo": {
             "type": "array",
             "items": {
@@ -63,6 +63,21 @@
     }
   },
   "$defs": {
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "path"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
     "usageProjection": {
       "type": "object",
       "additionalProperties": false,
