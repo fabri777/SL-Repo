@@ -132,6 +132,22 @@ function slSameLockSnapshot(
   );
 }
 
+function slSameLockOwner(
+  left: SLMutationLockOwner | undefined,
+  right: SLMutationLockOwner | undefined,
+): boolean {
+  if (!left || !right) {
+    return left === right;
+  }
+  return (
+    left.schemaVersion === right.schemaVersion &&
+    left.token === right.token &&
+    left.pid === right.pid &&
+    left.hostname === right.hostname &&
+    left.acquiredAt === right.acquiredAt
+  );
+}
+
 function slLockLeaseIsFresh(
   snapshot: SLMutationLockSnapshot,
   staleMs: number,
@@ -208,9 +224,7 @@ async function slTryReclaimStaleMutationLock(
   const renamed = await slReadLockSnapshot(renamedPath, renamedOwnerPath);
   if (
     !renamed ||
-    !slSameLockSnapshot(revalidated, renamed) ||
-    slLockLeaseIsFresh(renamed, staleMs) ||
-    slLockOwnerIsLiveLocally(renamed.owner)
+    !slSameLockOwner(revalidated.owner, renamed.owner)
   ) {
     await slRestoreRenamedLock(renamedPath, lockPath);
     return false;
