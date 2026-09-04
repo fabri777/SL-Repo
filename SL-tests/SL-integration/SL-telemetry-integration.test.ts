@@ -50,7 +50,7 @@ function slDefaultIndexPath(root: string): string {
 
 const repositories: string[] = [];
 const CAPTURED_AT = new Date("2026-01-01T00:00:00.000Z");
-const SL_RUNTIME_COMMIT = "62f5e1db61fa738a68d0e163ad9b676572baab81";
+const SL_RUNTIME_COMMIT = "bb22c7caa0782f47f1cab031071a188a8d79f233";
 const CHECKOUT_ACTION =
   "actions/checkout@11d5960a326750d5838078e36cf38b85af677262";
 const SETUP_NODE_ACTION =
