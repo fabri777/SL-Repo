@@ -156,7 +156,7 @@ describe("SL plugin package", () => {
       await readFile(resolve("SL-docs/SL-install.md"), "utf8"),
     ].join("\n");
     expect(sourceInstallExamples).toContain(
-      "github:fabri777/SL-Repo#f85e615b95046d2d7eaaa8d6fa803bea2c800615",
+      "github:fabri777/SL-Repo#62f5e1db61fa738a68d0e163ad9b676572baab81",
     );
     expect(sourceInstallExamples).not.toMatch(
       /github:fabri777\/SL-Repo(?!#[0-9a-f]{40})/,
