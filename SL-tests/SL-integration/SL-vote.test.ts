@@ -279,6 +279,66 @@ describe("SL reuse voting", () => {
     );
   });
 
+  test("deduplicates scoped vote retries and rejects cross-scope replay", async () => {
+    const root = await slCreateTestRepository();
+    repositories.push(root);
+    await slInstall(root, "init", false);
+    const lesson = await slCaptureLesson(root, {
+      title: "Scoped retry-safe lesson",
+      kind: "win",
+      scope: "orders",
+      triggers: ["scoped retry"],
+      dryRun: false,
+      now: new Date("2026-09-04T08:00:00.000Z"),
+    });
+    const context = {
+      taskRunId: "scoped-task",
+      applicationId: "scoped-application",
+      idempotencyKey: "scoped-vote",
+      scope: {
+        id: "SL-SCOPE-ORDERS",
+        path: "services/orders",
+      },
+    };
+
+    await slVoteOnLesson(
+      root,
+      lesson.id,
+      "useful",
+      false,
+      new Date("2026-09-04T09:00:00.000Z"),
+      context,
+    );
+    const retry = await slVoteOnLesson(
+      root,
+      lesson.id,
+      "useful",
+      false,
+      new Date("2026-09-04T09:00:00.000Z"),
+      context,
+    );
+    expect(retry[0]?.action).toBe("skip");
+
+    await expect(
+      slVoteOnLesson(
+        root,
+        lesson.id,
+        "useful",
+        false,
+        new Date("2026-09-04T09:00:00.000Z"),
+        {
+          ...context,
+          scope: {
+            id: "SL-SCOPE-BILLING",
+            path: "services/billing",
+          },
+        },
+      ),
+    ).rejects.toThrow(
+      "already bound to different usage identity data",
+    );
+  });
+
   test("rejects voting after managedBy is removed without partial writes", async () => {
     const root = await slCreateTestRepository();
     repositories.push(root);

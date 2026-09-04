@@ -189,6 +189,107 @@ describe("SL hierarchical scopes", () => {
     });
   });
 
+  test("keeps dependency closure, deepest ancestors, and root ordering deterministic", () => {
+    const scopes: SLScopeDefinition[] = [
+      {
+        id: "SL-SCOPE-SHARED",
+        displayName: "Shared",
+        kind: "shared",
+        includePaths: ["packages/shared/**"],
+        excludePaths: [],
+        parentScopeId: "SL-SCOPE-ROOT",
+        dependencyScopeIds: [],
+        ownerAliases: ["@example/shared"],
+      },
+      {
+        id: "SL-SCOPE-LIBRARY",
+        displayName: "Library",
+        kind: "library",
+        includePaths: ["packages/shared/common/**"],
+        excludePaths: [],
+        parentScopeId: "SL-SCOPE-SHARED",
+        dependencyScopeIds: [],
+        ownerAliases: ["@example/library"],
+      },
+      {
+        id: "SL-SCOPE-SOLUTION",
+        displayName: "Solution",
+        kind: "solution",
+        includePaths: ["services/orders/**"],
+        excludePaths: [],
+        parentScopeId: "SL-SCOPE-ROOT",
+        dependencyScopeIds: ["SL-SCOPE-LIBRARY"],
+        ownerAliases: ["@example/orders"],
+      },
+      {
+        id: "SL-SCOPE-SERVICE",
+        displayName: "Service",
+        kind: "service",
+        includePaths: ["services/orders/src/**"],
+        excludePaths: ["services/orders/src/generated/**"],
+        parentScopeId: "SL-SCOPE-SOLUTION",
+        dependencyScopeIds: ["SL-SCOPE-LIBRARY"],
+        ownerAliases: ["@example/orders-api"],
+      },
+    ];
+    const forward = new SLScopeResolver(createCatalog(scopes));
+    const reverse = new SLScopeResolver(createCatalog([...scopes].reverse()));
+
+    expect(
+      reverse.resolvePath("/repo", "services/orders/src/order.ts"),
+    ).toEqual(
+      forward.resolvePath("/repo", "services/orders/src/order.ts"),
+    );
+    expect(
+      forward.resolvePath("/repo", "services/orders/src/order.ts")
+        .orderedScopeIds,
+    ).toEqual([
+      "SL-SCOPE-SERVICE",
+      "SL-SCOPE-LIBRARY",
+      "SL-SCOPE-SHARED",
+      "SL-SCOPE-SOLUTION",
+      "SL-SCOPE-ROOT",
+    ]);
+    expect(
+      forward.resolvePath(
+        "/repo",
+        "services/orders/src/generated/client.ts",
+      ).primaryScopeId,
+    ).toBe("SL-SCOPE-SOLUTION");
+  });
+
+  test.each([
+    ["C:\\repo", "C:\\repo\\services\\api", "services/api"],
+    ["/repo", "/repo/services/api", "services/api"],
+    ["/repo", "services\\api", "services/api"],
+  ])(
+    "resolves current directory consistently across separators",
+    (root, currentDirectory, normalizedPath) => {
+      const resolver = new SLScopeResolver(
+        createCatalog([
+          {
+            id: "SL-SCOPE-API",
+            displayName: "API",
+            kind: "service",
+            includePaths: ["services/api", "services/api/**"],
+            excludePaths: [],
+            parentScopeId: "SL-SCOPE-ROOT",
+            dependencyScopeIds: [],
+            ownerAliases: ["@example/api"],
+          },
+        ]),
+      );
+
+      expect(
+        resolver.resolveCurrentDirectory(root, currentDirectory),
+      ).toMatchObject({
+        normalizedPath,
+        primaryScopeId: "SL-SCOPE-API",
+        orderedScopeIds: ["SL-SCOPE-API", "SL-SCOPE-ROOT"],
+      });
+    },
+  );
+
   test("reports structural, relationship, ownership, and matchability failures", () => {
     const invalidCatalog = createCatalog([
       {

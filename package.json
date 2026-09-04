@@ -13,6 +13,7 @@
     "SL-schemas",
     "SL-templates",
     "SL-plugin",
+    "SL-tests",
     "README.md",
     "SECURITY.md"
   ],

@@ -73,3 +73,18 @@ sl-repo stats . --aggregate repository --json
 `SL-scope-catalog.yml`, Markdown artifacts, and immutable events are source
 inputs. `SL-state-catalog.json`, registry/index shards, and usage projections
 are deterministic generated state rebuilt by `sl-repo project`.
+
+## Merge workflow
+
+1. Merge all branch-added immutable event and lifecycle shards without
+   squashing them into a mutable log.
+2. Reject duplicate event IDs, idempotency keys, application identities, or
+   conflicting terminal outcomes.
+3. Run `sl-repo project .` once against the combined tree.
+4. Review generated registry/index/projection changes.
+5. Run `sl-repo validate .`; projection or index drift must be zero before
+   merge.
+
+Independent service branches normally touch different artifact/scope/month
+paths. Generated projections are not resolved by choosing one side of a merge;
+they must be rebuilt from the union of immutable shards.

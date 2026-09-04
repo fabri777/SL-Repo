@@ -963,6 +963,7 @@ export function slAssertVoteApplicationMutation(
     artifactContentHash: event.artifactContentHash,
     taskRunId: event.taskRunId,
     applicationId: event.applicationId,
+    ...(event.scope ? { scope: event.scope } : {}),
   });
   slAssertUniqueApplicationStages(applicationEvents, event.applicationId);
   slAssertPlannedUsageEvents(existingEvents, [event]);

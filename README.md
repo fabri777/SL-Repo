@@ -28,6 +28,13 @@ and explicit repository-review gates must pass before activation makes it
 discoverable. Promotion and forgetting remain governed, reviewable, and
 stored in Git.
 
+Raw and distilled lessons are retrievable before promotion. Promotion does not
+make knowledge readable for the first time; it increases reliable automatic
+delivery by converting proven evidence into an activated instruction or skill.
+Vote thresholds create candidates only. Shared or root activation is never
+automatic: it requires verified evidence from distinct non-root scopes,
+current policy/content hashes, conflict checks, and target-owner approval.
+
 This repository implements the first project milestone:
 
 - **SL Repo**: repository-local learning, discovery, promotion, validation,
@@ -78,6 +85,13 @@ sl-repo doctor C:\path\to\repository
 sl-repo validate C:\path\to\repository
 ```
 
+`init` installs the root scope catalog, configuration, canonical workflows and
+skills, plus local copies of every SL scope/state/event schema under
+`.github/SL-learning/SL-schemas/`. Runtime validation still uses the immutable
+schemas bundled with the reviewed SL package; installed copies support review,
+editors, and repository-local auditing. `update` replaces only files already
+registered as SL-managed system artifacts and the delimited Copilot block.
+
 Installed validation and retention workflows use a reviewed immutable SL Repo
 commit. They do not execute mutable `main` under repository write credentials;
 see `SL-docs/SL-install.md` for the pin-update procedure and
@@ -100,6 +114,15 @@ sl-repo use finish APPLY-123 C:\path\to\repository `
 sl-repo stats SL-LESSON-ID C:\path\to\repository --scope SL-SCOPE-ORDERS
 sl-repo stats C:\path\to\repository --aggregate repository
 sl-repo project C:\path\to\repository
+```
+
+Capture can be explicit or path-inferred:
+
+```powershell
+sl-repo capture C:\path\to\repository --title "Orders retry policy" `
+  --scope SL-SCOPE-ORDERS --lesson-scope orders --trigger "retry policy"
+sl-repo capture C:\path\to\repository --title "Shared result handling" `
+  --target-path packages/shared/common/src/result.ts --trigger "result type"
 ```
 
 `use start` returns an application ID and receipt ID. Generated IDs are safe
@@ -150,6 +173,9 @@ sl-repo promotion-activate SL-PROMOTED-ID C:\path\to\repository
 In monorepo mode, local promotion defaults to the source scope. Promotion to a
 shared/root scope is rebuilt from immutable verified-use evidence and requires
 the configured number of distinct non-root scopes plus target-owner approval.
+An explicit narrower-scope override must name the broader artifact, scope, and
+declaration key and carry its own review reference. Peer conflicts and
+undeclared contradictions fail closed.
 
 Executable contract checks remain disabled unless explicitly requested with
 `--execute-checks`; they are trusted commands from the reviewed repository,
@@ -161,6 +187,30 @@ deliberate escape.
 SL only rewrites files it owns. Existing `AGENTS.md` and
 `.github/copilot-instructions.md` content is preserved outside an identifiable
 managed block.
+
+## Scope-aware architecture
+
+The hand-authored scope catalog and Markdown knowledge are intent. Immutable
+usage/lifecycle events are evidence. Per-scope registries, indexes, state
+catalog, and usage projections are deterministic generated state. After
+merging branches that add event shards, always run:
+
+```powershell
+sl-repo project .
+sl-repo validate .
+```
+
+Repository aggregation deliberately returns counts without a verified-success
+percentage. Compare success rates only within a scope; combining services with
+different workloads, verifiers, or sample sizes can produce a deceptive rate.
+
+See the complete operational references:
+
+- [Architecture and source-of-truth boundaries](SL-docs/SL-architecture.md)
+- [Scope catalog and precedence](SL-docs/SL-scopes.md)
+- [Sharded state and merge workflow](SL-docs/SL-state-layout.md)
+- [Monorepo operations and troubleshooting](SL-docs/SL-monorepo-operations.md)
+- [0.2 migration and rollback](SL-docs/SL-migration-0.2.md)
 
 ## Automatic forgetting
 
@@ -182,4 +232,7 @@ See:
 - `SL-docs/SL-validation-contracts.md`
 - `SL-docs/SL-usage-events.md`
 - `SL-docs/SL-scopes.md`
+- `SL-docs/SL-state-layout.md`
+- `SL-docs/SL-monorepo-operations.md`
+- `SL-docs/SL-migration-0.2.md`
 - `SL-docs/SL-roadmap.md`

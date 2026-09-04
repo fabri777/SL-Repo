@@ -55,6 +55,11 @@ content version, scope, and application ID. `--aggregate scope` reports
 scope-specific rates. `--aggregate repository` reports counts only and does
 not manufacture a global success percentage from unlike service scopes.
 
+Repository counts are useful for inventory, not comparative quality. Never
+divide repository success counts manually and present the result as an SL
+verified-success rate: scopes may use different tasks, verifiers, sample sizes,
+and content versions. Use `--aggregate scope` or `--scope <id>` for rates.
+
 - Retrieval counts unique applications with any stage.
 - Application counts unique applications that reached `applied`, `outcome`, or
   `verified`.

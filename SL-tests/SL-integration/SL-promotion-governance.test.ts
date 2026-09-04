@@ -296,6 +296,25 @@ describe("SL monorepo promotion governance", () => {
     expect(direct.record.targetScope.id).toBe(SERVICE_A_SCOPE.id);
   });
 
+  test("does not count duplicate evidence references toward local gates", () => {
+    const input = slBaseInput();
+    input.policy.local.minimumVerifiedSuccesses = 2;
+    input.evidence = [
+      input.evidence[0]!,
+      structuredClone(input.evidence[0]!),
+    ];
+
+    const evaluation = slEvaluatePromotionGovernance(input);
+
+    expect(evaluation.evidencePassed).toBe(false);
+    expect(evaluation.record.evidenceSummary).toEqual([
+      expect.objectContaining({
+        verifiedSuccessCount: 1,
+        evidenceRefs: ["run:service-a-success"],
+      }),
+    ]);
+  });
+
   test("rejects repeated shared evidence from only one non-root scope", () => {
     const input = slBaseInput(ROOT_SCOPE);
     input.evidence = [1, 2, 3].map((index) => ({

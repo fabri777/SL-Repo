@@ -64,9 +64,14 @@ async function slInstallUnlocked(
 ): Promise<SLChange[]> {
   const packageRoot = await slFindPackageRoot(import.meta.url);
   const templateRoot = resolve(packageRoot, "SL-templates/SL-repository");
+  const schemaRoot = resolve(packageRoot, "SL-schemas");
   const templateFiles = await fg("**/*", {
     cwd: templateRoot,
     dot: true,
+    onlyFiles: true,
+  });
+  const schemaFiles = await fg("*.schema.json", {
+    cwd: schemaRoot,
     onlyFiles: true,
   });
   const changes: SLChange[] = [];
@@ -85,6 +90,7 @@ async function slInstallUnlocked(
     if (templatePath === "SL-copilot-block.md") {
       continue;
     }
+
     if (
       templatePath === SL_PATHS.scopeCatalog &&
       existingScopeCatalogPaths.length > 0 &&
@@ -127,6 +133,37 @@ async function slInstallUnlocked(
     }
   }
 
+  for (const schemaFile of schemaFiles.sort()) {
+    const targetPath = `${SL_PATHS.learningRoot}/SL-schemas/${schemaFile}`;
+    const targetAbsolutePath = slResolveInside(root, targetPath);
+    const existingEntry = existingRegistry.artifacts.find(
+      (artifact) => artifact.path === targetPath,
+    );
+    const canUpdate =
+      mode === "update" &&
+      existingEntry?.classification === "system" &&
+      existingEntry.managedBy === "SL-Repo";
+    if ((await slExists(targetAbsolutePath)) && !canUpdate) {
+      changes.push({
+        action: "skip",
+        path: targetPath,
+        detail: "existing unowned schema preserved",
+      });
+      continue;
+    }
+    const content = await slReadText(resolve(schemaRoot, schemaFile));
+    const changeCount = changes.length;
+    await slWriteText(root, targetPath, content, dryRun, changes);
+    managedTemplatePaths.add(targetPath);
+    if (
+      changes
+        .slice(changeCount)
+        .some((change) => change.action === "create" || change.action === "update")
+    ) {
+      changedTemplatePaths.add(targetPath);
+    }
+  }
+
   const block = await slReadText(resolve(templateRoot, "SL-copilot-block.md"));
   const instructionsPath = slResolveInside(root, SL_PATHS.copilotInstructions);
   const existingInstructions = (await slExists(instructionsPath))
@@ -142,8 +179,13 @@ async function slInstallUnlocked(
 
   const registry = await slLoadRegistry(root);
   const timestamp = new Date().toISOString();
-  for (const templatePathValue of templateFiles.sort()) {
-    const templatePath = slNormalizePath(templatePathValue);
+  const managedSystemPaths = [
+    ...templateFiles.map(slNormalizePath),
+    ...schemaFiles.map(
+      (schemaFile) => `${SL_PATHS.learningRoot}/SL-schemas/${schemaFile}`,
+    ),
+  ].sort();
+  for (const templatePath of managedSystemPaths) {
     if (
       templatePath === "SL-copilot-block.md" ||
       templatePath === SL_PATHS.registry ||

@@ -1,6 +1,8 @@
-import { access, readFile } from "node:fs/promises";
+import { access, readFile, readdir } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
+import { Ajv2020 } from "ajv/dist/2020.js";
+import type { FormatsPlugin } from "ajv-formats";
 import { describe, expect, test } from "vitest";
 import { parse } from "yaml";
 import { slParseMarkdown } from "../../SL-src/SL-core/SL-frontmatter.js";
@@ -35,6 +37,9 @@ const DOWNLOAD_ARTIFACT_ACTION =
   "actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093";
 const CREATE_PULL_REQUEST_ACTION =
   "peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676";
+const addFormats = createRequire(import.meta.url)(
+  "ajv-formats",
+) as FormatsPlugin;
 
 type SLNpmArborist = new (options: {
   path: string;
@@ -118,6 +123,7 @@ describe("SL plugin package", () => {
       "SL-schemas",
       "SL-templates",
       "SL-plugin",
+      "SL-tests",
       "README.md",
       "SECURITY.md",
     ]);
@@ -125,12 +131,19 @@ describe("SL plugin package", () => {
     const requiredFiles = [
       "SECURITY.md",
       "SL-docs/SL-install.md",
+      "SL-docs/SL-migration-0.2.md",
+      "SL-docs/SL-monorepo-operations.md",
       "SL-docs/SL-security.md",
       "SL-docs/SL-usage-events.md",
       "SL-docs/SL-validation-contracts.md",
       "SL-schemas/SL-lifecycle-event.schema.json",
       "SL-schemas/SL-usage-event.schema.json",
+      "SL-schemas/SL-scope-catalog.schema.json",
+      "SL-schemas/SL-scope-registry.schema.json",
+      "SL-schemas/SL-state-catalog.schema.json",
+      "SL-schemas/SL-usage-projection.schema.json",
       "SL-schemas/SL-validation-contract.schema.json",
+      "SL-tests/SL-fixtures/SL-monorepo-fixture.ts",
       "SL-templates/SL-repository/.github/SL-learning/.gitattributes",
       "SL-templates/SL-repository/.github/workflows/SL-learning-validation.yml",
       "SL-templates/SL-repository/.github/workflows/SL-learning-forget.yml",
@@ -163,6 +176,60 @@ describe("SL plugin package", () => {
     );
   }, SL_PACKAGE_AUDIT_TIMEOUT_MS);
 
+  test("compiles every schema and validates canonical clean-install templates", async () => {
+    const ajv = new Ajv2020({ allErrors: true, strict: false });
+    addFormats(ajv);
+    const schemaNames = (await readdir(resolve("SL-schemas")))
+      .filter((name) => name.endsWith(".schema.json"))
+      .sort();
+    const validators = new Map<string, ReturnType<typeof ajv.compile>>();
+    const schemas = new Map<string, { $id: string }>();
+    for (const schemaName of schemaNames) {
+      const schema = JSON.parse(
+        await readFile(resolve("SL-schemas", schemaName), "utf8"),
+      ) as { $id: string };
+      schemas.set(schemaName, schema);
+      ajv.addSchema(schema);
+    }
+    for (const [schemaName, schema] of schemas) {
+      const validator = ajv.getSchema(schema.$id);
+      if (!validator) {
+        throw new Error(`Schema did not compile: ${schemaName}`);
+      }
+      validators.set(schemaName, validator);
+    }
+
+    const config = parse(
+      await readFile(
+        resolve(
+          "SL-templates/SL-repository/.github/SL-learning/SL-config.yml",
+        ),
+        "utf8",
+      ),
+    );
+    const scopeCatalog = parse(
+      await readFile(
+        resolve(
+          "SL-templates/SL-repository/.github/SL-learning/SL-scope-catalog.yml",
+        ),
+        "utf8",
+      ),
+    );
+    const registry = JSON.parse(
+      await readFile(
+        resolve(
+          "SL-templates/SL-repository/.github/SL-learning/SL-registry.json",
+        ),
+        "utf8",
+      ),
+    );
+    expect(validators.get("SL-config.schema.json")!(config)).toBe(true);
+    expect(
+      validators.get("SL-scope-catalog.schema.json")!(scopeCatalog),
+    ).toBe(true);
+    expect(validators.get("SL-registry.schema.json")!(registry)).toBe(true);
+  });
+
   test("keeps source workflow write credentials isolated from execution", async () => {
     const ciWorkflow = parse(
       await readFile(resolve(".github/workflows/SL-ci.yml"), "utf8"),
@@ -172,6 +239,7 @@ describe("SL plugin package", () => {
         test: {
           steps: Array<{
             uses?: string;
+            run?: string;
             with?: Record<string, unknown>;
           }>;
         };
@@ -202,6 +270,16 @@ describe("SL plugin package", () => {
     };
 
     expect(ciWorkflow.permissions).toEqual({ contents: "read" });
+    expect(
+      (ciWorkflow as unknown as {
+        jobs: { test: { strategy: { matrix: { os: string[] } } } };
+      }).jobs.test.strategy.matrix.os,
+    ).toEqual(["ubuntu-latest", "windows-latest", "macos-latest"]);
+    expect(
+      ciWorkflow.jobs.test.steps.some(
+        (step) => step.run === "npm pack --dry-run --json",
+      ),
+    ).toBe(true);
     expect(forgettingWorkflow.permissions).toEqual({ contents: "read" });
     expect(forgettingWorkflow.jobs.plan.permissions).toEqual({
       contents: "read",

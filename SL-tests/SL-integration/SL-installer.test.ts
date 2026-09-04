@@ -1,15 +1,31 @@
-import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import {
+  mkdir,
+  readFile,
+  readdir,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
+import { join, resolve } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import { SL_MANAGED_BLOCK_END, SL_MANAGED_BLOCK_START } from "../../SL-src/SL-core/SL-constants.js";
 import { slInstall } from "../../SL-src/SL-core/SL-installer.js";
 import { slLoadRegistry } from "../../SL-src/SL-core/SL-registry.js";
+import {
+  slProjectUsage,
+  slSynchronizeUsageProjection,
+} from "../../SL-src/SL-core/SL-usage.js";
+import { slValidateRepository } from "../../SL-src/SL-validation/SL-validation.js";
+import { slCreateLegacy02Fixture } from "../SL-fixtures/SL-monorepo-fixture.js";
 import {
   slCreateTestRepository,
   slRemoveTestRepository,
 } from "../SL-fixtures/SL-test-repository.js";
 
 const repositories: string[] = [];
+
+function normalizeLineEndings(value: string): string {
+  return value.replaceAll("\r\n", "\n");
+}
 
 afterEach(async () => {
   await Promise.all(repositories.splice(0).map(slRemoveTestRepository));
@@ -123,6 +139,80 @@ describe("SL installer", () => {
     await expect(
       readFile(join(learningRoot, "SL-scope-catalog.yml"), "utf8"),
     ).rejects.toThrow();
+  });
+
+  test("installs every bundled schema and updates only registered copies", async () => {
+    const root = await slCreateTestRepository();
+    repositories.push(root);
+    await slInstall(root, "init", false);
+    const schemaNames = (await readdir(resolve("SL-schemas")))
+      .filter((name) => name.endsWith(".schema.json"))
+      .sort();
+    const installedRoot = join(
+      root,
+      ".github",
+      "SL-learning",
+      "SL-schemas",
+    );
+    for (const schemaName of schemaNames) {
+      expect(
+        normalizeLineEndings(
+          await readFile(join(installedRoot, schemaName), "utf8"),
+        ),
+      ).toBe(
+        normalizeLineEndings(
+          await readFile(resolve("SL-schemas", schemaName), "utf8"),
+        ),
+      );
+    }
+
+    const managedSchema = join(installedRoot, schemaNames[0]!);
+    const manualSchema = join(installedRoot, "SL-manual.schema.json");
+    await writeFile(managedSchema, '{"manual":"drift"}\n', "utf8");
+    await writeFile(manualSchema, '{"manual":true}\n', "utf8");
+
+    await slInstall(root, "update", false);
+
+    expect(
+      normalizeLineEndings(await readFile(managedSchema, "utf8")),
+    ).toBe(
+      normalizeLineEndings(
+        await readFile(resolve("SL-schemas", schemaNames[0]!), "utf8"),
+      ),
+    );
+    expect(await readFile(manualSchema, "utf8")).toBe('{"manual":true}\n');
+    const registry = await slLoadRegistry(root);
+    expect(
+      registry.artifacts.filter((artifact) =>
+        artifact.path?.startsWith(".github/SL-learning/SL-schemas/"),
+      ),
+    ).toHaveLength(schemaNames.length);
+  });
+
+  test("updates a legacy 0.2 repository without rewriting or losing legacy state", async () => {
+    const legacy = await slCreateLegacy02Fixture();
+    repositories.push(legacy.root);
+    const before = await readFile(legacy.legacyRegistryPath, "utf8");
+
+    await slInstall(legacy.root, "update", false);
+    await slSynchronizeUsageProjection(legacy.root, false);
+
+    expect(await readFile(legacy.legacyRegistryPath, "utf8")).toBe(before);
+    const projections = await slProjectUsage(legacy.root, legacy.lessonId);
+    expect(projections).toEqual([
+      expect.objectContaining({
+        scope: { id: "SL-SCOPE-ROOT", path: "." },
+        retrievalCount: 4,
+        applicationCount: 4,
+        verifiedSuccessCount: 3,
+        verifiedFailureCount: 1,
+      }),
+    ]);
+    expect(
+      (await slValidateRepository(legacy.root)).filter(
+        (issue) => issue.severity === "error",
+      ),
+    ).toEqual([]);
   });
 
   test("rejects a target path that resolves outside the repository", async () => {

@@ -1,7 +1,8 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { access, mkdir, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
+import { parse, stringify } from "yaml";
 import { slCaptureLesson } from "../../SL-src/SL-core/SL-capture.js";
 import { slInstall } from "../../SL-src/SL-core/SL-installer.js";
 import { slRegisterPromotion } from "../../SL-src/SL-core/SL-promotion.js";
@@ -662,6 +663,199 @@ describe("sl-repo CLI", () => {
     expect(conflicting.status).toBe(1);
     expect(conflicting.stderr).toContain("already has a conflicting outcome");
   });
+
+  test(
+    "runs the complete monorepo lifecycle from init through governed forgetting",
+    async () => {
+      const root = await slCreateTestRepository();
+      repositories.push(root);
+      runCli(["init", root]);
+      const learningRoot = join(root, ".github", "SL-learning");
+      await rm(join(learningRoot, "SL-scope-catalog.yml"));
+      await writeFile(
+        join(learningRoot, "SL-scope-catalog.json"),
+        `${JSON.stringify(
+          {
+            schemaVersion: 1,
+            scopes: [
+              {
+                id: "SL-SCOPE-ROOT",
+                displayName: "Repository",
+                kind: "repository",
+                includePaths: ["**"],
+                excludePaths: [],
+                dependencyScopeIds: [],
+                ownerAliases: ["@example/platform"],
+              },
+              {
+                id: "SL-SCOPE-ORDERS",
+                displayName: "Orders",
+                kind: "service",
+                includePaths: ["services/orders/**"],
+                excludePaths: ["services/orders/generated/**"],
+                parentScopeId: "SL-SCOPE-ROOT",
+                dependencyScopeIds: [],
+                ownerAliases: ["@example/orders"],
+              },
+            ],
+          },
+          null,
+          2,
+        )}\n`,
+        "utf8",
+      );
+      const configPath = join(learningRoot, "SL-config.yml");
+      const config = parse(await readFile(configPath, "utf8"));
+      config.promotion.mode = "monorepo";
+      await writeFile(configPath, stringify(config), "utf8");
+      await mkdir(join(root, "services", "orders"), { recursive: true });
+      await writeFile(
+        join(root, "services", "orders", "order.ts"),
+        "export const ORDER = 1;\n",
+        "utf8",
+      );
+
+      const captureOutput = runCli([
+        "capture",
+        root,
+        "--title",
+        "Complete monorepo flow",
+        "--scope",
+        "SL-SCOPE-ORDERS",
+        "--trigger",
+        "complete-flow",
+      ]);
+      const sourceId = captureOutput.split(/\s+/).find((value) =>
+        value.startsWith("SL-202"),
+      );
+      if (!sourceId) {
+        throw new Error("CLI output did not contain a lesson ID.");
+      }
+      expect(
+        JSON.parse(
+          runCli([
+            "retrieve",
+            root,
+            "--path",
+            "services/orders/order.ts",
+            "--json",
+          ]),
+        ).artifacts,
+      ).toContainEqual(expect.objectContaining({ id: sourceId }));
+
+      const started = JSON.parse(
+        runCli([
+          "use",
+          "start",
+          sourceId,
+          root,
+          "--target-path",
+          "services/orders/order.ts",
+          "--application-id",
+          "complete-flow-application",
+          "--task-run-id",
+          "complete-flow-task",
+          "--idempotency-key",
+          "complete-flow-start",
+          "--json",
+        ]),
+      ) as { receiptId: string };
+      runCli([
+        "use",
+        "finish",
+        started.receiptId,
+        root,
+        "--outcome",
+        "success",
+        "--verified",
+        "--verifier-type",
+        "test-suite",
+        "--evidence-ref",
+        "ci:complete-flow",
+        "--idempotency-key",
+        "complete-flow-finish",
+      ]);
+      runCli(["project", root]);
+
+      const artifactId = "SL-CLI-MONOREPO-PROMOTION";
+      const artifactPath =
+        `.github/instructions/${artifactId}.instructions.md`;
+      const contractPath = slTestContractPath(artifactId);
+      await slWriteTestJson(
+        root,
+        contractPath,
+        slCreateTestContract({
+          artifactId,
+          artifactType: "instruction",
+          artifactPath,
+          sourceIds: [sourceId],
+          declarations: [{ key: "tests.runner", value: "vitest" }],
+        }),
+      );
+      await slWriteTestPromotedArtifact({
+        root,
+        artifactId,
+        artifactType: "instruction",
+        artifactPath,
+        contractPath,
+      });
+      runCli([
+        "promote",
+        sourceId,
+        artifactPath,
+        root,
+        "--target-scope",
+        "SL-SCOPE-ORDERS",
+      ]);
+      const readiness = JSON.parse(
+        runCli([
+          "promotion-evaluate",
+          artifactId,
+          root,
+          "--target-scope",
+          "SL-SCOPE-ORDERS",
+          "--approval-ref",
+          "review:orders-owners",
+          "--json",
+        ]),
+      ) as { evaluation: { status: string } };
+      expect(readiness.evaluation.status).toBe("passed");
+      runCli(["promotion-activate", artifactId, root]);
+      expect(runCli(["validate", root])).toContain("SL validation passed.");
+      expect(
+        JSON.parse(
+          runCli([
+            "retrieve",
+            root,
+            "--path",
+            "services/orders/order.ts",
+            "--json",
+          ]),
+        ).artifacts,
+      ).toContainEqual(expect.objectContaining({ id: artifactId }));
+
+      runCli([
+        "forget",
+        artifactId,
+        root,
+        "--reason",
+        "superseded",
+      ]);
+      expect(runCli(["validate", root])).toContain("SL validation passed.");
+      expect(
+        JSON.parse(
+          runCli([
+            "retrieve",
+            root,
+            "--path",
+            "services/orders/order.ts",
+            "--json",
+          ]),
+        ).artifacts,
+      ).not.toContainEqual(expect.objectContaining({ id: artifactId }));
+    },
+    120_000,
+  );
 
   test("evaluates statically by default and resolves an artifact path", async () => {
     const root = await slCreateTestRepository();

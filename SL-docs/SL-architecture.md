@@ -9,6 +9,19 @@ SL Repo separates reasoning from deterministic enforcement.
 | Repository files | Preserve evidence and promoted knowledge in Git |
 | GitHub Actions | Re-run deterministic checks and scheduled retention |
 
+## Source-of-truth boundaries
+
+| Data | Authority | Derived or compatibility behavior |
+|---|---|---|
+| Scope ownership and relationships | Hand-authored `SL-scope-catalog.yml`, `.yaml`, or `.json` | Exactly one catalog; no catalog means the compatibility root scope |
+| Lesson/guidance content | SL-managed Markdown plus validation contracts | Registry metadata cannot replace or silently rewrite content |
+| Usage and lifecycle evidence | Immutable event shards | Mutable counters and legacy JSONL are read-only migration inputs |
+| Lifecycle ownership | Per-scope registry shards | Root `SL-registry.json` is retained as 0.2 compatibility input |
+| Retrieval discovery | Per-scope indexes | Rebuilt from active registry state; never a metrics authority |
+| Usage metrics | Per-scope projections rebuilt from events | Repository aggregation exposes counts only, not a blended success rate |
+| Shard routing | Generated `SL-state-catalog.json` | Contains descriptors and deterministic paths, not artifacts or metrics |
+| Enforcement schemas | Schemas bundled with the reviewed runtime | Installed schema copies are review/editor aids and SL-managed templates |
+
 Per-scope registry shards are the authority for ownership and governed
 lifecycle state. The root state catalog contains only scope descriptors and
 shard paths.
@@ -39,6 +52,11 @@ scenario, conflict, executable, approval, and content-version gates pass.
 Stale or quarantined promoted guidance returns to that probation area after
 fresh verified usage or undo. It is not indexed again until a new evaluation
 and activation recheck current evidence and conflicts.
+
+Raw lessons remain eligible for explicit retrieval while active. Promotion
+increases reliable automatic delivery through normal instruction/skill
+discovery; it is not required to read or apply a lesson. Candidate thresholds
+never bypass governance, especially for root/shared guidance.
 
 Usage telemetry is receipt-based rather than implicit. A skill can record its
 own application, but instruction usage requires an agent or host integration

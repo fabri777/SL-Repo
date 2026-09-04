@@ -27,6 +27,12 @@ verification horizon; retrieval alone does not. Before deletion, SL checks
 ownership, pinning, active references, source evidence, registry consistency,
 and the quarantine grace period.
 
+These checks are repository-wide, not shard-local. A lesson in a library scope
+cannot be forgotten while an active or probationary service/root artifact
+depends on it. Removing or renaming a scope does not authorize deletion:
+orphaned shards and artifact/event scope references are diagnostics that must
+be migrated explicitly.
+
 Instruction telemetry extends retention only when an agent or host emitted a
 receipt. Absence of receipts means unknown usage, not proof that the
 instruction was unused. Likewise, an associated verified success is a

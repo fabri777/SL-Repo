@@ -26,7 +26,9 @@ sl-repo update C:\path\to\target
 ```
 
 Update replaces only registered system templates and the SL-managed
-instruction block. Produced lessons, instructions, and skills are retained.
+instruction block. It also refreshes registered schema copies under
+`.github/SL-learning/SL-schemas/`. Produced lessons, instructions, skills,
+manual catalogs, unknown files, and unregistered same-path files are retained.
 
 ## Uninstall
 
@@ -78,9 +80,9 @@ To update the runtime pin, maintainers must:
    distributing an update.
 
 Packed artifact contents include `dist/`, `SL-schemas/`, `SL-templates/`,
-`SL-plugin/`, `SL-docs/`, `README.md`, and `SECURITY.md`. This keeps the
-runtime, validation schemas, secured consumer templates, plugin skills, and
-linked documentation together.
+`SL-plugin/`, `SL-tests/`, `SL-docs/`, `README.md`, and `SECURITY.md`. This
+keeps the runtime, validation schemas, reusable fixtures/tests, secured
+consumer templates, plugin skills, and linked documentation together.
 
 After installation or update, run:
 
@@ -91,3 +93,7 @@ sl-repo validate C:\path\to\target
 
 `project` imports legacy mutable counters once, rebuilds immutable usage
 projections, and refreshes the discovery index.
+
+For a 0.2 repository, follow
+[Migration from 0.2](SL-migration-0.2.md). Update is additive: legacy registry,
+index, counter, and unscoped event inputs remain readable and are not deleted.
