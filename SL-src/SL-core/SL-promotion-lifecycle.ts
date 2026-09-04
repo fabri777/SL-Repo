@@ -1,5 +1,7 @@
 import type { SLRegistryArtifact } from "./SL-types.js";
+import { slLoadConfig } from "./SL-config.js";
 import { slParseMarkdown } from "./SL-frontmatter.js";
+import { slPromotionPolicyHash } from "./SL-promotion-governance.js";
 import {
   slArtifactContentHash,
   slArtifactUsageContentHash,
@@ -31,6 +33,17 @@ export async function slPromotionEvaluationIsCurrent(
     const evaluation = artifact.promotionEvaluation;
     if (!evaluation || evaluation.status !== "passed" || !artifact.path) {
       return false;
+    }
+    if (evaluation.governance) {
+      const config = await slLoadConfig(root);
+      if (
+        config.promotion.policyVersion !==
+          evaluation.governance.policyVersion ||
+        slPromotionPolicyHash(config.promotion) !==
+          evaluation.governance.policyHash
+      ) {
+        return false;
+      }
     }
     const artifactPath = slResolveInside(root, artifact.path);
     if (!(await slExists(artifactPath))) {

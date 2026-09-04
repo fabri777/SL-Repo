@@ -38,6 +38,24 @@ export const SL_DEFAULT_CONFIG: SLConfig = {
     promotedStaleAfterDays: 365,
     promotedQuarantineAfterDays: 30,
   },
+  promotion: {
+    mode: "single-repository",
+    policyVersion: "1",
+    local: {
+      minimumVerifiedSuccesses: 1,
+    },
+    shared: {
+      minimumDistinctNonRootScopes: 2,
+      minimumVerifiedSuccessesPerScope: 1,
+    },
+    approvals: {
+      requireTargetOwnerApproval: true,
+    },
+    conflicts: {
+      allowNarrowerExplicitOverrides: true,
+      blockUndeclaredConflicts: true,
+    },
+  },
 };
 
 export const SL_ACTIVE_STATUSES = new Set([

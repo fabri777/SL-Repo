@@ -94,6 +94,44 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 1000
+        },
+        "override": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "overriddenArtifactId",
+            "overriddenScopeId",
+            "declarationKey",
+            "reason",
+            "approvalRef"
+          ],
+          "properties": {
+            "kind": {
+              "const": "narrower-scope"
+            },
+            "overriddenArtifactId": {
+              "type": "string",
+              "pattern": "^SL-[A-Z0-9][A-Z0-9-]*$"
+            },
+            "overriddenScopeId": {
+              "$ref": "#/$defs/scopeId"
+            },
+            "declarationKey": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9.-]{1,127}$"
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            },
+            "approvalRef": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          }
         }
       },
       "allOf": [
@@ -269,6 +307,12 @@
     "checkId": {
       "type": "string",
       "pattern": "^[a-z][a-z0-9-]{1,127}$"
+    },
+    "scopeId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]*$"
     },
     "repositoryPath": {
       "type": "string",

@@ -9,7 +9,11 @@ import { SL_SECRET_PATTERNS, SL_USER_PATH_PATTERN } from "../SL-core/SL-constant
 import { slParseMarkdown } from "../SL-core/SL-frontmatter.js";
 import { slFindPackageRoot } from "../SL-core/SL-package.js";
 import { slFindArtifact, slLoadRegistry } from "../SL-core/SL-registry.js";
-import type { SLArtifactType, SLRegistryArtifact } from "../SL-core/SL-types.js";
+import type {
+  SLArtifactType,
+  SLAuditableOverrideMetadata,
+  SLRegistryArtifact,
+} from "../SL-core/SL-types.js";
 import {
   slAssertRealPathInside,
   slExists,
@@ -68,6 +72,7 @@ export interface SLValidationDeclaration {
   key: string;
   value: string | number | boolean;
   description?: string;
+  override?: SLAuditableOverrideMetadata;
 }
 
 export interface SLExecutableValidationCheck {
@@ -348,7 +353,7 @@ function slScopePatternsIntersect(left: string, right: string): boolean {
   return false;
 }
 
-function slScopesOverlap(
+export function slValidationScopesOverlap(
   left: SLValidationContract["scope"],
   right: SLValidationContract["scope"],
 ): boolean {
@@ -382,7 +387,7 @@ export function slFindValidationContractConflicts(
       const right = ordered[rightIndex];
       if (
         !right ||
-        !slScopesOverlap(left.contract.scope, right.contract.scope)
+        !slValidationScopesOverlap(left.contract.scope, right.contract.scope)
       ) {
         continue;
       }

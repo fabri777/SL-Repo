@@ -7,7 +7,8 @@
   "required": [
     "schemaVersion",
     "scope",
-    "retention"
+    "retention",
+    "promotion"
   ],
   "properties": {
     "schemaVersion": {
@@ -51,6 +52,90 @@
         "promotedQuarantineAfterDays": {
           "type": "integer",
           "minimum": 1
+        }
+      }
+    },
+    "promotion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "policyVersion",
+        "local",
+        "shared",
+        "approvals",
+        "conflicts"
+      ],
+      "properties": {
+        "mode": {
+          "enum": [
+            "single-repository",
+            "monorepo"
+          ]
+        },
+        "policyVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "local": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "minimumVerifiedSuccesses"
+          ],
+          "properties": {
+            "minimumVerifiedSuccesses": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        "shared": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "minimumDistinctNonRootScopes",
+            "minimumVerifiedSuccessesPerScope"
+          ],
+          "properties": {
+            "minimumDistinctNonRootScopes": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "minimumVerifiedSuccessesPerScope": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        "approvals": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "requireTargetOwnerApproval"
+          ],
+          "properties": {
+            "requireTargetOwnerApproval": {
+              "type": "boolean"
+            }
+          }
+        },
+        "conflicts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "allowNarrowerExplicitOverrides",
+            "blockUndeclaredConflicts"
+          ],
+          "properties": {
+            "allowNarrowerExplicitOverrides": {
+              "type": "boolean"
+            },
+            "blockUndeclaredConflicts": {
+              "const": true
+            }
+          }
         }
       }
     }

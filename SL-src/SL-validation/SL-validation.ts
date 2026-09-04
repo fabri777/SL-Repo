@@ -62,6 +62,10 @@ import {
   slPromotionEvaluationIsCurrent,
 } from "../SL-core/SL-promotion-lifecycle.js";
 import {
+  slEvaluateScopedGuidanceConflicts,
+  type SLScopedGuidance,
+} from "../SL-core/SL-promotion-governance.js";
+import {
   slEvaluateValidationContract,
   slFindValidationContractConflicts,
   slPromotedContractTarget,
@@ -604,7 +608,35 @@ export async function slValidateRepository(root: string): Promise<SLValidationIs
     }
   }
 
-  for (const conflict of slFindValidationContractConflicts(activeContracts)) {
+  const governedContracts: SLActiveValidationContract[] = [];
+  const legacyContracts: SLActiveValidationContract[] = [];
+  const governedGuidance: SLScopedGuidance[] = [];
+  for (const active of activeContracts) {
+    const artifact = registry.artifacts.find(
+      (candidate) => candidate.id === active.artifactId,
+    );
+    const scope = artifact?.promotionEvaluation?.governance?.targetScope;
+    if (!scope) {
+      legacyContracts.push(active);
+      continue;
+    }
+    governedContracts.push(active);
+    governedGuidance.push({
+      artifactId: active.artifactId,
+      scope,
+      applicability: active.contract.scope,
+      declarations: active.contract.declarations ?? [],
+    });
+  }
+  const legacyConflicts = [
+    ...slFindValidationContractConflicts(legacyContracts),
+    ...governedContracts.flatMap((governed) =>
+      legacyContracts.flatMap((legacy) =>
+        slFindValidationContractConflicts([legacy, governed]),
+      ),
+    ),
+  ];
+  for (const conflict of legacyConflicts) {
     const artifact = registry.artifacts.find(
       (candidate) => candidate.id === conflict.rightArtifactId,
     );
@@ -614,6 +646,35 @@ export async function slValidateRepository(root: string): Promise<SLValidationIs
       ...(artifact?.path ? { path: artifact.path } : {}),
       message: conflict.message,
     });
+  }
+  if (governedGuidance.length > 0) {
+    try {
+      const scoped = slEvaluateScopedGuidanceConflicts(
+        config.promotion,
+        governedGuidance,
+      );
+      for (const conflict of scoped.resolutions.filter(
+        (resolution) => resolution.status === "blocked",
+      )) {
+        const artifact = registry.artifacts.find(
+          (candidate) =>
+            candidate.id === conflict.narrowerArtifactId,
+        );
+        issues.push({
+          severity: "error",
+          code: "validation-contract-conflict",
+          ...(artifact?.path ? { path: artifact.path } : {}),
+          message: conflict.message,
+        });
+      }
+    } catch (error) {
+      issues.push({
+        severity: "error",
+        code: "promotion-governance-policy",
+        path: SL_PATHS.config,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   const usageEvents: SLUsageEvent[] = [];

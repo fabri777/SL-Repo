@@ -35,7 +35,10 @@
             "pattern": "^SL-[A-Z0-9][A-Z0-9-]*$"
           },
           "path": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "originalPath": {
             "type": "string"
@@ -56,10 +59,19 @@
             ]
           },
           "artifactType": {
-            "enum": ["lesson", "instruction", "skill", "system"]
+            "enum": [
+              "lesson",
+              "instruction",
+              "skill",
+              "system"
+            ]
           },
           "classification": {
-            "enum": ["system", "evidence", "promoted"]
+            "enum": [
+              "system",
+              "evidence",
+              "promoted"
+            ]
           },
           "managedBy": {
             "const": "SL-Repo"
@@ -147,7 +159,10 @@
                 "const": 1
               },
               "status": {
-                "enum": ["passed", "failed"]
+                "enum": [
+                  "passed",
+                  "failed"
+                ]
               },
               "artifactVersion": {
                 "type": "string",
@@ -158,7 +173,10 @@
                 "pattern": "^[a-f0-9]{64}$"
               },
               "contractContentHash": {
-                "type": ["string", "null"],
+                "type": [
+                  "string",
+                  "null"
+                ],
                 "pattern": "^[a-f0-9]{64}$"
               },
               "evaluatedAt": {
@@ -170,7 +188,11 @@
                 "items": {
                   "type": "object",
                   "additionalProperties": false,
-                  "required": ["id", "status", "message"],
+                  "required": [
+                    "id",
+                    "status",
+                    "message"
+                  ],
                   "properties": {
                     "id": {
                       "enum": [
@@ -180,11 +202,18 @@
                         "active-conflicts",
                         "executable-checks",
                         "repository-approval",
+                        "scope-evidence",
+                        "owner-approval",
+                        "scoped-conflicts",
+                        "policy-current",
                         "content-unchanged"
                       ]
                     },
                     "status": {
-                      "enum": ["passed", "failed"]
+                      "enum": [
+                        "passed",
+                        "failed"
+                      ]
                     },
                     "message": {
                       "type": "string",
@@ -196,7 +225,10 @@
               "approvalEvidence": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["kind", "evidenceRef"],
+                "required": [
+                  "kind",
+                  "evidenceRef"
+                ],
                 "properties": {
                   "kind": {
                     "const": "repository-review"
@@ -207,14 +239,14 @@
                     "maxLength": 256
                   }
                 }
+              },
+              "governance": {
+                "$ref": "#/$defs/promotionGovernance"
               }
             }
           },
           "usageProjection": {
             "$ref": "#/$defs/usageProjection"
-          },
-          "scope": {
-            "$ref": "#/$defs/scope"
           },
           "pinned": {
             "type": "boolean"
@@ -244,24 +276,325 @@
               "superseded",
               "unused"
             ]
+          },
+          "scope": {
+            "$ref": "#/$defs/scope"
           }
         }
       }
     }
   },
   "$defs": {
-    "scope": {
+    "scopeId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]*$"
+    },
+    "artifactId": {
+      "type": "string",
+      "pattern": "^SL-[A-Z0-9][A-Z0-9-]*$"
+    },
+    "artifactVersion": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "opaqueReference": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "promotionScope": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "path"],
+      "required": [
+        "id",
+        "kind",
+        "root",
+        "precedence",
+        "ancestorScopeIds",
+        "ownerSetId"
+      ],
       "properties": {
         "id": {
-          "type": "string",
-          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+          "$ref": "#/$defs/scopeId"
         },
-        "path": {
+        "kind": {
+          "enum": [
+            "repository",
+            "shared",
+            "solution",
+            "service",
+            "library",
+            "package"
+          ]
+        },
+        "root": {
+          "type": "boolean"
+        },
+        "precedence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "ancestorScopeIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/scopeId"
+          }
+        },
+        "ownerSetId": {
+          "$ref": "#/$defs/scopeId"
+        }
+      }
+    },
+    "overrideMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "overriddenArtifactId",
+        "overriddenScopeId",
+        "declarationKey",
+        "reason",
+        "approvalRef"
+      ],
+      "properties": {
+        "kind": {
+          "const": "narrower-scope"
+        },
+        "overriddenArtifactId": {
+          "$ref": "#/$defs/artifactId"
+        },
+        "overriddenScopeId": {
+          "$ref": "#/$defs/scopeId"
+        },
+        "declarationKey": {
           "type": "string",
-          "minLength": 1
+          "pattern": "^[a-z][a-z0-9.-]{1,127}$"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "approvalRef": {
+          "$ref": "#/$defs/opaqueReference"
+        }
+      }
+    },
+    "promotionGovernance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "status",
+        "policyVersion",
+        "policyHash",
+        "inputHash",
+        "targetScope",
+        "sourceScopes",
+        "artifactScope",
+        "evidenceSummary",
+        "ownerApprovals",
+        "conflictResolutions",
+        "reasons"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "status": {
+          "enum": [
+            "passed",
+            "failed"
+          ]
+        },
+        "policyVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "policyHash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "inputHash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "targetScope": {
+          "$ref": "#/$defs/promotionScope"
+        },
+        "sourceScopes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "artifactId",
+              "artifactVersion",
+              "scope"
+            ],
+            "properties": {
+              "artifactId": {
+                "$ref": "#/$defs/artifactId"
+              },
+              "artifactVersion": {
+                "$ref": "#/$defs/artifactVersion"
+              },
+              "scope": {
+                "$ref": "#/$defs/promotionScope"
+              }
+            }
+          }
+        },
+        "artifactScope": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "artifactId",
+            "scope"
+          ],
+          "properties": {
+            "artifactId": {
+              "$ref": "#/$defs/artifactId"
+            },
+            "scope": {
+              "$ref": "#/$defs/promotionScope"
+            }
+          }
+        },
+        "evidenceSummary": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "sourceArtifactId",
+              "artifactVersion",
+              "scopeId",
+              "verifiedSuccessCount",
+              "verifiedFailureCount",
+              "evidenceRefs"
+            ],
+            "properties": {
+              "sourceArtifactId": {
+                "$ref": "#/$defs/artifactId"
+              },
+              "artifactVersion": {
+                "$ref": "#/$defs/artifactVersion"
+              },
+              "scopeId": {
+                "$ref": "#/$defs/scopeId"
+              },
+              "verifiedSuccessCount": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "verifiedFailureCount": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "evidenceRefs": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/$defs/opaqueReference"
+                }
+              }
+            }
+          }
+        },
+        "ownerApprovals": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "scopeId",
+              "ownerSetId",
+              "evidenceRef"
+            ],
+            "properties": {
+              "kind": {
+                "const": "owner-set-approval"
+              },
+              "scopeId": {
+                "$ref": "#/$defs/scopeId"
+              },
+              "ownerSetId": {
+                "$ref": "#/$defs/scopeId"
+              },
+              "evidenceRef": {
+                "$ref": "#/$defs/opaqueReference"
+              }
+            }
+          }
+        },
+        "legacyApproval": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "evidenceRef"
+          ],
+          "properties": {
+            "kind": {
+              "const": "repository-review"
+            },
+            "evidenceRef": {
+              "$ref": "#/$defs/opaqueReference"
+            }
+          }
+        },
+        "conflictResolutions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "declarationKey",
+              "narrowerArtifactId",
+              "broaderArtifactId",
+              "status",
+              "message"
+            ],
+            "properties": {
+              "declarationKey": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9.-]{1,127}$"
+              },
+              "narrowerArtifactId": {
+                "$ref": "#/$defs/artifactId"
+              },
+              "broaderArtifactId": {
+                "$ref": "#/$defs/artifactId"
+              },
+              "status": {
+                "enum": [
+                  "explicit-override",
+                  "blocked"
+                ]
+              },
+              "message": {
+                "type": "string",
+                "minLength": 1
+              },
+              "override": {
+                "$ref": "#/$defs/overrideMetadata"
+              }
+            }
+          }
+        },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
         }
       }
     },
@@ -314,7 +647,10 @@
           "minimum": 0
         },
         "applicationRate": {
-          "type": ["number", "null"],
+          "type": [
+            "number",
+            "null"
+          ],
           "minimum": 0,
           "maximum": 1
         },
@@ -339,7 +675,10 @@
           "minimum": 0
         },
         "outcomeSuccessRate": {
-          "type": ["number", "null"],
+          "type": [
+            "number",
+            "null"
+          ],
           "minimum": 0,
           "maximum": 1
         },
@@ -386,6 +725,24 @@
         "lastVerifiedFailureAt": {
           "type": "string",
           "format": "date-time"
+        }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "path"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
         }
       }
     }

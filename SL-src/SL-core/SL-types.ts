@@ -22,10 +22,42 @@ export interface SLRetentionConfig {
   promotedQuarantineAfterDays: number;
 }
 
+export type SLPromotionPolicyMode =
+  | "single-repository"
+  | "monorepo";
+
+export type SLPromotionScopeKind =
+  | "repository"
+  | "shared"
+  | "solution"
+  | "service"
+  | "library"
+  | "package";
+
+export interface SLPromotionPolicy {
+  mode: SLPromotionPolicyMode;
+  policyVersion: string;
+  local: {
+    minimumVerifiedSuccesses: number;
+  };
+  shared: {
+    minimumDistinctNonRootScopes: number;
+    minimumVerifiedSuccessesPerScope: number;
+  };
+  approvals: {
+    requireTargetOwnerApproval: boolean;
+  };
+  conflicts: {
+    allowNarrowerExplicitOverrides: boolean;
+    blockUndeclaredConflicts: boolean;
+  };
+}
+
 export interface SLConfig {
   schemaVersion: 1;
   scope: "repo";
   retention: SLRetentionConfig;
+  promotion: SLPromotionPolicy;
 }
 
 export type SLScopeKind =
@@ -193,9 +225,91 @@ export interface SLLifecycleEvent extends SLEvent {
   idempotencyKey: string;
 }
 
-export interface SLPromotionApprovalEvidence {
+export interface SLLegacyRepositoryApprovalEvidence {
   kind: "repository-review";
   evidenceRef: string;
+}
+
+export interface SLPromotionOwnerApprovalEvidence {
+  kind: "owner-set-approval";
+  scopeId: string;
+  ownerSetId: string;
+  evidenceRef: string;
+}
+
+export type SLPromotionApprovalEvidence =
+  | SLLegacyRepositoryApprovalEvidence
+  | SLPromotionOwnerApprovalEvidence;
+
+export interface SLPromotionScopeRef {
+  id: string;
+  kind: SLPromotionScopeKind;
+  root: boolean;
+  precedence: number;
+  ancestorScopeIds: string[];
+  ownerSetId: string;
+}
+
+export interface SLPromotionSourceScope {
+  artifactId: string;
+  artifactVersion: string;
+  scope: SLPromotionScopeRef;
+}
+
+export interface SLPromotionArtifactScope {
+  artifactId: string;
+  scope: SLPromotionScopeRef;
+}
+
+export interface SLPromotionEvidenceApplication {
+  sourceArtifactId: string;
+  artifactVersion: string;
+  applicationScope: SLPromotionScopeRef;
+  outcome: "verified-success" | "verified-failure";
+  evidenceRef: string;
+}
+
+export interface SLPromotionEvidenceSummary {
+  sourceArtifactId: string;
+  artifactVersion: string;
+  scopeId: string;
+  verifiedSuccessCount: number;
+  verifiedFailureCount: number;
+  evidenceRefs: string[];
+}
+
+export interface SLAuditableOverrideMetadata {
+  kind: "narrower-scope";
+  overriddenArtifactId: string;
+  overriddenScopeId: string;
+  declarationKey: string;
+  reason: string;
+  approvalRef: string;
+}
+
+export interface SLPromotionConflictResolution {
+  declarationKey: string;
+  narrowerArtifactId: string;
+  broaderArtifactId: string;
+  status: "explicit-override" | "blocked";
+  message: string;
+  override?: SLAuditableOverrideMetadata;
+}
+
+export interface SLPromotionGovernanceRecord {
+  schemaVersion: 1;
+  status: "passed" | "failed";
+  policyVersion: string;
+  policyHash: string;
+  inputHash: string;
+  targetScope: SLPromotionScopeRef;
+  sourceScopes: SLPromotionSourceScope[];
+  artifactScope: SLPromotionArtifactScope;
+  evidenceSummary: SLPromotionEvidenceSummary[];
+  ownerApprovals: SLPromotionOwnerApprovalEvidence[];
+  legacyApproval?: SLLegacyRepositoryApprovalEvidence;
+  conflictResolutions: SLPromotionConflictResolution[];
+  reasons: string[];
 }
 
 export interface SLPromotionGateResult {
@@ -206,6 +320,10 @@ export interface SLPromotionGateResult {
     | "active-conflicts"
     | "executable-checks"
     | "repository-approval"
+    | "scope-evidence"
+    | "owner-approval"
+    | "scoped-conflicts"
+    | "policy-current"
     | "content-unchanged";
   status: "passed" | "failed";
   message: string;
@@ -220,6 +338,7 @@ export interface SLPromotionEvaluation {
   evaluatedAt: string;
   gates: SLPromotionGateResult[];
   approvalEvidence?: SLPromotionApprovalEvidence;
+  governance?: SLPromotionGovernanceRecord;
 }
 
 export type SLUsageStage = "selected" | "applied" | "outcome" | "verified";

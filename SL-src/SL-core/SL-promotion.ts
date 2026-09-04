@@ -5,8 +5,15 @@ import {
   SL_SECRET_PATTERNS,
   SL_USER_PATH_PATTERN,
 } from "./SL-constants.js";
+import { slLoadConfig } from "./SL-config.js";
 import { slParseMarkdown, slStringifyMarkdown } from "./SL-frontmatter.js";
 import { slWithRepositoryMutationLock } from "./SL-mutation-lock.js";
+import {
+  slEvaluatePromotionGovernance,
+  type SLPromotionGovernanceContext,
+  type SLPromotionGovernanceInput,
+  type SLScopedGuidance,
+} from "./SL-promotion-governance.js";
 import {
   slPromotionEvaluationIsCurrent,
   slPromotionArtifactContentHash,
@@ -33,6 +40,7 @@ import { SL_DEFAULT_SCOPE, slNormalizeScope } from "./SL-state.js";
 import { slArtifactContentHash } from "./SL-usage.js";
 import {
   slAssertRealPathInside,
+  slCanonicalJson,
   slExists,
   slMove,
   slNormalizePath,
@@ -58,6 +66,7 @@ const slDryRunPromotionEvaluations = new Map<string, SLPromotionEvaluation>();
 
 export interface SLEvaluatePromotionReadinessOptions {
   approval?: SLPromotionApprovalEvidence;
+  governance?: SLPromotionGovernanceContext;
   executeCommands?: boolean;
   dryRun?: boolean;
   now?: Date;
@@ -71,6 +80,10 @@ export interface SLPromotionReadinessResult {
 interface SLBuildPromotionEvaluationOptions
   extends SLEvaluatePromotionReadinessOptions {
   executableFallback?: SLPromotionEvaluation;
+}
+
+export interface SLActivatePromotionOptions {
+  governance?: SLPromotionGovernanceContext;
 }
 
 function slDryRunEvaluationKey(root: string, artifactId: string): string {
@@ -135,6 +148,150 @@ function slApprovalValid(
     pattern.lastIndex = 0;
     return pattern.test(approval.evidenceRef);
   });
+}
+
+async function slCurrentSourceScopes(
+  root: string,
+  registry: SLRegistry,
+  artifact: SLRegistryArtifact,
+  governance: SLPromotionGovernanceContext,
+): Promise<SLPromotionGovernanceContext["sourceScopes"]> {
+  const expectedSourceIds = [...(artifact.dependsOn ?? [])].sort();
+  const suppliedSourceIds = governance.sourceScopes
+    .map((source) => source.artifactId)
+    .sort();
+  if (
+    expectedSourceIds.length !== suppliedSourceIds.length ||
+    expectedSourceIds.some(
+      (sourceId, index) => sourceId !== suppliedSourceIds[index],
+    )
+  ) {
+    throw new Error(
+      "Promotion governance source scopes must exactly match direct promotion evidence.",
+    );
+  }
+  const current = [];
+  for (const sourceScope of governance.sourceScopes) {
+    const source = registry.artifacts.find(
+      (candidate) => candidate.id === sourceScope.artifactId,
+    );
+    if (!source?.path) {
+      current.push(sourceScope);
+      continue;
+    }
+    try {
+      const contentHash = slPromotionArtifactContentHash(
+        await slReadContainedText(root, source.path),
+      );
+      current.push({
+        ...sourceScope,
+        artifactVersion: slPromotionArtifactVersion(contentHash),
+      });
+    } catch {
+      current.push(sourceScope);
+    }
+  }
+  return current;
+}
+
+function slGovernedActiveGuidance(
+  registry: SLRegistry,
+  activeContracts: SLActiveValidationContract[],
+): {
+  governed: SLScopedGuidance[];
+  legacy: SLActiveValidationContract[];
+} {
+  const governed: SLScopedGuidance[] = [];
+  const legacy: SLActiveValidationContract[] = [];
+  for (const active of activeContracts) {
+    const artifact = registry.artifacts.find(
+      (candidate) => candidate.id === active.artifactId,
+    );
+    const scope = artifact?.promotionEvaluation?.governance?.targetScope;
+    if (!scope) {
+      legacy.push(active);
+      continue;
+    }
+    governed.push({
+      artifactId: active.artifactId,
+      scope,
+      applicability: active.contract.scope,
+      declarations: active.contract.declarations ?? [],
+    });
+  }
+  return { governed, legacy };
+}
+
+async function slBuildGovernanceInput(
+  root: string,
+  registry: SLRegistry,
+  artifact: SLRegistryArtifact,
+  contract: NonNullable<
+    Awaited<ReturnType<typeof slEvaluateValidationContract>>["contract"]
+  >,
+  context: SLPromotionGovernanceContext,
+  activeContracts: SLActiveValidationContract[],
+): Promise<{
+  input: SLPromotionGovernanceInput;
+  legacyConflictsPassed: boolean;
+}> {
+  const config = await slLoadConfig(root);
+  if (config.promotion.mode !== "monorepo") {
+    throw new Error(
+      "Scoped promotion governance requires promotion.mode: monorepo.",
+    );
+  }
+  if (context.artifactScope.artifactId !== artifact.id) {
+    throw new Error(
+      "Promotion artifact scope must identify the probationary artifact.",
+    );
+  }
+  const sourceScopes = await slCurrentSourceScopes(
+    root,
+    registry,
+    artifact,
+    context,
+  );
+  const active = slGovernedActiveGuidance(registry, activeContracts);
+  const candidate: SLScopedGuidance = {
+    artifactId: artifact.id,
+    scope: context.targetScope,
+    applicability: contract.scope,
+    declarations: contract.declarations ?? [],
+  };
+  const callerGuidance = context.activeGuidance ?? [];
+  const combined = new Map<string, SLScopedGuidance>();
+  for (const guidance of [
+    ...active.governed,
+    ...callerGuidance,
+    candidate,
+  ]) {
+    const existing = combined.get(guidance.artifactId);
+    if (
+      existing &&
+      slArtifactContentHash(slCanonicalJson(existing)) !==
+        slArtifactContentHash(slCanonicalJson(guidance))
+    ) {
+      throw new Error(
+        `Scoped guidance ${guidance.artifactId} has contradictory active definitions.`,
+      );
+    }
+    combined.set(guidance.artifactId, guidance);
+  }
+  const legacyConflictsPassed =
+    slFindValidationContractConflicts([
+      ...active.legacy,
+      { artifactId: artifact.id, contract },
+    ]).length === 0;
+  return {
+    input: {
+      policy: config.promotion,
+      ...context,
+      sourceScopes,
+      activeGuidance: [...combined.values()],
+    },
+    legacyConflictsPassed,
+  };
 }
 
 async function slArtifactSourcesValid(
@@ -616,23 +773,44 @@ async function slBuildPromotionEvaluation(
     );
 
   let conflictPassed = false;
+  let governance:
+    | ReturnType<typeof slEvaluatePromotionGovernance>
+    | undefined;
   if (contractEvaluation.contract) {
     const active = await slLoadActiveContracts(
       root,
       registry,
       artifact.id,
     );
-    conflictPassed =
-      active.valid &&
-      slFindValidationContractConflicts([
-        ...active.contracts,
-        {
-          artifactId: artifact.id,
-          contract: contractEvaluation.contract,
-        },
-      ]).length === 0;
+    if (options.governance) {
+      const governed = await slBuildGovernanceInput(
+        root,
+        registry,
+        artifact,
+        contractEvaluation.contract,
+        options.governance,
+        active.contracts,
+      );
+      governance = slEvaluatePromotionGovernance(governed.input);
+      conflictPassed =
+        active.valid &&
+        governed.legacyConflictsPassed &&
+        governance.conflictsPassed;
+    } else {
+      conflictPassed =
+        active.valid &&
+        slFindValidationContractConflicts([
+          ...active.contracts,
+          {
+            artifactId: artifact.id,
+            contract: contractEvaluation.contract,
+          },
+        ]).length === 0;
+    }
   }
-  const approvalPassed = slApprovalValid(options.approval);
+  const approvalPassed = options.governance
+    ? governance?.approvalPassed === true
+    : slApprovalValid(options.approval);
   const gates: SLPromotionGateResult[] = [
     slGate(
       "contract",
@@ -668,12 +846,38 @@ async function slBuildPromotionEvaluation(
           : "All configured executable checks passed.",
       "Configured executable checks were skipped or failed.",
     ),
-    slGate(
-      "repository-approval",
-      approvalPassed,
-      "Explicit repository review approval was supplied.",
-      "Explicit repository review approval is missing or invalid.",
-    ),
+    ...(!options.governance
+      ? [
+          slGate(
+            "repository-approval",
+            approvalPassed,
+            "Explicit repository review approval was supplied.",
+            "Explicit repository review approval is missing or invalid.",
+          ),
+        ]
+      : []),
+    ...(options.governance
+      ? [
+          slGate(
+            "scope-evidence",
+            governance?.evidencePassed === true,
+            "Promotion evidence satisfies target-scope distribution policy.",
+            "Promotion evidence does not satisfy target-scope distribution policy.",
+          ),
+          slGate(
+            "owner-approval",
+            approvalPassed,
+            "The target scope owner set approved the promotion.",
+            "Approval from the target scope owner set is missing or invalid.",
+          ),
+          slGate(
+            "scoped-conflicts",
+            governance?.conflictsPassed === true && conflictPassed,
+            "Scoped declarations are compatible or explicitly overridden.",
+            "A scoped declaration conflict is blocked.",
+          ),
+        ]
+      : []),
   ];
   const artifactContentHash = slPromotionArtifactContentHash(content);
   const evaluation: SLPromotionEvaluation = {
@@ -689,9 +893,10 @@ async function slBuildPromotionEvaluation(
     ),
     evaluatedAt: (options.now ?? new Date()).toISOString(),
     gates,
-    ...(approvalPassed && options.approval
+    ...(!options.governance && approvalPassed && options.approval
       ? { approvalEvidence: options.approval }
       : {}),
+    ...(governance ? { governance: governance.record } : {}),
   };
   return evaluation;
 }
@@ -701,6 +906,7 @@ export async function slActivatePromotion(
   artifactId: string,
   dryRun: boolean,
   now = new Date(),
+  options: SLActivatePromotionOptions = {},
 ): Promise<SLChange[]> {
   await slAssertEventPathSafe(root);
   return slWithRepositoryMutationLock(root, async () => {
@@ -772,7 +978,41 @@ export async function slActivatePromotion(
       dryRun,
       now,
       ...(dryRun ? { executableFallback: evaluation } : {}),
+      ...(options.governance
+        ? { governance: options.governance }
+        : {}),
     };
+    if (evaluation.governance && !options.governance) {
+      const invalidated: SLPromotionEvaluation = {
+        ...evaluation,
+        status: "failed",
+        evaluatedAt: now.toISOString(),
+        gates: [
+          ...evaluation.gates.filter(
+            (gate) => gate.id !== "policy-current",
+          ),
+          {
+            id: "policy-current",
+            status: "failed",
+            message:
+              "Current scope, evidence, approvals, and policy context must be supplied for governed activation.",
+          },
+        ],
+      };
+      const changes: SLChange[] = [];
+      await slPersistEvaluation(
+        root,
+        registry,
+        artifact,
+        invalidated,
+        dryRun,
+        changes,
+        "promotion-invalidated",
+      );
+      throw new Error(
+        `Artifact ${artifactId} governed activation context is missing and it remains in probation.`,
+      );
+    }
     if (evaluation.approvalEvidence) {
       refreshOptions.approval = evaluation.approvalEvidence;
     }
@@ -782,6 +1022,47 @@ export async function slActivatePromotion(
       artifact,
       refreshOptions,
     );
+    if (
+      evaluation.governance &&
+      (
+        !refreshedEvaluation.governance ||
+        refreshedEvaluation.governance.policyVersion !==
+          evaluation.governance.policyVersion ||
+        refreshedEvaluation.governance.policyHash !==
+          evaluation.governance.policyHash ||
+        refreshedEvaluation.governance.inputHash !==
+          evaluation.governance.inputHash
+      )
+    ) {
+      const invalidated: SLPromotionEvaluation = {
+        ...refreshedEvaluation,
+        status: "failed",
+        gates: [
+          ...refreshedEvaluation.gates.filter(
+            (gate) => gate.id !== "policy-current",
+          ),
+          {
+            id: "policy-current",
+            status: "failed",
+            message:
+              "Promotion policy, scope, evidence, approvals, or active scoped guidance changed after evaluation.",
+          },
+        ],
+      };
+      const changes: SLChange[] = [];
+      await slPersistEvaluation(
+        root,
+        registry,
+        artifact,
+        invalidated,
+        dryRun,
+        changes,
+        "promotion-invalidated",
+      );
+      throw new Error(
+        `Artifact ${artifactId} governance inputs changed and it remains in probation.`,
+      );
+    }
     if (refreshedEvaluation.status !== "passed") {
       const changes: SLChange[] = [];
       await slPersistEvaluation(
