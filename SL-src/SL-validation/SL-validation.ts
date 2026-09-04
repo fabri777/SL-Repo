@@ -20,6 +20,8 @@ import {
 } from "../SL-core/SL-registry.js";
 import {
   slLoadScopeCatalog,
+  slScopeDescriptor,
+  slScopeDescriptors,
   SLScopeCatalogValidationError,
 } from "../SL-core/SL-scope.js";
 import type {
@@ -28,6 +30,7 @@ import type {
   SLEvent,
   SLLifecycleEvent,
   SLRegistry,
+  SLScopeCatalog,
   SLUsageApplicationEvent,
   SLUsageEvent,
   SLScopeRegistry,
@@ -157,8 +160,9 @@ export async function slValidateRepository(root: string): Promise<SLValidationIs
     issues.push(...slAjvIssues("config-schema", SL_PATHS.config, validateConfig.errors));
   }
 
+  let scopeCatalog: SLScopeCatalog | undefined;
   try {
-    await slLoadScopeCatalog(root);
+    scopeCatalog = await slLoadScopeCatalog(root);
   } catch (error) {
     if (error instanceof SLScopeCatalogValidationError) {
       issues.push(
@@ -228,6 +232,20 @@ export async function slValidateRepository(root: string): Promise<SLValidationIs
       });
     }
     catalogScopeKeys.add(key);
+    if (
+      scopeCatalog &&
+      !scopeCatalog.scopes.some(
+        (scope) =>
+          slScopeKey(slScopeDescriptor(scope)) === key,
+      )
+    ) {
+      issues.push({
+        severity: "error",
+        code: "scope-state-orphan",
+        path: SL_PATHS.stateCatalog,
+        message: `State shard ${entry.shard} references a scope no longer declared in the hand-authored catalog.`,
+      });
+    }
     const shardOwner = catalogShards.get(entry.shard);
     if (shardOwner && shardOwner !== key) {
       issues.push({
@@ -322,9 +340,9 @@ export async function slValidateRepository(root: string): Promise<SLValidationIs
   try {
     const expectedCatalog = slBuildStateCatalog(
       [
-        ...catalog.scopes.map((entry) => entry.scope),
+        ...(scopeCatalog ? slScopeDescriptors(scopeCatalog) : []),
         ...registry.artifacts.map((artifact) => artifact.scope ?? {
-          id: "repo",
+          id: "SL-SCOPE-ROOT",
           path: ".",
         }),
       ],
@@ -350,6 +368,24 @@ export async function slValidateRepository(root: string): Promise<SLValidationIs
   const paths = new Set<string>();
   const activeContracts: SLActiveValidationContract[] = [];
   for (const artifact of registry.artifacts) {
+    const artifactScope = slNormalizeScope(
+      artifact.scope ?? { id: "SL-SCOPE-ROOT", path: "." },
+    );
+    if (
+      scopeCatalog &&
+      !scopeCatalog.scopes.some(
+        (scope) =>
+          slScopeKey(slScopeDescriptor(scope)) ===
+          slScopeKey(artifactScope),
+      )
+    ) {
+      issues.push({
+        severity: "error",
+        code: "artifact-scope-invalid",
+        ...(artifact.path ? { path: artifact.path } : {}),
+        message: `Artifact ${artifact.id} references undeclared scope ${artifactScope.id}:${artifactScope.path}.`,
+      });
+    }
     if (ids.has(artifact.id)) {
       issues.push({
         severity: "error",
@@ -802,14 +838,20 @@ export async function slValidateRepository(root: string): Promise<SLValidationIs
         message: `Usage event references unknown artifact ${event.artifactId}.`,
       });
     } else if (
-      slScopeKey(event.scope ?? { id: "repo", path: "." }) !==
-      slScopeKey(usageArtifact.scope ?? { id: "repo", path: "." })
+      scopeCatalog &&
+      !scopeCatalog.scopes.some(
+        (scope) =>
+          slScopeKey(slScopeDescriptor(scope)) ===
+          slScopeKey(
+            event.scope ?? { id: "SL-SCOPE-ROOT", path: "." },
+          ),
+      )
     ) {
       issues.push({
         severity: "error",
         code: "usage-event-scope",
         path: usageFile,
-        message: `Usage event scope does not match artifact ${event.artifactId}.`,
+        message: `Usage event references an undeclared source scope.`,
       });
     }
     if (event.eventType === "legacy-baseline") {
@@ -840,6 +882,9 @@ export async function slValidateRepository(root: string): Promise<SLValidationIs
           event.artifactVersion,
           event.artifactContentHash,
           event.taskRunId,
+          slScopeKey(
+            event.scope ?? { id: "SL-SCOPE-ROOT", path: "." },
+          ),
         ].join("\0"),
       ),
     );

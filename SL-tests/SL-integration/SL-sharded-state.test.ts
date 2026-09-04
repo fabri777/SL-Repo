@@ -213,7 +213,7 @@ describe("SL scope-sharded state", () => {
     expect(await readFile(legacyRegistryPath, "utf8")).toBe(legacyBefore);
     expect(await slProjectUsage(root, lesson.id)).toEqual([
       expect.objectContaining({
-        scope: { id: "repo", path: "." },
+        scope: { id: "SL-SCOPE-ROOT", path: "." },
         retrievalCount: 4,
         applicationCount: 4,
         verifiedSuccessCount: 3,

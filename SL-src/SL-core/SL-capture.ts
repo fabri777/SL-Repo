@@ -15,6 +15,7 @@ import type {
   SLScopeDescriptor,
 } from "./SL-types.js";
 import { SL_DEFAULT_SCOPE, slNormalizeScope } from "./SL-state.js";
+import { slResolveScopeDescriptor } from "./SL-scope.js";
 import {
   slDateOnly,
   slExists,
@@ -32,6 +33,9 @@ export interface SLCaptureOptions {
   dryRun: boolean;
   now?: Date;
   stateScope?: SLScopeDescriptor;
+  scopeId?: string;
+  targetPath?: string;
+  currentDirectory?: string;
 }
 
 export async function slCaptureLesson(
@@ -60,6 +64,17 @@ async function slCaptureLessonUnlocked(
   }
 
   const registry = await slLoadRegistry(root);
+  const resolvedStateScope = options.stateScope
+    ? slNormalizeScope(options.stateScope)
+    : (
+        await slResolveScopeDescriptor(root, {
+          ...(options.scopeId ? { scopeId: options.scopeId } : {}),
+          ...(options.targetPath ? { targetPath: options.targetPath } : {}),
+          ...(options.currentDirectory
+            ? { currentDirectory: options.currentDirectory }
+            : {}),
+        })
+      ).scope;
   const baseId = `SL-${date.replaceAll("-", "")}-${slug.toUpperCase()}`;
   let id = baseId;
   let suffix = 2;
@@ -135,7 +150,7 @@ async function slCaptureLessonUnlocked(
     hits: 0,
     retrievals: 0,
     notUsefulVotes: 0,
-    scope: slNormalizeScope(options.stateScope ?? SL_DEFAULT_SCOPE),
+    scope: resolvedStateScope ?? SL_DEFAULT_SCOPE,
   };
   slUpsertArtifact(registry, artifact);
   await slSaveRegistry(root, registry, options.dryRun, changes);

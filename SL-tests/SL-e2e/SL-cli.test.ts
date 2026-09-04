@@ -122,7 +122,151 @@ describe("sl-repo CLI", () => {
     expect(runCli(["scope", "--help"])).toContain(
       "Resolve hierarchical SL scopes",
     );
+    expect(help).toContain("retrieve");
   });
+
+  test(
+    "runs scoped capture, dependency retrieval, usage, and projection through the CLI",
+    async () => {
+      const root = await slCreateTestRepository();
+      repositories.push(root);
+      await slInstall(root, "init", false);
+      await writeFile(
+        join(root, ".github", "SL-learning", "SL-scope-catalog.json"),
+        JSON.stringify({
+          schemaVersion: 1,
+          scopes: [
+            {
+              id: "SL-SCOPE-ROOT",
+              displayName: "Repository",
+              kind: "repository",
+              includePaths: ["**"],
+              excludePaths: [],
+              dependencyScopeIds: [],
+              ownerAliases: [],
+            },
+            {
+              id: "SL-SCOPE-LIBRARY",
+              displayName: "Library",
+              kind: "library",
+              includePaths: ["libraries/common/**"],
+              excludePaths: [],
+              parentScopeId: "SL-SCOPE-ROOT",
+              dependencyScopeIds: [],
+              ownerAliases: ["@example/library"],
+            },
+            {
+              id: "SL-SCOPE-SERVICE",
+              displayName: "Service",
+              kind: "service",
+              includePaths: ["services/api/**"],
+              excludePaths: [],
+              parentScopeId: "SL-SCOPE-ROOT",
+              dependencyScopeIds: ["SL-SCOPE-LIBRARY"],
+              ownerAliases: ["@example/api"],
+            },
+          ],
+        }),
+        "utf8",
+      );
+      await rm(join(root, ".github", "SL-learning", "SL-scope-catalog.yml"));
+
+      expect(runCli(["scope", "validate", root])).toContain(
+        "SL scope catalog valid",
+      );
+      expect(runCli(["scope", "list", root])).toContain(
+        "SL-SCOPE-LIBRARY",
+      );
+      const captureOutput = runCli([
+        "capture",
+        root,
+        "--title",
+        "Scoped CLI library lesson",
+        "--scope",
+        "SL-SCOPE-LIBRARY",
+        "--lesson-scope",
+        "library",
+        "--trigger",
+        "scoped-cli",
+      ]);
+      const lessonId = captureOutput.split(/\s+/).find((value) =>
+        value.startsWith("SL-202"),
+      );
+      if (!lessonId) {
+        throw new Error("CLI output did not contain a scoped lesson ID.");
+      }
+      const retrieval = JSON.parse(
+        runCli([
+          "retrieve",
+          root,
+          "--path",
+          "services/api/src/handler.ts",
+          "--json",
+        ]),
+      ) as {
+        orderedScopeIds: string[];
+        artifacts: Array<{ id: string; relation: string }>;
+      };
+      expect(retrieval.orderedScopeIds).toEqual([
+        "SL-SCOPE-SERVICE",
+        "SL-SCOPE-LIBRARY",
+        "SL-SCOPE-ROOT",
+      ]);
+      expect(retrieval.artifacts).toContainEqual(
+        expect.objectContaining({
+          id: lessonId,
+          relation: "dependency",
+        }),
+      );
+
+      const started = JSON.parse(
+        runCli([
+          "use",
+          "start",
+          lessonId,
+          root,
+          "--target-path",
+          "services/api/src/handler.ts",
+          "--application-id",
+          "scoped-cli-application",
+          "--task-run-id",
+          "scoped-cli-task",
+          "--idempotency-key",
+          "scoped-cli-start",
+          "--json",
+        ]),
+      ) as { receiptId: string };
+      runCli([
+        "use",
+        "finish",
+        started.receiptId,
+        root,
+        "--outcome",
+        "success",
+        "--verified",
+        "--verifier-type",
+        "test-suite",
+        "--evidence-ref",
+        "ci:scoped-cli",
+        "--idempotency-key",
+        "scoped-cli-finish",
+      ]);
+      const stats = JSON.parse(
+        runCli([
+          "stats",
+          lessonId,
+          root,
+          "--scope",
+          "SL-SCOPE-SERVICE",
+          "--json",
+        ]),
+      ) as Array<{ verifiedSuccessCount: number }>;
+      expect(stats).toEqual([
+        expect.objectContaining({ verifiedSuccessCount: 1 }),
+      ]);
+    },
+    120_000,
+  );
 
   test("resolves scope catalogs through the CLI", async () => {
     const root = await slCreateTestRepository();

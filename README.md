@@ -86,7 +86,10 @@ see `SL-docs/SL-install.md` for the pin-update procedure and
 After a lesson is retrieved and applied:
 
 ```powershell
+sl-repo scope resolve C:\path\to\repository --file services\orders\src\handler.ts
+sl-repo retrieve C:\path\to\repository --path services/orders/src/handler.ts
 sl-repo use start SL-LESSON-ID C:\path\to\repository `
+  --target-path services/orders/src/handler.ts `
   --task-run-id TASK-123 `
   --application-id APPLY-123
 sl-repo use finish APPLY-123 C:\path\to\repository `
@@ -94,7 +97,8 @@ sl-repo use finish APPLY-123 C:\path\to\repository `
   --verified `
   --verifier-type test-suite `
   --evidence-ref ci:run-123
-sl-repo stats SL-LESSON-ID C:\path\to\repository
+sl-repo stats SL-LESSON-ID C:\path\to\repository --scope SL-SCOPE-ORDERS
+sl-repo stats C:\path\to\repository --aggregate repository
 sl-repo project C:\path\to\repository
 ```
 
@@ -124,11 +128,11 @@ Positive reuse votes raise a lesson from raw to distilled and then to a
 promotion candidate. A vote is evidence for promotion, not permission to
 generate broad guidance without reviewing its applicability.
 
-Votes are stored as immutable files under
-`.github/SL-learning/SL-usage-events/`. Stable application and idempotency IDs
-make command retries safe, while separate files keep concurrent branch changes
-merge-friendly. Existing mutable counters are retained and imported once as an
-immutable per-version baseline; new votes do not increment those counters.
+Votes and usage receipts are stored as immutable files in deterministic
+scope/artifact shards. Stable application and idempotency IDs make command
+retries safe, while separate files keep concurrent branch changes
+merge-friendly. Existing unscoped events and mutable counters are retained and
+imported without data loss; new votes do not increment those counters.
 See [SL usage events](SL-docs/SL-usage-events.md).
 For monorepo scope shards and post-merge regeneration, see
 [SL monorepo state layout](SL-docs/SL-state-layout.md).
@@ -138,9 +142,14 @@ Evaluate a promoted artifact statically by ID or registered path:
 ```powershell
 sl-repo evaluate SL-PROMOTED-ID C:\path\to\repository --json
 sl-repo promotion-evaluate SL-PROMOTED-ID C:\path\to\repository `
+  --target-scope SL-SCOPE-ROOT `
   --approval-ref review:123
 sl-repo promotion-activate SL-PROMOTED-ID C:\path\to\repository
 ```
+
+In monorepo mode, local promotion defaults to the source scope. Promotion to a
+shared/root scope is rebuilt from immutable verified-use evidence and requires
+the configured number of distinct non-root scopes plus target-owner approval.
 
 Executable contract checks remain disabled unless explicitly requested with
 `--execute-checks`; they are trusted commands from the reviewed repository,

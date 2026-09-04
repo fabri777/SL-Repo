@@ -34,11 +34,13 @@ interface SLScopeDescriptor {
 }
 ```
 
-Pass it as `stateScope` to `slCaptureLesson`, or use
-`sl-repo capture --state-scope services/orders --state-scope-id orders`.
-Usage APIs derive the scope from the registered artifact. Reusable helpers are
-exported from `SL-core/SL-state.ts`, `SL-core/SL-registry.ts`,
-`SL-index/SL-index.ts`, and `SL-core/SL-usage.ts`.
+The hand-authored hierarchical catalog determines these descriptors. Use
+`sl-repo capture --scope SL-SCOPE-ORDERS` or `--target-path` for inference.
+Usage can record the consuming source scope separately from the artifact's
+owning scope, which allows shared evidence to remain partitioned by application
+scope. Reusable helpers are exported from `SL-core/SL-scope.ts`,
+`SL-core/SL-state.ts`, `SL-core/SL-registry.ts`, `SL-index/SL-index.ts`, and
+`SL-core/SL-usage.ts`.
 
 ## Compatibility and regeneration
 
@@ -68,5 +70,6 @@ sl-repo stats . --aggregate scope --json
 sl-repo stats . --aggregate repository --json
 ```
 
-SL Repo does not resolve hierarchical scope inheritance or promotion
-governance in this foundation.
+`SL-scope-catalog.yml`, Markdown artifacts, and immutable events are source
+inputs. `SL-state-catalog.json`, registry/index shards, and usage projections
+are deterministic generated state rebuilt by `sl-repo project`.

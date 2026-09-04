@@ -1,7 +1,11 @@
 import type { SLRegistryArtifact } from "./SL-types.js";
 import { slLoadConfig } from "./SL-config.js";
 import { slParseMarkdown } from "./SL-frontmatter.js";
-import { slPromotionPolicyHash } from "./SL-promotion-governance.js";
+import {
+  slEvaluatePromotionGovernance,
+  slPromotionPolicyHash,
+} from "./SL-promotion-governance.js";
+import { slBuildPromotionGovernanceContext } from "./SL-promotion-context.js";
 import {
   slArtifactContentHash,
   slArtifactUsageContentHash,
@@ -43,6 +47,39 @@ export async function slPromotionEvaluationIsCurrent(
           evaluation.governance.policyHash
       ) {
         return false;
+      }
+      try {
+        const context = await slBuildPromotionGovernanceContext(
+          root,
+          artifact.id,
+          {
+            targetScopeId: evaluation.governance.targetScope.id,
+            ownerApprovalRefs: evaluation.governance.ownerApprovals.map(
+              (approval) => approval.evidenceRef,
+            ),
+          },
+        );
+        const current = slEvaluatePromotionGovernance({
+          policy: config.promotion,
+          ...context,
+        }).record;
+        if (
+          current.status !== "passed" ||
+          JSON.stringify(current.targetScope) !==
+            JSON.stringify(evaluation.governance.targetScope) ||
+          JSON.stringify(current.sourceScopes) !==
+            JSON.stringify(evaluation.governance.sourceScopes) ||
+          JSON.stringify(current.evidenceSummary) !==
+            JSON.stringify(evaluation.governance.evidenceSummary) ||
+          JSON.stringify(current.ownerApprovals) !==
+            JSON.stringify(evaluation.governance.ownerApprovals)
+        ) {
+          return false;
+        }
+      } catch {
+        if (evaluation.governance.targetScope.id.startsWith("SL-SCOPE-")) {
+          return false;
+        }
       }
     }
     const artifactPath = slResolveInside(root, artifact.path);

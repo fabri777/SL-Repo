@@ -37,6 +37,7 @@ import type {
   SLRegistryArtifact,
 } from "./SL-types.js";
 import { SL_DEFAULT_SCOPE, slNormalizeScope } from "./SL-state.js";
+import { slResolveScopeDescriptor } from "./SL-scope.js";
 import { slArtifactContentHash } from "./SL-usage.js";
 import {
   slAssertRealPathInside,
@@ -84,6 +85,10 @@ interface SLBuildPromotionEvaluationOptions
 
 export interface SLActivatePromotionOptions {
   governance?: SLPromotionGovernanceContext;
+}
+
+export interface SLRegisterPromotionOptions {
+  targetScopeId?: string;
 }
 
 function slDryRunEvaluationKey(root: string, artifactId: string): string {
@@ -437,6 +442,7 @@ export async function slRegisterPromotion(
   promotedPathValue: string,
   dryRun: boolean,
   now = new Date(),
+  options: SLRegisterPromotionOptions = {},
 ): Promise<SLChange[]> {
   return slWithRepositoryMutationLock(root, () =>
     slRegisterPromotionUnlocked(
@@ -445,6 +451,7 @@ export async function slRegisterPromotion(
       promotedPathValue,
       dryRun,
       now,
+      options,
     ),
     { dryRun },
   );
@@ -456,6 +463,7 @@ async function slRegisterPromotionUnlocked(
   promotedPathValue: string,
   dryRun: boolean,
   now: Date,
+  options: SLRegisterPromotionOptions,
 ): Promise<SLChange[]> {
   const promotedPath = slNormalizePath(promotedPathValue);
   await slAssertEventPathSafe(root);
@@ -496,6 +504,13 @@ async function slRegisterPromotionUnlocked(
   if (source.classification !== "evidence") {
     throw new Error("Only lesson evidence can be promoted.");
   }
+  const promotedScope = options.targetScopeId
+    ? (
+        await slResolveScopeDescriptor(root, {
+          scopeId: options.targetScopeId,
+        })
+      ).scope
+    : slNormalizeScope(source.scope ?? SL_DEFAULT_SCOPE);
 
   const content = await slReadContainedText(root, promotedPath);
   const markdown = slParseMarkdown<Record<string, unknown>>(content);
@@ -630,7 +645,7 @@ async function slRegisterPromotionUnlocked(
     pinned: false,
     relatedTo: [sourceId],
     dependsOn: [sourceId],
-    scope: slNormalizeScope(source.scope ?? SL_DEFAULT_SCOPE),
+    scope: promotedScope,
   };
   slUpsertArtifact(registry, promoted);
   await slSaveRegistry(root, registry, dryRun, changes);

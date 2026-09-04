@@ -21,6 +21,10 @@ import {
   slWriteStateCatalog,
 } from "./SL-state.js";
 import {
+  slLoadScopeCatalog,
+  slScopeDescriptors,
+} from "./SL-scope.js";
+import {
   slAssertRealPathInside,
   slCanonicalJson,
   slExists,
@@ -152,6 +156,9 @@ export async function slSaveRegistry(
   const scopes = new Map(
     catalog.scopes.map((entry) => [slScopeKey(entry.scope), entry.scope]),
   );
+  for (const scope of slScopeDescriptors(await slLoadScopeCatalog(root))) {
+    scopes.set(slScopeKey(scope), scope);
+  }
   const artifactsByScope = new Map<string, SLRegistryArtifact[]>();
   for (const artifact of registry.artifacts) {
     const scope = slNormalizeScope(artifact.scope ?? SL_DEFAULT_SCOPE);

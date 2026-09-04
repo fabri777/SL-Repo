@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "scopes": [
+    {
+      "scope": {
+        "id": "SL-SCOPE-ROOT",
+        "path": "."
+      },
+      "shard": "SL-sl-scope-root-47ab59b49ac7",
+      "registryPath": ".github/SL-learning/SL-scopes/SL-sl-scope-root-47ab59b49ac7/SL-registry.json",
+      "indexPath": ".github/SL-learning/SL-scopes/SL-sl-scope-root-47ab59b49ac7/SL-index.json",
+      "projectionPath": ".github/SL-learning/SL-scopes/SL-sl-scope-root-47ab59b49ac7/SL-usage-projection.json",
+      "usageEventsPath": ".github/SL-learning/SL-scopes/SL-sl-scope-root-47ab59b49ac7/SL-usage-events"
+    }
+  ]
+}

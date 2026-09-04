@@ -5,7 +5,7 @@ import {
   slFindArtifact,
   slLoadRegistry,
 } from "./SL-registry.js";
-import type { SLChange } from "./SL-types.js";
+import type { SLChange, SLScopeDescriptor } from "./SL-types.js";
 import {
   slArtifactUsageContentHash,
   slArtifactVersion,
@@ -24,6 +24,7 @@ export interface SLVoteContext {
   idempotencyKey?: string;
   verifierType?: string;
   evidenceRef?: string;
+  scope?: SLScopeDescriptor;
 }
 
 export async function slVoteOnLesson(
@@ -87,6 +88,7 @@ async function slVoteOnLessonUnlocked(
       context.idempotencyKey ??
       `lesson-vote:${id}:${artifactVersion}:${applicationId}`,
     ...(context.evidenceRef ? { evidenceRef: context.evidenceRef } : {}),
+    ...(context.scope ? { scope: context.scope } : {}),
   });
   const existingUsageEvents = await slLoadUsageEvents(root);
   slAssertVoteApplicationMutation(existingUsageEvents, usageEvent);

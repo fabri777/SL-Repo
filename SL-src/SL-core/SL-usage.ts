@@ -108,6 +108,7 @@ export interface SLStartUsageOptions {
   applicationId?: string;
   taskRunId?: string;
   idempotencyKey?: string;
+  scope?: SLScopeDescriptor;
   now?: Date;
   dryRun?: boolean;
 }
@@ -604,6 +605,13 @@ export function slValidateUsageEvent(event: SLUsageEvent): void {
 export function slUsageEventPath(event: SLUsageEvent): string {
   const month = event.timestamp.slice(0, 7);
   if (event.scope) {
+    if (event.scope.id === "repo" && event.scope.path === ".") {
+      const shardHash = createHash("sha256")
+        .update("repo\0.")
+        .digest("hex")
+        .slice(0, 12);
+      return `${SL_PATHS.scopeRoot}/SL-repo-${shardHash}/SL-usage-events/${slArtifactShardName(event.artifactId)}/${month}/SL-usage-${event.eventId.slice("SL-USE-".length)}.json`;
+    }
     const scopeEntry = slScopeCatalogEntry(event.scope);
     return `${scopeEntry.usageEventsPath}/${slArtifactShardName(event.artifactId)}/${month}/SL-usage-${event.eventId.slice("SL-USE-".length)}.json`;
   }
@@ -782,6 +790,7 @@ export async function slLoadUsageEvents(root: string): Promise<SLUsageEvent[]> {
 function slUsageArtifactIdentity(
   artifact: SLRegistryArtifact,
   snapshot: SLOwnedMarkdownSnapshot,
+  applicationScope?: SLScopeDescriptor,
 ): {
   artifactId: string;
   artifactVersion: string;
@@ -805,7 +814,9 @@ function slUsageArtifactIdentity(
     artifactId: artifact.id,
     artifactContentHash,
     artifactVersion: slArtifactVersion(artifactContentHash),
-    scope: slNormalizeScope(artifact.scope ?? SL_DEFAULT_SCOPE),
+    scope: slNormalizeScope(
+      applicationScope ?? artifact.scope ?? SL_DEFAULT_SCOPE,
+    ),
   };
 }
 
@@ -897,6 +908,7 @@ function slAssertStartApplicationRetry(
     artifactContentHash: selected.artifactContentHash,
     taskRunId: selected.taskRunId,
     applicationId: selected.applicationId,
+    ...(selected.scope ? { scope: selected.scope } : {}),
   });
   slAssertUniqueApplicationStages(applicationEvents, selected.applicationId);
   if (
@@ -1017,7 +1029,11 @@ async function slStartUsageUnlocked(
   const registry = await slLoadRegistry(root);
   const artifact = slFindArtifact(registry, artifactId);
   const snapshot = await slReadOwnedArtifactMarkdown(root, artifact);
-  const identity = slUsageArtifactIdentity(artifact, snapshot);
+  const identity = slUsageArtifactIdentity(
+    artifact,
+    snapshot,
+    options.scope,
+  );
   const applicationId = options.applicationId ?? `usage-${randomUUID()}`;
   const taskRunId = options.taskRunId ?? applicationId;
   const timestamp = (options.now ?? new Date()).toISOString();

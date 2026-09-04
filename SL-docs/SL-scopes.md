@@ -62,10 +62,15 @@ Typed APIs are exported from `SL-src/SL-core/SL-scope.ts`, including
 `slResolveRepositoryScopes`. The CLI exposes the same behavior:
 
 ```powershell
-sl-repo scope C:\repo --file services\orders\src\handler.ts --json
-sl-repo scope C:\repo --changed-path services/orders/a.ts `
+sl-repo scope list C:\repo
+sl-repo scope validate C:\repo
+sl-repo scope resolve C:\repo --file services\orders\src\handler.ts --json
+sl-repo scope resolve C:\repo --changed-path services/orders/a.ts `
   --changed-path libraries/common/b.ts --json
+sl-repo retrieve C:\repo --path services/orders/src/handler.ts --json
 ```
 
-The scope model intentionally does not shard indexes or usage storage and does
-not define promotion policy.
+Capture and usage accept explicit `SL-SCOPE-*` IDs or infer from
+`--target-path`. Retrieval walks local scope, declared dependencies, ancestors,
+and root, reports provenance and precedence, and fails closed for unresolved
+same-precedence guidance conflicts.

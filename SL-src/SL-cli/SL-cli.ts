@@ -3,6 +3,8 @@ import { resolve } from "node:path";
 import { Command, Option } from "commander";
 import { slCaptureLesson } from "../SL-core/SL-capture.js";
 import { slInstall } from "../SL-core/SL-installer.js";
+import { slLoadConfig } from "../SL-core/SL-config.js";
+import { slBuildPromotionGovernanceContext } from "../SL-core/SL-promotion-context.js";
 import {
   slActivatePromotion,
   slEvaluatePromotionReadiness,
@@ -10,9 +12,13 @@ import {
 } from "../SL-core/SL-promotion.js";
 import { slLoadRegistry } from "../SL-core/SL-registry.js";
 import {
+  slFindScopeDefinition,
   slLoadScopeCatalog,
+  slResolveScopeDescriptor,
+  slScopeDescriptor,
   SLScopeResolver,
 } from "../SL-core/SL-scope.js";
+import { slRetrieveArtifacts } from "../SL-core/SL-retrieval.js";
 import type { SLChange } from "../SL-core/SL-types.js";
 import {
   slNormalizePath,
@@ -50,6 +56,22 @@ function slRoot(pathValue: string): string {
 
 function slCollect(value: string, previous: string[]): string[] {
   return [...previous, value];
+}
+
+async function slOptionalScope(
+  root: string,
+  scopeId?: string,
+  targetPath?: string,
+) {
+  if (!scopeId && !targetPath) {
+    return undefined;
+  }
+  return (
+    await slResolveScopeDescriptor(root, {
+      ...(scopeId ? { scopeId } : {}),
+      ...(targetPath ? { targetPath } : {}),
+    })
+  ).scope;
 }
 
 async function slRun(action: () => Promise<void>): Promise<void> {
@@ -186,7 +208,7 @@ program
   );
 
 program
-  .command("scope [path]")
+  .command("scope [action-or-path] [path]")
   .description("Resolve hierarchical SL scopes for a file, directory, or changed paths")
   .option("--file <file>", "Resolve one repository file")
   .option("--current-directory <directory>", "Resolve a current directory")
@@ -194,7 +216,8 @@ program
   .option("--json", "Print machine-readable JSON")
   .action(
     (
-      pathValue = ".",
+      actionOrPath = ".",
+      pathValue: string | undefined,
       options: SLJsonOptions & {
         file?: string;
         currentDirectory?: string;
@@ -202,7 +225,40 @@ program
       },
     ) =>
       slRun(async () => {
-        const root = slRoot(pathValue);
+        const action = ["list", "resolve", "validate"].includes(actionOrPath)
+          ? actionOrPath
+          : "resolve";
+        const root = slRoot(
+          action === "resolve" && actionOrPath !== "resolve"
+            ? actionOrPath
+            : pathValue ?? ".",
+        );
+        const catalog = await slLoadScopeCatalog(root);
+        if (action === "list") {
+          const scopes = catalog.scopes.map((scope) => ({
+            ...scope,
+            state: slScopeDescriptor(scope),
+          }));
+          slPrintObject(
+            scopes,
+            options.json ?? false,
+            scopes
+              .map(
+                (scope) =>
+                  `${scope.id} ${scope.kind} ${scope.state.path}`,
+              )
+              .join("\n"),
+          );
+          return;
+        }
+        if (action === "validate") {
+          console.log(
+            options.json
+              ? JSON.stringify({ valid: true, scopeCount: catalog.scopes.length })
+              : `SL scope catalog valid (${catalog.scopes.length} scopes).`,
+          );
+          return;
+        }
         const selectedModes = [
           options.file !== undefined,
           options.currentDirectory !== undefined,
@@ -214,7 +270,7 @@ program
           );
         }
 
-        const resolver = new SLScopeResolver(await slLoadScopeCatalog(root));
+        const resolver = new SLScopeResolver(catalog);
         const result =
           options.changedPath.length > 0
             ? resolver.resolveChangedPaths(root, options.changedPath)
@@ -250,7 +306,12 @@ program
   )
   .option("--state-scope <path>", "Repository-relative monorepo state scope")
   .option("--state-scope-id <id>", "Stable state scope identifier")
-  .requiredOption("--scope <scope>", "Repository-defined scope")
+  .option(
+    "--scope <scope>",
+    "SL-SCOPE-* control-plane scope, or legacy lesson scope text",
+  )
+  .option("--lesson-scope <scope>", "Human-readable lesson scope metadata")
+  .option("--target-path <path>", "Infer the control-plane scope from a target path")
   .option("--trigger <trigger>", "Retrieval trigger", slCollect, [])
   .option("--dry-run", "Show changes without writing")
   .action(
@@ -259,19 +320,30 @@ program
       options: SLDryRunOptions & {
         title: string;
         kind: "win" | "pitfall" | "mixed";
-        scope: string;
+        scope?: string;
+        lessonScope?: string;
+        targetPath?: string;
         trigger: string[];
         stateScope?: string;
         stateScopeId?: string;
       },
     ) =>
       slRun(async () => {
+        const scopeId = options.scope?.startsWith("SL-SCOPE-")
+          ? options.scope
+          : undefined;
+        const lessonScope =
+          options.lessonScope ??
+          (scopeId ? scopeId : options.scope) ??
+          "repository";
         const result = await slCaptureLesson(slRoot(pathValue), {
           title: options.title,
           kind: options.kind,
-          scope: options.scope,
+          scope: lessonScope,
           triggers: options.trigger,
           dryRun: options.dryRun ?? false,
+          ...(scopeId ? { scopeId } : {}),
+          ...(options.targetPath ? { targetPath: options.targetPath } : {}),
           ...(options.stateScope
             ? {
                 stateScope: {
@@ -303,6 +375,8 @@ program
   .option("--idempotency-key <key>", "Stable command idempotency key")
   .option("--verifier-type <type>", "Verifier type", "lesson-vote")
   .option("--evidence-ref <ref>", "Opaque evidence reference without source content")
+  .option("--scope <scope-id>", "Application source scope")
+  .option("--target-path <path>", "Infer the application source scope")
   .option("--dry-run", "Show changes without writing")
   .action(
     (
@@ -317,9 +391,12 @@ program
         idempotencyKey?: string;
         verifierType: string;
         evidenceRef?: string;
+        scope?: string;
+        targetPath?: string;
       },
     ) =>
       slRun(async () => {
+        const root = slRoot(pathValue);
         if (options.useful && options.notUseful) {
           throw new Error("Choose either --useful or --not-useful, not both.");
         }
@@ -328,8 +405,13 @@ program
           : options.useful
             ? "useful"
             : options.result;
+        const applicationScope = await slOptionalScope(
+          root,
+          options.scope,
+          options.targetPath,
+        );
         const changes = await slVoteOnLesson(
-          slRoot(pathValue),
+          root,
           id,
           result,
           options.dryRun ?? false,
@@ -346,6 +428,7 @@ program
             ...(options.evidenceRef
               ? { evidenceRef: options.evidenceRef }
               : {}),
+            ...(applicationScope ? { scope: applicationScope } : {}),
           },
         );
         slPrintChanges(changes);
@@ -372,6 +455,8 @@ useCommand
   .option("--application-id <id>", "Stable application ID for automation")
   .option("--task-run-id <id>", "Stable task or run correlation ID")
   .option("--idempotency-key <key>", "Stable start idempotency key")
+  .option("--scope <scope-id>", "Application source scope")
+  .option("--target-path <path>", "Infer the application source scope")
   .option("--dry-run", "Show event and projection changes without writing")
   .option("--json", "Print deterministic JSON output")
   .action(
@@ -382,11 +467,19 @@ useCommand
         applicationId?: string;
         taskRunId?: string;
         idempotencyKey?: string;
+        scope?: string;
+        targetPath?: string;
         dryRun?: boolean;
       },
     ) =>
       slRun(async () => {
-        const result = await slStartUsage(slRoot(pathValue), artifactId, {
+        const root = slRoot(pathValue);
+        const applicationScope = await slOptionalScope(
+          root,
+          options.scope,
+          options.targetPath,
+        );
+        const result = await slStartUsage(root, artifactId, {
           ...(options.applicationId
             ? { applicationId: options.applicationId }
             : {}),
@@ -394,6 +487,7 @@ useCommand
           ...(options.idempotencyKey
             ? { idempotencyKey: options.idempotencyKey }
             : {}),
+          ...(applicationScope ? { scope: applicationScope } : {}),
           dryRun: options.dryRun ?? false,
         });
         slPrintObject(
@@ -493,6 +587,7 @@ program
   .command("stats [artifact-id] [path]")
   .description("Show version-specific immutable usage statistics")
   .option("--json", "Print deterministic JSON output")
+  .option("--scope <scope-id>", "Filter statistics to one source scope")
   .addOption(
     new Option("--aggregate <view>", "Aggregation view")
       .choices(["artifact", "scope", "repository"])
@@ -504,6 +599,7 @@ program
       pathValue: string | undefined,
       options: SLJsonOptions & {
         aggregate: "artifact" | "scope" | "repository";
+        scope?: string;
       },
     ) =>
       slRun(async () => {
@@ -513,7 +609,12 @@ program
           artifactId === artifactIdValue
             ? pathValue ?? "."
             : artifactIdValue ?? pathValue ?? ".";
-        const projections = await slProjectUsage(slRoot(rootPath), artifactId);
+        const projections = (
+          await slProjectUsage(slRoot(rootPath), artifactId)
+        ).filter(
+          (projection) =>
+            !options.scope || projection.scope.id === options.scope,
+        );
         const output =
           options.aggregate === "scope"
             ? slAggregateUsageByScope(projections)
@@ -549,6 +650,48 @@ program
                   ? "n/a"
                   : projection.verifiedSuccessRate.toFixed(6)
               }`,
+            ].join(" "),
+          );
+        }
+      }),
+  );
+
+program
+  .command("retrieve [path]")
+  .description("Resolve and retrieve active SL artifacts for a repository path")
+  .requiredOption("--path <target-path>", "Repository path needing guidance")
+  .option("--trigger <trigger>", "Filter by an exact retrieval trigger")
+  .option("--json", "Print deterministic JSON output")
+  .action(
+    (
+      pathValue = ".",
+      options: SLJsonOptions & {
+        path: string;
+        trigger?: string;
+      },
+    ) =>
+      slRun(async () => {
+        const result = await slRetrieveArtifacts(
+          slRoot(pathValue),
+          options.path,
+          options.trigger,
+        );
+        if (options.json) {
+          console.log(JSON.stringify(result, null, 2));
+          return;
+        }
+        console.log(
+          `${result.path || "."}: ${result.orderedScopeIds.join(" -> ")}`,
+        );
+        for (const artifact of result.artifacts) {
+          console.log(
+            [
+              `artifactId=${artifact.id}`,
+              `scope=${artifact.scope.id}`,
+              `precedence=${artifact.precedence}`,
+              `relation=${artifact.relation}`,
+              `path=${artifact.path}`,
+              `provenance=${artifact.provenance.join(",") || "none"}`,
             ].join(" "),
           );
         }
@@ -610,15 +753,27 @@ program
 program
   .command("promote <id> <artifactPath> [path]")
   .description("Register an agent-authored instruction or skill as a promotion")
+  .option("--target-scope <scope-id>", "Promotion target scope; defaults to source scope")
   .option("--dry-run", "Show changes without writing")
   .action(
-    (id: string, artifactPath: string, pathValue = ".", options: SLDryRunOptions) =>
+    (
+      id: string,
+      artifactPath: string,
+      pathValue = ".",
+      options: SLDryRunOptions & { targetScope?: string },
+    ) =>
       slRun(async () => {
         const changes = await slRegisterPromotion(
           slRoot(pathValue),
           id,
           artifactPath,
           options.dryRun ?? false,
+          new Date(),
+          {
+            ...(options.targetScope
+              ? { targetScopeId: options.targetScope }
+              : {}),
+          },
         );
         slPrintChanges(changes);
       }),
@@ -628,6 +783,7 @@ program
   .command("promotion-evaluate <id> [path]")
   .description("Evaluate governed activation gates for a probation artifact")
   .requiredOption("--approval-ref <ref>", "Opaque repository review reference")
+  .option("--target-scope <scope-id>", "Evaluate for this promotion target scope")
   .option("--execute-checks", "Run configured bounded executable checks")
   .option("--dry-run", "Evaluate without persisting results or running commands")
   .option("--json", "Print deterministic JSON output")
@@ -638,18 +794,34 @@ program
       options: SLDryRunOptions &
         SLJsonOptions & {
           approvalRef: string;
+          targetScope?: string;
           executeChecks?: boolean;
         },
     ) =>
       slRun(async () => {
+        const root = slRoot(pathValue);
+        const config = await slLoadConfig(root);
+        const governance =
+          config.promotion.mode === "monorepo"
+            ? await slBuildPromotionGovernanceContext(root, id, {
+                ...(options.targetScope
+                  ? { targetScopeId: options.targetScope }
+                  : {}),
+                ownerApprovalRefs: [options.approvalRef],
+              })
+            : undefined;
         const result = await slEvaluatePromotionReadiness(
-          slRoot(pathValue),
+          root,
           id,
           {
-            approval: {
-              kind: "repository-review",
-              evidenceRef: options.approvalRef,
-            },
+            ...(governance
+              ? { governance }
+              : {
+                  approval: {
+                    kind: "repository-review" as const,
+                    evidenceRef: options.approvalRef,
+                  },
+                }),
             executeCommands: options.executeChecks ?? false,
             dryRun: options.dryRun ?? false,
           },
@@ -668,18 +840,43 @@ program
 program
   .command("promotion-activate <id> [path]")
   .description("Activate a probation artifact with a current passing evaluation")
+  .option("--target-scope <scope-id>", "Revalidate this promotion target scope")
+  .option("--owner-approval-ref <ref>", "Current target owner approval reference")
   .option("--dry-run", "Show activation changes without writing")
   .action(
     (
       id: string,
       pathValue = ".",
-      options: SLDryRunOptions,
+      options: SLDryRunOptions & {
+        targetScope?: string;
+        ownerApprovalRef?: string;
+      },
     ) =>
       slRun(async () => {
+        const root = slRoot(pathValue);
+        const registry = await slLoadRegistry(root);
+        const artifact = registry.artifacts.find(
+          (candidate) => candidate.id === id,
+        );
+        const recordedGovernance =
+          artifact?.promotionEvaluation?.governance;
+        const governance = recordedGovernance
+          ? await slBuildPromotionGovernanceContext(root, id, {
+              targetScopeId:
+                options.targetScope ?? recordedGovernance.targetScope.id,
+              ownerApprovalRefs: options.ownerApprovalRef
+                ? [options.ownerApprovalRef]
+                : recordedGovernance.ownerApprovals.map(
+                    (approval) => approval.evidenceRef,
+                  ),
+            })
+          : undefined;
         const changes = await slActivatePromotion(
-          slRoot(pathValue),
+          root,
           id,
           options.dryRun ?? false,
+          new Date(),
+          governance ? { governance } : {},
         );
         slPrintChanges(changes);
       }),

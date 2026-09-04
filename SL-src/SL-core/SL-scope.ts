@@ -1,4 +1,5 @@
 import { createRequire } from "node:module";
+import { createHash } from "node:crypto";
 import { posix, win32 } from "node:path";
 import { Ajv2020, type ErrorObject } from "ajv/dist/2020.js";
 import { parse } from "yaml";
@@ -12,10 +13,13 @@ import type {
   SLScopeCatalogIssue,
   SLScopeCatalogSource,
   SLScopeDefinition,
+  SLScopeDescriptor,
+  SLPromotionScopeRef,
   SLScopeResolution,
   SLScopeSetResolution,
 } from "./SL-types.js";
 import {
+  slAssertRealPathInside,
   slExists,
   slReadContainedText,
   slReadJson,
@@ -66,6 +70,134 @@ export const SL_DEFAULT_SCOPE_CATALOG: SLScopeCatalog = {
     },
   ],
 };
+
+function slLiteralPatternPrefix(pattern: string): string[] {
+  const segments = pattern.split("/");
+  const prefix: string[] = [];
+  for (const segment of segments) {
+    if (SL_GLOB_MAGIC_PATTERN.test(segment)) {
+      break;
+    }
+    prefix.push(segment);
+  }
+  return prefix;
+}
+
+export function slScopeDefinitionPath(
+  scope: SLScopeDefinition,
+): string {
+  if (!scope.parentScopeId) {
+    return ".";
+  }
+  const prefixes = scope.includePaths
+    .map(slLiteralPatternPrefix)
+    .filter((prefix) => prefix.length > 0);
+  if (prefixes.length === 0) {
+    return ".";
+  }
+  const common = [...prefixes[0]!];
+  for (const prefix of prefixes.slice(1)) {
+    while (
+      common.length > 0 &&
+      common.some((segment, index) => prefix[index] !== segment)
+    ) {
+      common.pop();
+    }
+  }
+  return common.length > 0 ? common.join("/") : ".";
+}
+
+export function slScopeDescriptor(
+  scope: SLScopeDefinition,
+): SLScopeDescriptor {
+  return {
+    id: scope.id,
+    path: slScopeDefinitionPath(scope),
+  };
+}
+
+export function slScopeDescriptors(
+  catalog: SLScopeCatalog,
+): SLScopeDescriptor[] {
+  return [...catalog.scopes]
+    .sort((left, right) => left.id.localeCompare(right.id))
+    .map(slScopeDescriptor);
+}
+
+export function slFindScopeDefinition(
+  catalog: SLScopeCatalog,
+  scopeId: string,
+): SLScopeDefinition {
+  const scope = catalog.scopes.find((candidate) => candidate.id === scopeId);
+  if (!scope) {
+    throw new Error(`SL scope does not exist in the catalog: ${scopeId}`);
+  }
+  return scope;
+}
+
+export function slPromotionScopeRef(
+  catalog: SLScopeCatalog,
+  scopeId: string,
+): SLPromotionScopeRef {
+  const scope = slFindScopeDefinition(catalog, scopeId);
+  const ancestors: string[] = [];
+  let current = scope;
+  while (current.parentScopeId) {
+    ancestors.push(current.parentScopeId);
+    current = slFindScopeDefinition(catalog, current.parentScopeId);
+  }
+  const root = ancestors.length === 0;
+  const ownerSetHash = createHash("sha256")
+    .update(JSON.stringify([...scope.ownerAliases].sort()))
+    .digest("hex")
+    .slice(0, 16)
+    .toUpperCase();
+  return {
+    id: scope.id,
+    kind: root ? "repository" : scope.kind,
+    root,
+    precedence: ancestors.length,
+    ancestorScopeIds: ancestors,
+    ownerSetId: `SL-OWNERS-${ownerSetHash}`,
+  };
+}
+
+export interface SLResolveScopeOptions {
+  scopeId?: string;
+  targetPath?: string;
+  currentDirectory?: string;
+}
+
+export async function slResolveScopeDescriptor(
+  root: string,
+  options: SLResolveScopeOptions = {},
+): Promise<{
+  scope: SLScopeDescriptor;
+  resolution?: SLScopeResolution;
+}> {
+  const catalog = await slLoadScopeCatalog(root);
+  if (options.scopeId) {
+    return {
+      scope: slScopeDescriptor(
+        slFindScopeDefinition(catalog, options.scopeId),
+      ),
+    };
+  }
+  const targetPath =
+    options.targetPath ?? options.currentDirectory ?? root;
+  const normalizedPath = slNormalizeRepositoryPath(root, targetPath);
+  await slAssertRealPathInside(root, normalizedPath || ".");
+  const resolution = new SLScopeResolver(catalog).resolvePath(
+    root,
+    targetPath,
+  );
+  return {
+    scope: slScopeDescriptor(
+      slFindScopeDefinition(catalog, resolution.primaryScopeId),
+    ),
+    resolution,
+  };
+}
 
 interface SLScopeMatch {
   scope: SLScopeDefinition;
