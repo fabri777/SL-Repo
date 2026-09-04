@@ -773,7 +773,7 @@ describe("SL promoted validation contracts", () => {
 
   test("parses live POSIX process groups and excludes zombies", () => {
     const snapshot = slParseLivePosixProcessGroups(
-      "  101 Ss\n202 Z+\n  303 R<\n",
+      "    0 I\n  101 Ss\n202 Z+\n  303 R<\n",
     );
 
     expect(snapshot).toEqual({

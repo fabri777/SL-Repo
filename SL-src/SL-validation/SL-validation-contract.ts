@@ -701,13 +701,15 @@ export function slParseLivePosixProcessGroups(
     }
     const processGroupId = Number.parseInt(match[1]!, 10);
     const status = match[2]!;
-    if (
-      !Number.isSafeInteger(processGroupId) ||
-      processGroupId <= 0
-    ) {
+    if (!Number.isSafeInteger(processGroupId)) {
       return {
         error: `POSIX process snapshot contained an invalid process group ID: ${match[1]}`,
       };
+    }
+    // GNU ps reports kernel processes with PGID 0. They can never match a
+    // positive child process group and are safe to ignore.
+    if (processGroupId === 0) {
+      continue;
     }
     if (!status.startsWith("Z")) {
       processGroupIds.add(processGroupId);
