@@ -22,6 +22,7 @@ export const SL_PATHS = {
   lessons: ".github/SL-learning/SL-lessons",
   probation: ".github/SL-learning/SL-probation",
   quarantine: ".github/SL-learning/SL-quarantine",
+  agentInstructions: "AGENTS.md",
   copilotInstructions: ".github/copilot-instructions.md",
 } as const;
 

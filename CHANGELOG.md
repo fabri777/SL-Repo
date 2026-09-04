@@ -8,6 +8,8 @@
   index, usage-projection, and immutable usage-event shards.
 - Scope-aware promotion governance with target-owner approval, shared-scope
   evidence distribution, and explicit narrower-scope overrides.
+- Optional Azure Pipelines validation and retention-patch templates under the
+  SL-owned `.azure-pipelines/SL-learning/` folder.
 
 ### Changed
 
@@ -19,6 +21,8 @@
   UTF-16 code-unit ordering.
 - Restore rollback snapshots every affected shard and the root state catalog
   byte-for-byte, including prior file absence.
+- `AGENTS.md` is now maintained as the provider-neutral agent entry point;
+  GitHub Actions and Azure Pipelines are documented as optional adapters.
 
 ### Fixed
 
@@ -31,5 +35,6 @@
 
 - 0.2 root registry, index, counters, and unscoped events remain read-only
   migration inputs.
-- Consumer workflow runtime SHAs remain unchanged for this release commit and
-  must be updated only in a later dedicated immutable-pin commit.
+- Optional automation adapters acquire runtime commit
+  `3c6bb31d1f717595791e9a575d698b5593cbcf10`; floating runtime refs remain
+  prohibited.

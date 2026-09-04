@@ -16,8 +16,10 @@ Current limitations:
 - Outcome association is not proof of causal improvement.
 - Obvious declaration conflicts are detected; semantic contradictions still
   require repository review.
-- The generated private-source workflows require `SL_REPO_TOKEN` until a
-  supported package distribution is published.
+- The optional GitHub Actions adapter requires `SL_REPO_TOKEN` when it reads
+  the current private GitHub source. The Azure Pipelines adapter instead uses
+  normal repository-resource authorization. Local operation requires neither
+  adapter.
 
 ## SL Org
 

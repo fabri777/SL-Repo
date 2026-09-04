@@ -15,6 +15,11 @@ sl-repo project .
 sl-repo validate .
 ```
 
+These commands are the primary operating mode and work in any Git repository,
+including Azure Repos. A pipeline is optional. The `AGENTS.md` managed block
+is the agent entry point; state, evidence, and discovery indexes remain
+repository-native.
+
 Raw lessons can be retrieved and applied immediately while active. Promotion
 is for reliable automatic delivery through instructions and skills. Local
 promotion defaults to the source scope and requires local verified evidence.
@@ -81,3 +86,15 @@ review retention pull requests. Mutation locking serializes local writers but
 does not replace Git merge review. Path containment rejects repository escapes
 and existing symlink or junction traversal. Executable checks remain explicit,
 bounded, reviewed repository commands rather than a sandbox.
+
+## Optional automation
+
+Use the GitHub Actions adapter when the consumer is hosted on GitHub. Use the
+Azure Pipelines templates in `.azure-pipelines/SL-learning/` when the
+consumer uses Azure Repos or already standardizes on Azure Pipelines. Both
+adapters execute the same CLI and immutable runtime.
+
+Without automation, run `project` and `validate` before merge and schedule
+retention reviews through normal team operations. Knowledge capture and
+retrieval continue; only the automated merge gate, scheduled
+projection/retention run, and hosted cross-platform validation are absent.

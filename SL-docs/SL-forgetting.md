@@ -50,8 +50,15 @@ Lifecycle transitions are written as separate immutable files under
 validated as read-only compatibility data and are never appended to. Deleted
 content remains recoverable from Git history.
 
-The installed retention workflow schedules read-only previews only. A
+The optional GitHub retention workflow schedules read-only previews only. A
 maintainer can manually request an apply run, but the pinned external runtime
 still executes without repository write credentials. It produces a binary
 patch artifact that a separate trusted job applies before opening an
 unmerged, review-required pull request.
+
+The optional Azure Pipelines adapter also defaults scheduled runs to preview.
+A manual sweep mutates only the disposable pipeline workspace and publishes a
+binary patch artifact. It does not push, open or merge a pull request, or
+bypass branch protections. Without either adapter, maintainers can run
+`sl-repo sweep . --dry-run` locally; the retention policy and safety gates are
+unchanged.

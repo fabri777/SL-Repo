@@ -6,6 +6,10 @@
 - Node.js 20 or newer
 - A Git repository to receive the SL layer
 
+No CI provider is required. The Node CLI, repository-native state, Git
+distribution, and `AGENTS.md` entry point are sufficient for local or
+agent-driven operation.
+
 SL Repo 0.3.0 supports both single repositories and hierarchical monorepos.
 Existing 0.2 root state is migrated additively into deterministic scope shards.
 
@@ -29,9 +33,11 @@ sl-repo update C:\path\to\target
 ```
 
 Update replaces only registered system templates and the SL-managed
-instruction block. It also refreshes registered schema copies under
-`.github/SL-learning/SL-schemas/`. Produced lessons, instructions, skills,
-manual catalogs, unknown files, and unregistered same-path files are retained.
+instruction blocks in `AGENTS.md` and
+`.github/copilot-instructions.md`. It also refreshes registered schema copies
+under `.github/SL-learning/SL-schemas/`. Produced lessons, instructions,
+skills, manual catalogs, unknown files, and unregistered same-path files are
+retained.
 
 ## Uninstall
 
@@ -39,23 +45,64 @@ The first milestone intentionally does not provide destructive uninstall.
 Remove system templates only after `sl-repo doctor` identifies them. Produced
 knowledge remains ordinary Git content.
 
-## Private GitHub repository installation
+## Install from an immutable Git source
 
-Authenticate GitHub as `fabri777`, then run:
+Configure normal Git authentication for the authorized source, then run an
+immutable package reference. The current GitHub source example is:
 
 ```powershell
-npm exec --yes --package=github:fabri777/SL-Repo#bb22c7caa0782f47f1cab031071a188a8d79f233 -c "sl-repo init C:\path\to\target"
+npm exec --yes --package=github:fabri777/SL-Repo#3c6bb31d1f717595791e9a575d698b5593cbcf10 -c "sl-repo init C:\path\to\target"
 ```
 
-The generated workflows do not depend on an unpublished package. They check
-out the reviewed source snapshot
-`bb22c7caa0782f47f1cab031071a188a8d79f233` into `.SL-tool`, build it, and
-invoke the built CLI. The full commit SHA is immutable; the workflows must
-never use `main`, another branch, or a moving tag for runtime acquisition.
-Because the source repository is private, configure a repository secret named
-`SL_REPO_TOKEN` with read-only access to `fabri777/SL-Repo`.
+An Azure Repos mirror can be cloned and checked out at the same full commit
+before `npm ci`, `npm run build`, and `npm link`. A direct npm Git URL can
+also be used when the local Git credential configuration already authorizes
+it:
 
-Both the consumer checkout and runtime checkout set
+```powershell
+npm exec --yes --package="git+https://dev.azure.com/<organization>/<project>/_git/<runtime-repository>#3c6bb31d1f717595791e9a575d698b5593cbcf10" -c "sl-repo --help"
+```
+
+Do not place credentials in the URL, repository files, or SL state. The Git
+host supplies authentication through its normal credential manager, Azure
+Repos permissions, or service-connection configuration.
+
+## Local and agent invocation
+
+Local and agent-driven operation is complete without a pipeline:
+
+```powershell
+sl-repo retrieve C:\path\to\target --path src/example.ts
+sl-repo project C:\path\to\target
+sl-repo validate C:\path\to\target
+sl-repo sweep C:\path\to\target --dry-run
+```
+
+The SL managed block in `AGENTS.md` tells repository agents when to inspect
+the index and capture verified lessons. The
+`.github/copilot-instructions.md` mirror supports GitHub Copilot discovery but
+is not a GitHub hosting dependency.
+
+## Optional automation adapters
+
+Installation includes two adapters:
+
+- GitHub Actions workflows under `.github/workflows/`.
+- Azure Pipelines job templates under
+  `.azure-pipelines/SL-learning/`.
+
+The adapters acquire reviewed source snapshot
+`3c6bb31d1f717595791e9a575d698b5593cbcf10`, build it, and invoke the CLI. The
+full commit SHA is immutable; adapters must never use `main`, another branch,
+or a moving tag for runtime acquisition.
+
+The GitHub adapter uses a repository secret named `SL_REPO_TOKEN` when the
+private GitHub source requires it. The Azure Pipelines adapter embeds no
+credential and instead uses a repository resource authorized by normal Azure
+Repos permissions or a configured service connection. See
+[Optional Azure Pipelines adapter](SL-azure-pipelines.md).
+
+In the GitHub adapter, both the consumer checkout and runtime checkout set
 `persist-credentials: false`. Validation runs with `contents: read`.
 Forgetting also runs the downloaded runtime in a read-only planning job. On a
 manual apply request, that job uploads a Git binary patch. A separate job,
@@ -63,6 +110,16 @@ which never downloads or executes SL Repo source, receives narrowly scoped
 repository write permission, checks and applies the patch, and opens a pull
 request for review. Scheduled forgetting is preview-only, and retention pull
 requests are not automatically merged.
+
+The Azure Pipelines retention adapter also leaves checkout credentials
+unpersisted. Its scheduled/default mode is preview-only. A manual
+`applySweep: true` run mutates only the disposable pipeline workspace and
+publishes a binary patch artifact for human review; it never pushes, creates
+or merges a pull request, or bypasses branch protections.
+
+Without automation, SL capture and retrieval still work. What is lost is the
+automated merge gate, scheduled projection/retention execution, and hosted
+cross-platform release validation.
 
 Every external action in the write-scoped job is pinned to a reviewed full
 40-character commit SHA. The trailing `owner/action vX.Y.Z` comment records
@@ -76,10 +133,10 @@ To update the runtime pin, maintainers must:
 2. At that commit, run `npm ci`, `npm run ci`, and `npm run validate:self`.
 3. Run `node dist/SL-src/SL-cli/SL-cli.js --help` and verify the `validate`
    and `sweep` commands are present.
-4. Replace the full SHA in both consumer workflow templates, the source
-   installation examples, and the matching workflow-security test
-   expectation.
-5. Run `npm run ci` again and review the generated workflow diff before
+4. Replace the full SHA in both GitHub workflow templates, both Azure
+   Pipelines templates, the source installation examples, and the matching
+   security-test expectations.
+5. Run `npm run ci` again and review every adapter diff before
    distributing an update.
 
 Packed artifact contents include `dist/`, `SL-schemas/`, `SL-templates/`,

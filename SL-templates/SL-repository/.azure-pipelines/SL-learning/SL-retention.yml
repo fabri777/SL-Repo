@@ -1,0 +1,74 @@
+parameters:
+  - name: runtimeRepository
+    type: string
+    default: SLRuntime
+  - name: vmImage
+    type: string
+    default: ubuntu-latest
+  - name: applySweep
+    type: boolean
+    default: false
+
+jobs:
+  - job: SLRetention
+    displayName: SL retention preview or patch
+    pool:
+      vmImage: ${{ parameters.vmImage }}
+    steps:
+      - checkout: self
+        clean: true
+        path: s
+        persistCredentials: false
+      - checkout: ${{ parameters.runtimeRepository }}
+        clean: true
+        fetchDepth: 1
+        path: SL-tool
+        persistCredentials: false
+      - task: UseNode@1
+        displayName: Use Node.js 20
+        inputs:
+          version: 20.x
+      - pwsh: |
+          $expected = "3c6bb31d1f717595791e9a575d698b5593cbcf10"
+          $runtimeRoot = Join-Path "$(Pipeline.Workspace)" "SL-tool"
+          $actual = (git -C $runtimeRoot rev-parse HEAD).Trim().ToLowerInvariant()
+          if ($actual -ne $expected) {
+            throw "SL runtime must resolve to immutable commit $expected; found $actual."
+          }
+        displayName: Verify immutable SL runtime
+      - pwsh: |
+          $runtimeRoot = Join-Path "$(Pipeline.Workspace)" "SL-tool"
+          npm ci --prefix $runtimeRoot
+          if ($LASTEXITCODE -ne 0) { throw "SL runtime install failed." }
+          npm run build --prefix $runtimeRoot
+          if ($LASTEXITCODE -ne 0) { throw "SL runtime build failed." }
+        displayName: Install and build SL runtime
+      - pwsh: |
+          $runtime = Join-Path "$(Pipeline.Workspace)" "SL-tool/dist/SL-src/SL-cli/SL-cli.js"
+          node $runtime sweep "$(Build.SourcesDirectory)" --dry-run
+          if ($LASTEXITCODE -ne 0) { throw "SL retention preview failed." }
+        displayName: Preview retention
+      - ${{ if eq(parameters.applySweep, true) }}:
+          - pwsh: |
+              $runtime = Join-Path "$(Pipeline.Workspace)" "SL-tool/dist/SL-src/SL-cli/SL-cli.js"
+              node $runtime sweep "$(Build.SourcesDirectory)"
+              if ($LASTEXITCODE -ne 0) { throw "SL sweep failed." }
+              node $runtime project "$(Build.SourcesDirectory)"
+              if ($LASTEXITCODE -ne 0) { throw "SL project failed." }
+              node $runtime validate "$(Build.SourcesDirectory)"
+              if ($LASTEXITCODE -ne 0) { throw "SL validation failed." }
+            displayName: Apply sweep in pipeline workspace
+          - pwsh: |
+              $runtimeRoot = Join-Path "$(Pipeline.Workspace)" "SL-tool"
+              Remove-Item -LiteralPath $runtimeRoot -Recurse -Force
+              git -C "$(Build.SourcesDirectory)" add -A
+              $patchPath = Join-Path "$(Agent.TempDirectory)" "SL-retention.patch"
+              git -C "$(Build.SourcesDirectory)" diff --cached --binary --full-index | Set-Content -LiteralPath $patchPath
+              if ($LASTEXITCODE -ne 0) { throw "SL retention patch creation failed." }
+            displayName: Capture retention patch
+          - task: PublishPipelineArtifact@1
+            displayName: Publish retention patch for review
+            inputs:
+              targetPath: $(Agent.TempDirectory)/SL-retention.patch
+              artifact: SL-retention-patch
+              publishLocation: pipeline

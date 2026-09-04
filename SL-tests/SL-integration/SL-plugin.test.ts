@@ -83,6 +83,17 @@ function findMutableActions(value: unknown, path = "workflow"): string[] {
   });
 }
 
+function findFloatingRuntimeRefs(value: string): string[] {
+  return value
+    .replaceAll("\r\n", "\n")
+    .split("\n")
+    .filter((line) =>
+      /^\s*(?:-\s*)?ref:\s*(?:main|master|refs\/heads\/\S+|refs\/tags\/\S+)\s*$/i.test(
+        line,
+      ),
+    );
+}
+
 describe("SL plugin package", () => {
   test("contains the manifest and all milestone skills", async () => {
     const manifest = JSON.parse(
@@ -132,6 +143,7 @@ describe("SL plugin package", () => {
     const requiredFiles = [
       "CHANGELOG.md",
       "SECURITY.md",
+      "SL-docs/SL-azure-pipelines.md",
       "SL-docs/SL-install.md",
       "SL-docs/SL-migration-0.2.md",
       "SL-docs/SL-monorepo-operations.md",
@@ -149,6 +161,8 @@ describe("SL plugin package", () => {
       "SL-templates/SL-repository/.github/SL-learning/.gitattributes",
       "SL-templates/SL-repository/.github/workflows/SL-learning-validation.yml",
       "SL-templates/SL-repository/.github/workflows/SL-learning-forget.yml",
+      "SL-templates/SL-repository/.azure-pipelines/SL-learning/SL-validation.yml",
+      "SL-templates/SL-repository/.azure-pipelines/SL-learning/SL-retention.yml",
       "dist/SL-src/SL-core/SL-promotion-lifecycle.js",
       "dist/SL-src/SL-core/SL-usage.js",
       "dist/SL-src/SL-validation/SL-validation-contract.js",
@@ -171,7 +185,7 @@ describe("SL plugin package", () => {
       await readFile(resolve("SL-docs/SL-install.md"), "utf8"),
     ].join("\n");
     expect(sourceInstallExamples).toContain(
-      "github:fabri777/SL-Repo#bb22c7caa0782f47f1cab031071a188a8d79f233",
+      "github:fabri777/SL-Repo#3c6bb31d1f717595791e9a575d698b5593cbcf10",
     );
     expect(sourceInstallExamples).not.toMatch(
       /github:fabri777\/SL-Repo(?!#[0-9a-f]{40})/,
@@ -360,5 +374,47 @@ describe("SL plugin package", () => {
     ).toEqual([
       "workflow.jobs.plan.steps[0].uses: actions/checkout@v4",
     ]);
+  });
+
+  test("pins Azure Pipelines adapters to the reviewed runtime without embedded credentials", async () => {
+    const runtimeCommit =
+      "3c6bb31d1f717595791e9a575d698b5593cbcf10";
+    const templatePaths = [
+      "SL-templates/SL-repository/.azure-pipelines/SL-learning/SL-validation.yml",
+      "SL-templates/SL-repository/.azure-pipelines/SL-learning/SL-retention.yml",
+    ];
+
+    for (const templatePath of templatePaths) {
+      const content = await readFile(resolve(templatePath), "utf8");
+      const template = parse(content) as {
+        parameters: Array<{ name: string }>;
+        jobs: Array<{ steps: Array<Record<string, unknown>> }>;
+      };
+      expect(content).toContain(runtimeCommit);
+      expect(content).not.toMatch(/\b(?:pat|password|token)\s*:/i);
+      expect(content).not.toMatch(
+        /(?:dev\.azure\.com|github\.com)\/[A-Za-z0-9_.-]+/i,
+      );
+      expect(findFloatingRuntimeRefs(content)).toEqual([]);
+      expect(
+        template.parameters.some(
+          (parameter) => parameter.name === "runtimeCommit",
+        ),
+      ).toBe(false);
+      expect(
+        template.jobs[0]!.steps.some(
+          (step) => step["persistCredentials"] === false,
+        ),
+      ).toBe(true);
+    }
+
+    expect(
+      findFloatingRuntimeRefs("resources:\n  repositories:\n    - ref: main\n"),
+    ).toEqual(["    - ref: main"]);
+    expect(
+      findFloatingRuntimeRefs(
+        "resources:\n  repositories:\n    - ref: refs/heads/release\n",
+      ),
+    ).toEqual(["    - ref: refs/heads/release"]);
   });
 });

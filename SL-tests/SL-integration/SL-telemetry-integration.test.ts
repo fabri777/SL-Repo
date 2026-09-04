@@ -50,7 +50,7 @@ function slDefaultIndexPath(root: string): string {
 
 const repositories: string[] = [];
 const CAPTURED_AT = new Date("2026-01-01T00:00:00.000Z");
-const SL_RUNTIME_COMMIT = "bb22c7caa0782f47f1cab031071a188a8d79f233";
+const SL_RUNTIME_COMMIT = "3c6bb31d1f717595791e9a575d698b5593cbcf10";
 const CHECKOUT_ACTION =
   "actions/checkout@11d5960a326750d5838078e36cf38b85af677262";
 const SETUP_NODE_ACTION =
@@ -830,5 +830,59 @@ describe("SL telemetry integration", () => {
       ".SL-tool",
     );
     expect(forgettingWorkflow).not.toContain("gh pr merge");
+  });
+
+  test("installs provider-specific automation as optional SL-managed adapters", async () => {
+    const root = await slCreateTestRepository();
+    repositories.push(root);
+    await slInstall(root, "init", false);
+
+    const azureValidationPath = join(
+      root,
+      ".azure-pipelines",
+      "SL-learning",
+      "SL-validation.yml",
+    );
+    const azureRetentionPath = join(
+      root,
+      ".azure-pipelines",
+      "SL-learning",
+      "SL-retention.yml",
+    );
+    const [azureValidation, azureRetention] = await Promise.all([
+      readFile(azureValidationPath, "utf8"),
+      readFile(azureRetentionPath, "utf8"),
+    ]);
+    const registry = await slLoadRegistry(root);
+
+    expect(azureValidation).toContain(SL_RUNTIME_COMMIT);
+    expect(azureValidation).toContain("project \"$(Build.SourcesDirectory)\"");
+    expect(azureValidation).toContain("Validate SL repository state");
+    expect(azureRetention).toContain(SL_RUNTIME_COMMIT);
+    expect(azureRetention).toContain("default: false");
+    expect(azureRetention).toContain("Publish retention patch for review");
+    expect(azureRetention).not.toMatch(/\bgit\s+push\b/i);
+    expect(azureRetention).not.toMatch(/\b(?:az\s+repos|gh\s+pr)\b/i);
+    expect(
+      registry.artifacts.filter((artifact) =>
+        artifact.path?.startsWith(".azure-pipelines/SL-learning/"),
+      ),
+    ).toHaveLength(2);
+
+    const githubValidation = await readFile(
+      join(root, ".github", "workflows", "SL-learning-validation.yml"),
+      "utf8",
+    );
+    const githubForgetting = await readFile(
+      join(root, ".github", "workflows", "SL-learning-forget.yml"),
+      "utf8",
+    );
+    expect(githubValidation).toContain(
+      "Validate contracts, events, projections, and index",
+    );
+    expect(githubForgetting).toContain(
+      "github.event_name == 'workflow_dispatch' && inputs.apply",
+    );
+    expect(githubForgetting).not.toContain("gh pr merge");
   });
 });

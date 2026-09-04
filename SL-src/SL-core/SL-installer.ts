@@ -166,17 +166,22 @@ async function slInstallUnlocked(
   }
 
   const block = await slReadText(resolve(templateRoot, "SL-copilot-block.md"));
-  const instructionsPath = slResolveInside(root, SL_PATHS.copilotInstructions);
-  const existingInstructions = (await slExists(instructionsPath))
-    ? await slReadText(instructionsPath)
-    : "";
-  await slWriteText(
-    root,
+  for (const instructionsPath of [
+    SL_PATHS.agentInstructions,
     SL_PATHS.copilotInstructions,
-    slMergeManagedBlock(existingInstructions, block),
-    dryRun,
-    changes,
-  );
+  ]) {
+    const instructionsAbsolutePath = slResolveInside(root, instructionsPath);
+    const existingInstructions = (await slExists(instructionsAbsolutePath))
+      ? await slReadText(instructionsAbsolutePath)
+      : "";
+    await slWriteText(
+      root,
+      instructionsPath,
+      slMergeManagedBlock(existingInstructions, block),
+      dryRun,
+      changes,
+    );
+  }
 
   const registry = await slLoadRegistry(root);
   const timestamp = new Date().toISOString();

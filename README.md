@@ -1,7 +1,7 @@
 # Self Learning Repository
 
-SL Repo gives a Git repository a reviewable learning lifecycle for GitHub
-Copilot agents:
+SL Repo gives a Git repository a reviewable learning lifecycle for coding
+agents:
 
 ```text
 experience -> lesson -> verified reuse -> instruction or skill
@@ -15,6 +15,24 @@ scope-sharded registries/indexes/usage projections, governed scope-aware
 promotion, cross-scope usage freshness, deterministic ordinal serialization,
 and exact restore rollback across generated state shards. Legacy 0.2 root
 state remains a read-only compatibility input.
+
+## Core and optional adapters
+
+SL is Git-host agnostic. Its functional core is the Node CLI, repository-native
+state committed to Git, immutable Git distribution of the reviewed runtime,
+and the SL managed block in `AGENTS.md`. The installer also maintains the
+equivalent `.github/copilot-instructions.md` block for GitHub Copilot
+repository discovery.
+
+No CI service is required. Agents and maintainers can invoke `sl-repo`
+locally for capture, retrieval, projection, validation, promotion, and guarded
+forgetting. GitHub Actions and Azure Pipelines are optional automation
+adapters. Without either adapter, knowledge capture and retrieval continue;
+the repository gives up an automated merge gate, scheduled projection or
+retention runs, and hosted cross-platform validation.
+
+Azure Repos works because SL state is ordinary repository content and every
+core operation uses Git paths rather than a hosting-provider API.
 
 ## Why Self Learning for Copilot Repositories
 
@@ -53,7 +71,7 @@ This repository implements the first project milestone:
 ## Development
 
 ```powershell
-gh repo clone fabri777/SL-Repo C:\dev\SL-Repo
+git clone <authorized-SL-source> C:\dev\SL-Repo
 Set-Location C:\dev\SL-Repo
 npm ci
 npm run ci
@@ -61,8 +79,12 @@ npm link
 sl-repo --help
 ```
 
-The repository is private. Authenticate Git access as `fabri777` before
-cloning or installing it.
+The source repository is private. Configure normal Git authentication for the
+authorized source before cloning or installing it.
+
+This source repository keeps its GitHub-hosted three-platform CI as a
+release-quality check. That source-release gate does not make GitHub Actions a
+consumer prerequisite.
 
 ```powershell
 Set-Location C:\dev\SL-Repo
@@ -74,7 +96,7 @@ npm link
 An authenticated Git installation can also invoke the package directly:
 
 ```powershell
-npm exec --yes --package=github:fabri777/SL-Repo#bb22c7caa0782f47f1cab031071a188a8d79f233 -c "sl-repo --help"
+npm exec --yes --package=github:fabri777/SL-Repo#3c6bb31d1f717595791e9a575d698b5593cbcf10 -c "sl-repo --help"
 ```
 
 ## Install into a repository
@@ -93,17 +115,20 @@ sl-repo doctor C:\path\to\repository
 sl-repo validate C:\path\to\repository
 ```
 
-`init` installs the root scope catalog, configuration, canonical workflows and
-skills, plus local copies of every SL scope/state/event schema under
-`.github/SL-learning/SL-schemas/`. Runtime validation still uses the immutable
-schemas bundled with the reviewed SL package; installed copies support review,
-editors, and repository-local auditing. `update` replaces only files already
-registered as SL-managed system artifacts and the delimited Copilot block.
+`init` installs the root scope catalog, configuration, skills, optional
+GitHub Actions and Azure Pipelines adapters, and local copies of every SL
+scope/state/event schema under `.github/SL-learning/SL-schemas/`. It merges
+the SL entry block into `AGENTS.md` and preserves existing content. Runtime
+validation still uses the immutable schemas bundled with the reviewed SL
+package; installed copies support review, editors, and repository-local
+auditing. `update` replaces only files already registered as SL-managed
+system artifacts and the delimited agent instruction blocks.
 
-Installed validation and retention workflows use a reviewed immutable SL Repo
-commit. They do not execute mutable `main` under repository write credentials;
-see `SL-docs/SL-install.md` for the pin-update procedure and
-`SL-docs/SL-security.md` for the credential boundary.
+Both optional automation adapters use the reviewed immutable SL Repo commit.
+They never intentionally execute mutable `main` as the runtime. See
+`SL-docs/SL-install.md` for the pin-update procedure,
+`SL-docs/SL-azure-pipelines.md` for Azure Repos and GitHub repository-resource
+examples, and `SL-docs/SL-security.md` for credential boundaries.
 
 After a lesson is retrieved and applied:
 
@@ -198,7 +223,8 @@ deliberate escape.
 
 SL only rewrites files it owns. Existing `AGENTS.md` and
 `.github/copilot-instructions.md` content is preserved outside an identifiable
-managed block.
+managed block. `AGENTS.md` is the provider-neutral agent entry point; the
+Copilot-specific file is a compatibility mirror, not a hosting prerequisite.
 
 ## Scope-aware architecture
 
@@ -219,6 +245,7 @@ different workloads, verifiers, or sample sizes can produce a deceptive rate.
 See the complete operational references:
 
 - [Architecture and source-of-truth boundaries](SL-docs/SL-architecture.md)
+- [Optional Azure Pipelines adapter](SL-docs/SL-azure-pipelines.md)
 - [Release history](CHANGELOG.md)
 - [Scope catalog and precedence](SL-docs/SL-scopes.md)
 - [Sharded state and merge workflow](SL-docs/SL-state-layout.md)

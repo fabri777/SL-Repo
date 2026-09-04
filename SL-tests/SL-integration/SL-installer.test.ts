@@ -45,10 +45,17 @@ describe("SL installer", () => {
       "preserve",
       "utf8",
     );
+    await writeFile(
+      join(root, "AGENTS.md"),
+      "# Existing agent policy\n",
+      "utf8",
+    );
 
     await slInstall(root, "init", false);
     const instructionsPath = join(root, ".github", "copilot-instructions.md");
+    const agentsPath = join(root, "AGENTS.md");
     const first = await readFile(instructionsPath, "utf8");
+    const firstAgents = await readFile(agentsPath, "utf8");
     const firstRegistry = await readFile(
       join(root, ".github", "SL-learning", "SL-registry.json"),
       "utf8",
@@ -59,8 +66,14 @@ describe("SL installer", () => {
       `# Existing repository policy\n\n${first}`,
       "utf8",
     );
+    await writeFile(
+      agentsPath,
+      `# Existing agent policy\n\n${firstAgents}`,
+      "utf8",
+    );
     await slInstall(root, "init", false);
     const second = await readFile(instructionsPath, "utf8");
+    const secondAgents = await readFile(agentsPath, "utf8");
     const secondRegistry = await readFile(
       join(root, ".github", "SL-learning", "SL-registry.json"),
       "utf8",
@@ -69,6 +82,13 @@ describe("SL installer", () => {
     expect(second).toContain("# Existing repository policy");
     expect(second.match(new RegExp(SL_MANAGED_BLOCK_START, "g"))).toHaveLength(1);
     expect(second.match(new RegExp(SL_MANAGED_BLOCK_END, "g"))).toHaveLength(1);
+    expect(secondAgents).toContain("# Existing agent policy");
+    expect(
+      secondAgents.match(new RegExp(SL_MANAGED_BLOCK_START, "g")),
+    ).toHaveLength(1);
+    expect(
+      secondAgents.match(new RegExp(SL_MANAGED_BLOCK_END, "g")),
+    ).toHaveLength(1);
     expect(await readFile(join(root, "existing.txt"), "utf8")).toBe("preserve");
     expect(secondRegistry).toBe(firstRegistry);
   });
@@ -98,6 +118,7 @@ describe("SL installer", () => {
     await mkdir(join(root, ".github", "skills", "SL-bootstrap"), {
       recursive: true,
     });
+
     await writeFile(skillPath, "---\nname: custom\n---\n\n# Custom\n", "utf8");
 
     await slInstall(root, "init", false);
@@ -109,6 +130,54 @@ describe("SL installer", () => {
         (artifact) => artifact.path === ".github/skills/SL-bootstrap/SKILL.md",
       ),
     ).toBe(false);
+  });
+
+  test("installs SL-owned Azure Pipelines templates without claiming manual files", async () => {
+    const root = await slCreateTestRepository();
+    repositories.push(root);
+    const manualPipeline = join(root, ".azure-pipelines", "manual.yml");
+    const manualMatchingTemplate = join(
+      root,
+      ".azure-pipelines",
+      "SL-learning",
+      "SL-validation.yml",
+    );
+    await mkdir(join(root, ".azure-pipelines", "SL-learning"), {
+      recursive: true,
+    });
+    await writeFile(manualPipeline, "steps: []\n", "utf8");
+    await writeFile(manualMatchingTemplate, "jobs: []\n", "utf8");
+
+    await slInstall(root, "init", false);
+
+    expect(await readFile(manualPipeline, "utf8")).toBe("steps: []\n");
+    expect(await readFile(manualMatchingTemplate, "utf8")).toBe("jobs: []\n");
+    await expect(
+      readFile(
+        join(
+          root,
+          ".azure-pipelines",
+          "SL-learning",
+          "SL-retention.yml",
+        ),
+        "utf8",
+      ),
+    ).resolves.toContain("3c6bb31d1f717595791e9a575d698b5593cbcf10");
+    const registry = await slLoadRegistry(root);
+    expect(
+      registry.artifacts.some(
+        (artifact) =>
+          artifact.path ===
+          ".azure-pipelines/SL-learning/SL-validation.yml",
+      ),
+    ).toBe(false);
+    expect(
+      registry.artifacts.some(
+        (artifact) =>
+          artifact.path ===
+          ".azure-pipelines/SL-learning/SL-retention.yml",
+      ),
+    ).toBe(true);
   });
 
   test("preserves an existing JSON scope catalog without creating YAML", async () => {

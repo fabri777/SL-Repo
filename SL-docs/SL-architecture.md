@@ -7,7 +7,18 @@ SL Repo separates reasoning from deterministic enforcement.
 | Copilot skills | Decide whether a verified experience is worth capturing and how to express it |
 | CLI | Install, validate, index, register, quarantine, restore, and delete deterministically |
 | Repository files | Preserve evidence and promoted knowledge in Git |
-| GitHub Actions | Re-run deterministic checks and scheduled retention |
+| `AGENTS.md` | Provider-neutral entry point that directs agents to repository knowledge |
+| Optional automation adapters | Re-run deterministic checks and scheduled retention |
+
+The first four layers are the operational core. GitHub Actions and Azure
+Pipelines are optional adapters over the same CLI and repository state. SL
+does not call GitHub or Azure DevOps APIs for capture, retrieval, projection,
+validation, promotion, or forgetting, so Azure Repos and other Git hosts use
+the same state layout.
+
+The installer also maintains a delimited
+`.github/copilot-instructions.md` compatibility block. It improves GitHub
+Copilot discovery but is not required by the SL data model or CLI.
 
 ## Source-of-truth boundaries
 
@@ -70,3 +81,21 @@ latest current-version verified success across every consuming scope.
 
 SL Repo defines future `org` and `company` scopes in documentation only. It
 does not copy local lessons to a central service.
+
+## Automation boundaries
+
+The optional GitHub Actions adapter can enforce validation on merge and open
+a review-required retention pull request. The optional Azure Pipelines
+adapter can enforce validation and publish a retention patch for review.
+Neither adapter is authoritative for knowledge: immutable events, Markdown
+artifacts, scope registries, and generated projections remain authoritative
+in Git.
+
+With no automation adapter, agents and maintainers run `project`, `validate`,
+and retention previews locally. Capture and retrieval are unchanged. The
+missing capabilities are an automated merge gate, scheduled
+projection/retention execution, and hosted cross-platform validation.
+
+The SL Repo source repository continues to run its GitHub-hosted Linux,
+Windows, and macOS release-quality checks. That source validation is separate
+from consumer operation and does not make GitHub Actions mandatory.
