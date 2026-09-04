@@ -18,6 +18,10 @@ import {
   slLoadRegistry,
   slValidateLifecycleEvent,
 } from "../SL-core/SL-registry.js";
+import {
+  slLoadScopeCatalog,
+  SLScopeCatalogValidationError,
+} from "../SL-core/SL-scope.js";
 import type {
   SLConfig,
   SLIndex,
@@ -123,6 +127,30 @@ export async function slValidateRepository(root: string): Promise<SLValidationIs
   const config = await slLoadConfig(root);
   if (!validateConfig(config)) {
     issues.push(...slAjvIssues("config-schema", SL_PATHS.config, validateConfig.errors));
+  }
+
+  try {
+    await slLoadScopeCatalog(root);
+  } catch (error) {
+    if (error instanceof SLScopeCatalogValidationError) {
+      issues.push(
+        ...error.issues.map((issue) => ({
+          severity: "error" as const,
+          code: issue.code,
+          path: error.catalogPath ?? SL_PATHS.scopeCatalog,
+          message: issue.path
+            ? `${issue.path}: ${issue.message}`
+            : issue.message,
+        })),
+      );
+    } else {
+      issues.push({
+        severity: "error",
+        code: "scope-catalog-invalid",
+        path: SL_PATHS.scopeCatalog,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   const registry = await slLoadRegistry(root);

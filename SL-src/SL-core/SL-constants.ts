@@ -6,6 +6,12 @@ export const SL_MANAGED_BLOCK_END = "<!-- SL-REPO:END -->";
 export const SL_PATHS = {
   learningRoot: ".github/SL-learning",
   config: ".github/SL-learning/SL-config.yml",
+  scopeCatalog: ".github/SL-learning/SL-scope-catalog.yml",
+  scopeCatalogCandidates: [
+    ".github/SL-learning/SL-scope-catalog.yml",
+    ".github/SL-learning/SL-scope-catalog.yaml",
+    ".github/SL-learning/SL-scope-catalog.json",
+  ],
   registry: ".github/SL-learning/SL-registry.json",
   index: ".github/SL-learning/SL-index.json",
   legacyEvents: ".github/SL-learning/SL-events.jsonl",
@@ -16,6 +22,8 @@ export const SL_PATHS = {
   quarantine: ".github/SL-learning/SL-quarantine",
   copilotInstructions: ".github/copilot-instructions.md",
 } as const;
+
+export const SL_DEFAULT_SCOPE_ID = "SL-SCOPE-ROOT";
 
 export const SL_DEFAULT_CONFIG: SLConfig = {
   schemaVersion: 1,

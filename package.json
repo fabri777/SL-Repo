@@ -37,6 +37,7 @@
     "ajv-formats": "^3.0.1",
     "commander": "^14.0.1",
     "fast-glob": "^3.3.3",
+    "micromatch": "^4.0.8",
     "yaml": "^2.8.1"
   },
   "devDependencies": {

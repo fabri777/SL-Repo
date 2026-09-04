@@ -170,4 +170,5 @@ See:
 - `SL-docs/SL-security.md`
 - `SL-docs/SL-validation-contracts.md`
 - `SL-docs/SL-usage-events.md`
+- `SL-docs/SL-scopes.md`
 - `SL-docs/SL-roadmap.md`

@@ -95,6 +95,36 @@ describe("SL installer", () => {
     ).toBe(false);
   });
 
+  test("preserves an existing JSON scope catalog without creating YAML", async () => {
+    const root = await slCreateTestRepository();
+    repositories.push(root);
+    const learningRoot = join(root, ".github", "SL-learning");
+    await mkdir(learningRoot, { recursive: true });
+    const jsonPath = join(learningRoot, "SL-scope-catalog.json");
+    const catalog = JSON.stringify({
+      schemaVersion: 1,
+      scopes: [
+        {
+          id: "SL-SCOPE-ROOT",
+          displayName: "Repository",
+          kind: "repository",
+          includePaths: ["**"],
+          excludePaths: [],
+          dependencyScopeIds: [],
+          ownerAliases: [],
+        },
+      ],
+    });
+    await writeFile(jsonPath, catalog, "utf8");
+
+    await slInstall(root, "init", false);
+
+    expect(await readFile(jsonPath, "utf8")).toBe(catalog);
+    await expect(
+      readFile(join(learningRoot, "SL-scope-catalog.yml"), "utf8"),
+    ).rejects.toThrow();
+  });
+
   test("rejects a target path that resolves outside the repository", async () => {
     const root = await slCreateTestRepository();
     const outside = await slCreateTestRepository();

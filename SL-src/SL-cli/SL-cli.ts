@@ -9,6 +9,10 @@ import {
   slRegisterPromotion,
 } from "../SL-core/SL-promotion.js";
 import { slLoadRegistry } from "../SL-core/SL-registry.js";
+import {
+  slLoadScopeCatalog,
+  SLScopeResolver,
+} from "../SL-core/SL-scope.js";
 import type { SLChange } from "../SL-core/SL-types.js";
 import { slNormalizePath, slPrintChanges } from "../SL-core/SL-utils.js";
 import { slVoteOnLesson } from "../SL-core/SL-vote.js";
@@ -173,6 +177,60 @@ program
         process.exitCode = 1;
       }
     }),
+  );
+
+program
+  .command("scope [path]")
+  .description("Resolve hierarchical SL scopes for a file, directory, or changed paths")
+  .option("--file <file>", "Resolve one repository file")
+  .option("--current-directory <directory>", "Resolve a current directory")
+  .option("--changed-path <path>", "Resolve a changed-path set", slCollect, [])
+  .option("--json", "Print machine-readable JSON")
+  .action(
+    (
+      pathValue = ".",
+      options: SLJsonOptions & {
+        file?: string;
+        currentDirectory?: string;
+        changedPath: string[];
+      },
+    ) =>
+      slRun(async () => {
+        const root = slRoot(pathValue);
+        const selectedModes = [
+          options.file !== undefined,
+          options.currentDirectory !== undefined,
+          options.changedPath.length > 0,
+        ].filter(Boolean).length;
+        if (selectedModes > 1) {
+          throw new Error(
+            "Choose exactly one of --file, --current-directory, or --changed-path.",
+          );
+        }
+
+        const resolver = new SLScopeResolver(await slLoadScopeCatalog(root));
+        const result =
+          options.changedPath.length > 0
+            ? resolver.resolveChangedPaths(root, options.changedPath)
+            : options.file !== undefined
+              ? resolver.resolvePath(root, options.file)
+              : resolver.resolveCurrentDirectory(
+                  root,
+                  options.currentDirectory ?? process.cwd(),
+                );
+        slPrintObject(
+          result,
+          options.json ?? false,
+          "primaryScopeId" in result
+            ? `${result.normalizedPath || "."}: ${result.orderedScopeIds.join(" -> ")}`
+            : result.paths
+                .map(
+                  (path) =>
+                    `${path.normalizedPath || "."}: ${path.orderedScopeIds.join(" -> ")}`,
+                )
+                .join("\n"),
+        );
+      }),
   );
 
 program

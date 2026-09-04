@@ -1,0 +1,10 @@
+schemaVersion: 1
+scopes:
+  - id: SL-SCOPE-ROOT
+    displayName: Repository
+    kind: repository
+    includePaths:
+      - "**"
+    excludePaths: []
+    dependencyScopeIds: []
+    ownerAliases: []

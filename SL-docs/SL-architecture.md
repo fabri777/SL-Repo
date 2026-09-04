@@ -17,6 +17,12 @@ preserves human-readable evidence. The generated index is a discovery
 projection with current-version metrics, paths, and metadata rather than full
 content.
 
+Hierarchical monorepo scope resolution is a separate deterministic control
+plane. A versioned scope catalog maps normalized repository paths to one
+primary scope, followed by dependencies and ancestors. Existing installations
+without a catalog use a single built-in root scope. See
+[SL hierarchical monorepo scopes](SL-scopes.md).
+
 Every operation that changes whole-registry, discovery-index, or managed
 frontmatter state uses one repository-scoped mutation lock. The lock carries
 owner process, host, timestamp, and random-token metadata, refreshes its lease,

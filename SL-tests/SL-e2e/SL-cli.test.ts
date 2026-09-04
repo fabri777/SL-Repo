@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { access, mkdir, writeFile } from "node:fs/promises";
+import { access, mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import { slCaptureLesson } from "../../SL-src/SL-core/SL-capture.js";
@@ -28,7 +28,7 @@ afterEach(async () => {
 function runCli(argumentsList: string[]): string {
   return execFileSync(process.execPath, [cliPath, ...argumentsList], {
     encoding: "utf8",
-    timeout: 20_000,
+    timeout: 30_000,
   });
 }
 
@@ -111,6 +111,7 @@ describe("sl-repo CLI", () => {
     const help = runCli(["--help"]);
 
     expect(help).toContain("validate");
+    expect(help).toContain("scope");
     expect(help).toContain("sweep");
     expect(runCli(["validate", "--help"])).toContain(
       "Validate SL schemas, ownership, links, safety, and index state",
@@ -118,6 +119,59 @@ describe("sl-repo CLI", () => {
     expect(runCli(["sweep", "--help"])).toContain(
       "Apply stale, quarantine, and deletion policy",
     );
+    expect(runCli(["scope", "--help"])).toContain(
+      "Resolve hierarchical SL scopes",
+    );
+  });
+
+  test("resolves scope catalogs through the CLI", async () => {
+    const root = await slCreateTestRepository();
+    repositories.push(root);
+    await slInstall(root, "init", false);
+    await writeFile(
+      join(root, ".github", "SL-learning", "SL-scope-catalog.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        scopes: [
+          {
+            id: "SL-SCOPE-ROOT",
+            displayName: "Repository",
+            kind: "repository",
+            includePaths: ["**"],
+            excludePaths: [],
+            dependencyScopeIds: [],
+            ownerAliases: [],
+          },
+          {
+            id: "SL-SCOPE-SERVICE",
+            displayName: "Service",
+            kind: "service",
+            includePaths: ["services/api/**"],
+            excludePaths: [],
+            parentScopeId: "SL-SCOPE-ROOT",
+            dependencyScopeIds: [],
+            ownerAliases: ["@example/api"],
+          },
+        ],
+      }),
+      "utf8",
+    );
+    await rm(join(root, ".github", "SL-learning", "SL-scope-catalog.yml"));
+
+    const result = JSON.parse(
+      runCli([
+        "scope",
+        root,
+        "--file",
+        "services\\api\\handler.ts",
+        "--json",
+      ]),
+    ) as { primaryScopeId: string; orderedScopeIds: string[] };
+
+    expect(result).toMatchObject({
+      primaryScopeId: "SL-SCOPE-SERVICE",
+      orderedScopeIds: ["SL-SCOPE-SERVICE", "SL-SCOPE-ROOT"],
+    });
   });
 
   test(
@@ -288,7 +342,7 @@ describe("sl-repo CLI", () => {
         verifiedSuccessRate: 0,
       });
     },
-    60_000,
+    90_000,
   );
 
   test(

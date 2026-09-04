@@ -28,6 +28,57 @@ export interface SLConfig {
   retention: SLRetentionConfig;
 }
 
+export type SLScopeKind =
+  | "repository"
+  | "shared"
+  | "service"
+  | "solution"
+  | "library"
+  | "package";
+
+export interface SLScopeDefinition {
+  id: string;
+  displayName: string;
+  kind: SLScopeKind;
+  includePaths: string[];
+  excludePaths: string[];
+  parentScopeId?: string;
+  dependencyScopeIds: string[];
+  ownerAliases: string[];
+  priority?: number;
+}
+
+export interface SLScopeCatalog {
+  schemaVersion: 1;
+  scopes: SLScopeDefinition[];
+}
+
+export interface SLScopeCatalogIssue {
+  code: string;
+  path?: string;
+  message: string;
+}
+
+export interface SLScopeCatalogSource {
+  catalog: unknown;
+  path: string | null;
+  format: "default" | "json" | "yaml";
+}
+
+export interface SLScopeResolution {
+  inputPath: string;
+  normalizedPath: string;
+  primaryScopeId: string;
+  matchedScopeIds: string[];
+  orderedScopeIds: string[];
+}
+
+export interface SLScopeSetResolution {
+  paths: SLScopeResolution[];
+  primaryScopeIds: string[];
+  orderedScopeIds: string[];
+}
+
 export interface SLRegistryArtifact {
   id: string;
   path: string | null;

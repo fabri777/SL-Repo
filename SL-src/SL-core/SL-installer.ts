@@ -70,12 +70,30 @@ async function slInstallUnlocked(
   });
   const changes: SLChange[] = [];
   const existingRegistry = await slLoadRegistry(root);
+  const existingScopeCatalogPaths: string[] = [];
+  for (const scopeCatalogPath of SL_PATHS.scopeCatalogCandidates) {
+    if (await slExists(slResolveInside(root, scopeCatalogPath))) {
+      existingScopeCatalogPaths.push(scopeCatalogPath);
+    }
+  }
   const managedTemplatePaths = new Set<string>();
   const changedTemplatePaths = new Set<string>();
 
   for (const templatePathValue of templateFiles.sort()) {
     const templatePath = slNormalizePath(templatePathValue);
     if (templatePath === "SL-copilot-block.md") {
+      continue;
+    }
+    if (
+      templatePath === SL_PATHS.scopeCatalog &&
+      existingScopeCatalogPaths.length > 0 &&
+      !existingScopeCatalogPaths.includes(SL_PATHS.scopeCatalog)
+    ) {
+      changes.push({
+        action: "skip",
+        path: templatePath,
+        detail: `existing scope catalog preserved at ${existingScopeCatalogPaths.join(", ")}`,
+      });
       continue;
     }
     const targetPath = templatePath;
@@ -130,7 +148,10 @@ async function slInstallUnlocked(
       templatePath === SL_PATHS.registry ||
       templatePath === SL_PATHS.index ||
       templatePath === SL_PATHS.legacyEvents ||
-      templatePath === SL_PATHS.config
+      templatePath === SL_PATHS.config ||
+      SL_PATHS.scopeCatalogCandidates.includes(
+        templatePath as (typeof SL_PATHS.scopeCatalogCandidates)[number],
+      )
     ) {
       continue;
     }
