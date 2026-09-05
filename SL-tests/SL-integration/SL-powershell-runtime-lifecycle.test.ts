@@ -112,6 +112,31 @@ async function createPowerShellRepository(): Promise<string> {
 }
 
 describe("repository-local PowerShell lifecycle", () => {
+  test("keeps empty usage projections as JSON arrays", async () => {
+    const root = await createPowerShellRepository();
+    jsonOutput(runRuntime(root, ["project"]));
+    const stateCatalog = JSON.parse(
+      await readFile(
+        join(root, ".github", "SL-learning", "SL-state-catalog.json"),
+        "utf8",
+      ),
+    ) as { scopes: Array<{ projectionPath: string }> };
+    const projection = JSON.parse(
+      await readFile(
+        join(root, ...stateCatalog.scopes[0]!.projectionPath.split("/")),
+        "utf8",
+      ),
+    ) as { projections: unknown };
+
+    expect(projection.projections).toEqual([]);
+    expect(
+      (jsonOutput(runRuntime(root, ["doctor"])) as { healthy: boolean }).healthy,
+    ).toBe(true);
+    expect(
+      (jsonOutput(runRuntime(root, ["validate"])) as { valid: boolean }).valid,
+    ).toBe(true);
+  });
+
   test(
     "runs capture, retrieve, usage, projection, promotion, validation, forget, and undo without Node",
     async () => {

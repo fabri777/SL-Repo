@@ -996,16 +996,15 @@ function Write-SLIndexes {
             artifacts = $IndexArtifacts
         }
         Write-SLJson -Root $Root -RelativePath ([string] $Entry.indexPath) -Value $Index -Changes $Changes -DryRun:$DryRun
-        [object[]] $ScopeProjections = if ($null -eq $Projections) {
-            @()
-        }
-        else {
-            @($Projections | Where-Object { (Get-SLScopeKey $_.scope) -ceq $ScopeKey } |
+        [object[]] $ScopeProjections = @(
+            if ($null -ne $Projections) {
+                $Projections | Where-Object { (Get-SLScopeKey $_.scope) -ceq $ScopeKey } |
                 Sort-Object -Stable -Property @(
                     @{ Expression = { [string] $_.artifactId } },
                     @{ Expression = { [string] $_.artifactVersion } }
-                ))
-        }
+                )
+            }
+        )
         $CurrentVersions = [ordered] @{}
         foreach ($Artifact in @($Registry.artifacts | Sort-Object -Stable -Property @{ Expression = { [string] $_.id } })) {
             if (

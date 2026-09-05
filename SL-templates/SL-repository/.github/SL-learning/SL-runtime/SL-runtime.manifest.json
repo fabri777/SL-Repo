@@ -44,7 +44,7 @@
     },
     {
       "path": "SL.Runtime.State.ps1",
-      "sha256": "2c014281664d592ea2b63dc2cb2c3713ee82bc5c74b0d1f553e8666019287457"
+      "sha256": "c284da9ea245a9bca124987fad96e6427a32969956df2d398f442a3d89209810"
     },
     {
       "path": "SL.Runtime.Syntax.ps1",
