@@ -127,13 +127,14 @@ system artifacts and the delimited agent instruction blocks.
 It also installs the self-contained PowerShell 7 runtime under
 `.github/SL-learning/SL-runtime/`. After initialization, agents can invoke
 scope resolution, capture, retrieval, usage, projection, promotion,
-validation, retention, doctor, and conformance commands without
+resource receipts, advisory efficiency, validation, retention, doctor, and conformance commands without
 Node/npm/global SL CLI. See [the runtime contract](SL-docs/SL-runtime.md).
 
 ```powershell
 $sl = ".github/SL-learning/SL-runtime/SL.ps1"
 pwsh -NoLogo -NoProfile -File $sl scope resolve --file src/example.ts --json
 pwsh -NoLogo -NoProfile -File $sl retrieve --path src/example.ts --json
+pwsh -NoLogo -NoProfile -File $sl resource stats --json
 pwsh -NoLogo -NoProfile -File $sl project --json
 pwsh -NoLogo -NoProfile -File $sl validate --json
 ```

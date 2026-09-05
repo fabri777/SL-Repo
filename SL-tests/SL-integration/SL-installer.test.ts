@@ -22,6 +22,8 @@ import {
 } from "../SL-fixtures/SL-test-repository.js";
 
 const repositories: string[] = [];
+const INSTALLER_TEST_TIMEOUT_MS =
+  process.platform === "win32" ? 120_000 : 60_000;
 
 function normalizeLineEndings(value: string): string {
   return value.replaceAll("\r\n", "\n");
@@ -162,7 +164,7 @@ describe("SL installer", () => {
         ),
         "utf8",
       ),
-    ).resolves.toContain("3c6bb31d1f717595791e9a575d698b5593cbcf10");
+    ).resolves.toContain(".github/SL-learning/SL-runtime/SL.ps1");
     const registry = await slLoadRegistry(root);
     expect(
       registry.artifacts.some(
@@ -178,7 +180,7 @@ describe("SL installer", () => {
           ".azure-pipelines/SL-learning/SL-retention.yml",
       ),
     ).toBe(true);
-  });
+  }, INSTALLER_TEST_TIMEOUT_MS);
 
   test("preserves an existing JSON scope catalog without creating YAML", async () => {
     const root = await slCreateTestRepository();

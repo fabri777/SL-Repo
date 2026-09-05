@@ -325,6 +325,33 @@
       "operation": "safe-reference",
       "input": "host:10.0.0.1",
       "expected": false
+    },
+    {
+      "id": "resource-receipt-id-is-idempotent",
+      "operation": "resource-receipt-id",
+      "input": "resource-e2e",
+      "expected": "SL-RESOURCE-E8375CA1A3BCE94D8157565379ADA914"
+    },
+    {
+      "id": "resource-total-tokens-includes-cache-and-reasoning",
+      "operation": "resource-total-tokens",
+      "input": {
+        "input": 100,
+        "output": 20,
+        "cacheRead": 30,
+        "cacheWrite": 4,
+        "reasoning": 6
+      },
+      "expected": 160
+    },
+    {
+      "id": "resource-cost-add-preserves-decimal-accounting",
+      "operation": "resource-cost-add",
+      "input": {
+        "left": "0.0125",
+        "right": "0.0875"
+      },
+      "expected": "0.1"
     }
   ]
 }

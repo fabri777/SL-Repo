@@ -97,7 +97,7 @@ function Test-SLRepository {
                     $Issues.Add((New-SLValidationIssue error 'scope-state-orphan' "State shard $($Entry.shard) references an undeclared scope." $script:SLStateCatalogPath))
                 }
             }
-            foreach ($Path in @($Entry.registryPath, $Entry.indexPath, $Entry.projectionPath, $Entry.usageEventsPath)) {
+            foreach ($Path in @($Entry.registryPath, $Entry.indexPath, $Entry.projectionPath, $Entry.usageEventsPath, $Entry.resourceReceiptsPath, $Entry.resourceProjectionPath)) {
                 [void] (Resolve-SLContainedPath -Root $Root -RelativePath ([string] $Path))
             }
             if (-not [IO.File]::Exists((Resolve-SLContainedPath -Root $Root -RelativePath ([string] $Entry.registryPath)))) {
@@ -301,6 +301,72 @@ function Test-SLRepository {
         }
         catch {
             $Issues.Add((New-SLValidationIssue error 'usage-projection-schema' $_.Exception.Message ([string] $Entry.projectionPath)))
+        }
+    }
+    $ResourceReceipts = @()
+    try { $ResourceReceipts = @(Get-SLResourceReceipts $Root) } catch {
+        $Issues.Add((New-SLValidationIssue error 'resource-receipt-load' $_.Exception.Message $script:SLResourceRoot))
+    }
+    $ResourceIds = @{}
+    $ResourceKeys = @{}
+    $ResourceApplications = @{}
+    foreach ($Receipt in $ResourceReceipts) {
+        $ReceiptPath = Get-SLResourceReceiptPath $Receipt
+        if ($ResourceIds.ContainsKey([string] $Receipt.receiptId)) {
+            $Issues.Add((New-SLValidationIssue error 'resource-receipt-duplicate-id' "Resource receipt ID is already present at $($ResourceIds[[string] $Receipt.receiptId])." $ReceiptPath))
+        }
+        $ResourceIds[[string] $Receipt.receiptId] = $ReceiptPath
+        if ($ResourceKeys.ContainsKey([string] $Receipt.idempotencyKey) -and $ResourceKeys[[string] $Receipt.idempotencyKey] -cne $ReceiptPath) {
+            $Issues.Add((New-SLValidationIssue error 'resource-receipt-duplicate-idempotency' "Resource idempotency key is already present at $($ResourceKeys[[string] $Receipt.idempotencyKey])." $ReceiptPath))
+        }
+        $ResourceKeys[[string] $Receipt.idempotencyKey] = $ReceiptPath
+        if (-not $CatalogKeys.ContainsKey((Get-SLScopeKey $Receipt.scope))) {
+            $Issues.Add((New-SLValidationIssue error 'resource-receipt-scope' 'Resource receipt scope is not registered in the generated state catalog.' $ReceiptPath))
+        }
+        if ($Receipt.phase -ceq 'application') {
+            if ($ResourceApplications.ContainsKey([string] $Receipt.applicationId)) {
+                $Issues.Add((New-SLValidationIssue error 'resource-receipt-duplicate-application' "Application resource receipt is already present at $($ResourceApplications[[string] $Receipt.applicationId])." $ReceiptPath))
+            }
+            $ResourceApplications[[string] $Receipt.applicationId] = $ReceiptPath
+            $UsageApplication = @($UsageEvents | Where-Object { $_.eventType -ceq 'usage' -and $_.applicationId -ceq $Receipt.applicationId })
+            if ($UsageApplication.Count -eq 0 -or @($UsageApplication | Where-Object {
+                $_.artifactId -cne $Receipt.artifactId -or
+                $_.artifactVersion -cne $Receipt.artifactVersion -or
+                $_.artifactContentHash -cne $Receipt.artifactContentHash -or
+                $_.taskRunId -cne $Receipt.taskRunId -or
+                (Get-SLScopeKey $_.scope) -cne (Get-SLScopeKey $Receipt.scope)
+            }).Count -gt 0) {
+                $Issues.Add((New-SLValidationIssue error 'resource-receipt-usage-correlation' 'Application resource receipt does not match an immutable usage lifecycle.' $ReceiptPath))
+            }
+        }
+        elseif ($Receipt.phase -ceq 'generation') {
+            if (@($Registry.artifacts | Where-Object {
+                $_.id -ceq $Receipt.artifactId -and
+                (Get-SLScopeKey $_.scope) -ceq (Get-SLScopeKey $Receipt.scope)
+            }).Count -eq 0) {
+                $Issues.Add((New-SLValidationIssue error 'resource-receipt-artifact' 'Generation resource receipt references an unknown artifact or owning scope.' $ReceiptPath))
+            }
+        }
+    }
+    foreach ($Entry in @($StateCatalog.scopes)) {
+        $ResourceProjectionPath = [string] $Entry.resourceProjectionPath
+        $AbsoluteProjectionPath = Resolve-SLContainedPath -Root $Root -RelativePath $ResourceProjectionPath
+        if (-not [IO.File]::Exists($AbsoluteProjectionPath)) { continue }
+        try {
+            $Actual = Read-SLJson -Root $Root -RelativePath $ResourceProjectionPath
+            [object[]] $ScopedReceipts = @($ResourceReceipts | Where-Object { (Get-SLScopeKey $_.scope) -ceq (Get-SLScopeKey $Entry.scope) })
+            [object[]] $ExpectedResourceProjections = @(Get-SLResourceProjection $ScopedReceipts)
+            [object[]] $ActualResourceProjections = @($Actual.projections | Where-Object { $null -ne $_ })
+            if (
+                $Actual.schemaVersion -ne 1 -or
+                (Get-SLScopeKey $Actual.scope) -cne (Get-SLScopeKey $Entry.scope) -or
+                (ConvertTo-SLCanonicalJson -Value (, $ActualResourceProjections)) -cne (ConvertTo-SLCanonicalJson -Value (, $ExpectedResourceProjections))
+            ) {
+                $Issues.Add((New-SLValidationIssue error 'resource-projection-drift' 'Generated scope resource projection is stale; run project.' $ResourceProjectionPath))
+            }
+        }
+        catch {
+            $Issues.Add((New-SLValidationIssue error 'resource-projection-schema' $_.Exception.Message $ResourceProjectionPath))
         }
     }
     $LifecycleRoot = Resolve-SLContainedPath -Root $Root -RelativePath $script:SLLifecycleRoot

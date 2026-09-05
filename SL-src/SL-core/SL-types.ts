@@ -89,7 +89,10 @@ export type SLRuntimeConformanceOperation =
   | "lifecycle-event-id"
   | "retention-deadline"
   | "promotion-owner-set"
-  | "safe-reference";
+  | "safe-reference"
+  | "resource-receipt-id"
+  | "resource-total-tokens"
+  | "resource-cost-add";
 
 export interface SLRuntimeConformanceVector {
   id: string;

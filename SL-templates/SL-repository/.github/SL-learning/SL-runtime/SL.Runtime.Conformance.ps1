@@ -114,6 +114,35 @@ function Invoke-SLConformanceVector {
             }
             return Test-SLOpaqueReference $Vector.input
         }
+        'resource-receipt-id' {
+            if ($Vector.input -isnot [string] -or -not $Vector.input.Trim()) {
+                Throw-SLContractError -Code 'vector-input' -Message 'resource-receipt-id input must be a non-empty string.'
+            }
+            $Hash = Get-SLSha256 $Vector.input.Trim()
+            return "SL-RESOURCE-$($Hash.Substring(0, 32).ToUpperInvariant())"
+        }
+        'resource-total-tokens' {
+            if (-not (Test-SLMap $Vector.input)) {
+                Throw-SLContractError -Code 'vector-input' -Message 'resource-total-tokens input must be an object.'
+            }
+            [long] $Total = 0
+            foreach ($Name in @('input', 'output', 'cacheRead', 'cacheWrite', 'reasoning')) {
+                $Value = Get-SLProperty $Vector.input $Name 0
+                Assert-SLResourceInteger "tokens.$Name" $Value
+                $Total += [long] $Value
+            }
+            return $Total
+        }
+        'resource-cost-add' {
+            if (
+                -not (Test-SLMap $Vector.input) -or
+                [string] $Vector.input.left -cnotmatch '^(0|[1-9][0-9]*)(\.[0-9]{1,12})?$' -or
+                [string] $Vector.input.right -cnotmatch '^(0|[1-9][0-9]*)(\.[0-9]{1,12})?$'
+            ) {
+                Throw-SLContractError -Code 'vector-input' -Message 'resource-cost-add requires decimal strings.'
+            }
+            return Add-SLDecimal ([string] $Vector.input.left) ([string] $Vector.input.right)
+        }
         default {
             Throw-SLContractError -Code 'vector-operation' -Message "Unknown conformance operation: $($Vector.operation)"
         }

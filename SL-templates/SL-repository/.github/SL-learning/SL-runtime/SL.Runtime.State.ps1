@@ -13,6 +13,7 @@ $script:SLStateCatalogPath = '.github/SL-learning/SL-state-catalog.json'
 $script:SLScopeRoot = '.github/SL-learning/SL-scopes'
 $script:SLLifecycleRoot = '.github/SL-learning/SL-lifecycle-events'
 $script:SLUsageRoot = '.github/SL-learning/SL-usage-events'
+$script:SLResourceRoot = '.github/SL-learning/SL-resource-receipts'
 $script:SLLessonsRoot = '.github/SL-learning/SL-lessons'
 $script:SLProbationRoot = '.github/SL-learning/SL-probation'
 $script:SLQuarantineRoot = '.github/SL-learning/SL-quarantine'
@@ -648,6 +649,8 @@ function Get-SLStateCatalogEntry {
         indexPath = "$Root/SL-index.json"
         projectionPath = "$Root/SL-usage-projection.json"
         usageEventsPath = "$Root/SL-usage-events"
+        resourceReceiptsPath = "$Root/SL-resource-receipts"
+        resourceProjectionPath = "$Root/SL-resource-projection.json"
     }
 }
 

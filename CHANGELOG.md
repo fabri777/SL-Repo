@@ -4,6 +4,14 @@
 
 ### Added
 
+- Repository-local PowerShell resource receipt import, recording, baseline,
+  projection, validation, and advisory efficiency reporting with promotion
+  lineage.
+
+## Unreleased
+
+### Added
+
 - Complete repository-local PowerShell 7 lifecycle runtime for scopes,
   retrieval, capture, immutable usage, projection, promotion, validation,
   forgetting, rollback, deterministic output, and stale-safe mutation locks.

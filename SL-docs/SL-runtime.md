@@ -22,6 +22,7 @@ promotion governance, validation, forgetting, and diagnostics.
 | `SL.Runtime.State.ps1` | Scope resolution, sharded registry/state catalog, immutable lifecycle events, and indexes |
 | `SL.Runtime.Artifacts.ps1` | Capture, ownership checks, immutable usage events, votes, receipts, and projections |
 | `SL.Runtime.Promotion.ps1` | Validation contracts, probation, evidence/approval gates, conflicts, and activation |
+| `SL.Runtime.Resource.ps1` | Immutable resource receipts, deterministic projections, advisory efficiency, baseline pairing, and lineage |
 | `SL.Runtime.Lifecycle.ps1` | Retrieval, quarantine, sweep, restore, and rollback |
 | `SL.Runtime.Validation.ps1` | Repository validation, projection drift detection, and doctor aggregation |
 | `SL.Runtime.Conformance.ps1` | PowerShell golden-vector runner |
@@ -43,6 +44,7 @@ Implemented commands are:
 
 - `root`, `scope list|resolve|validate`, and `retrieve`;
 - `capture`, `vote`, `use start`, `use finish`, `stats`, and `project`;
+- `resource import|record|baseline|stats` and the top-level `efficiency` alias;
 - `evaluate` and `promotion register|evaluate|approve|activate`;
 - `validate`, `doctor`, `forget`, `undo`, and `sweep`;
 - `help`, `version`, `validate-runtime`, and `conformance`.

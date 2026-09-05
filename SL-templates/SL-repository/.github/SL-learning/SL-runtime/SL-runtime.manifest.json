@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "runtimeVersion": "0.2.0",
+  "runtimeVersion": "0.3.0",
   "sourceReleaseCommit": "__SL_SOURCE_RELEASE_COMMIT__",
   "configContractVersion": 1,
   "conformanceVersion": 1,
@@ -8,7 +8,7 @@
   "files": [
     {
       "path": "SL-conformance-vectors.json",
-      "sha256": "b6d2d2fee18d15b8fc9e0086030b679474970fcceefaa28154c693fea87b49ba"
+      "sha256": "f382ac89980e328ed84f1b3282c0f3aef11d10eaeab0c07a008dee30538279bb"
     },
     {
       "path": "SL-runtime-manifest.schema.json",
@@ -20,11 +20,11 @@
     },
     {
       "path": "SL.Runtime.Conformance.ps1",
-      "sha256": "4b38dba5cc4a9274ceae3e35b69b8d5b102556c5a1129a6aa731881239fbaa40"
+      "sha256": "c8de8d5c7371f5a89f74f144e71f0d9105dfad145e91113c24dc1c03c3995cca"
     },
     {
       "path": "SL.Runtime.Core.ps1",
-      "sha256": "b87f58d157a27f3e1360ecbd36f5a7ccc4265db9cf0dd777768067e4a1dcdd00"
+      "sha256": "656c856e41477acb092f645c8e225923132c855354c7185e213a54dfb9006a6a"
     },
     {
       "path": "SL.Runtime.Doctor.ps1",
@@ -32,15 +32,19 @@
     },
     {
       "path": "SL.Runtime.Lifecycle.ps1",
-      "sha256": "c4d772ad8fbc1b4901fa47b13e92e36929572fe66b8285187c181e5712a4eb2e"
+      "sha256": "d52aa0c674e548d5e83d6365f690a70ffabf3ba254676508eeb8ae5520e75faa"
     },
     {
       "path": "SL.Runtime.Promotion.ps1",
       "sha256": "e43a03eabdfe63bca31ba02cd7faf7aac9fa4740a5f7b871078c53df51641032"
     },
     {
+      "path": "SL.Runtime.Resource.ps1",
+      "sha256": "3aaa1d4d047550dd46e09744f3367705c1c92bdd687a8ae68a325b144020dbd3"
+    },
+    {
       "path": "SL.Runtime.State.ps1",
-      "sha256": "bfa91d4cf991ea40a9c67a2a1f64c921e83288b145408184ac424a83caa09eed"
+      "sha256": "ddee1400342e6a24ce2ef1dd311675456bc045ce6cbf0c250873451d32c0b099"
     },
     {
       "path": "SL.Runtime.Syntax.ps1",
@@ -48,11 +52,11 @@
     },
     {
       "path": "SL.Runtime.Validation.ps1",
-      "sha256": "3ec06fb05a61b811cf4d60db46ce68f7334ccfb06f8f04f87dd0b9ec5e66fb59"
+      "sha256": "a5dd2d4782740541d52697f6543cc67ce8821f9a59bee9fd4f1468064f653ccd"
     },
     {
       "path": "SL.Runtime.psm1",
-      "sha256": "029bcf6374edd727e3c45fa7a858657478b9f5ee2a81df942e5994227ad762ad"
+      "sha256": "f48fff511085202d291e6a7db6c1272459d203162e0fafdc85187a924f2cfb48"
     },
     {
       "path": "SL.ps1",

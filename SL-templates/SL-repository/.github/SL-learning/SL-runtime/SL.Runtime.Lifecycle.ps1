@@ -205,7 +205,7 @@ function Get-SLStateSnapshotPaths {
     $Paths = [System.Collections.Generic.List[string]]::new()
     foreach ($Path in @($script:SLLegacyRegistryPath, $script:SLLegacyIndexPath, $script:SLStateCatalogPath)) { $Paths.Add($Path) }
     foreach ($Entry in @((Get-SLStateCatalog $Root).scopes)) {
-        foreach ($Path in @($Entry.registryPath, $Entry.indexPath, $Entry.projectionPath)) { $Paths.Add([string] $Path) }
+        foreach ($Path in @($Entry.registryPath, $Entry.indexPath, $Entry.projectionPath, $Entry.resourceProjectionPath)) { $Paths.Add([string] $Path) }
     }
     return Sort-SLOrdinal @($Paths | Select-Object -Unique)
 }

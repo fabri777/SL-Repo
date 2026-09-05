@@ -1104,5 +1104,58 @@ export function slRunRuntimeVector(
         !SL_USER_PATH_PATTERN.test(reference) &&
         !SL_SECRET_PATTERNS.some(({ pattern }) => pattern.test(reference));
     }
+    case "resource-receipt-id":
+      if (typeof vector.input !== "string" || vector.input.trim().length === 0) {
+        return slContractError(
+          "vector-input",
+          "resource-receipt-id input must be a non-empty string.",
+        );
+      }
+      return `SL-RESOURCE-${slRuntimeSha256(vector.input.trim())
+        .slice(0, 32)
+        .toUpperCase()}`;
+    case "resource-total-tokens": {
+      const input = slRequireObject(vector.input, "vector-input");
+      const names = ["input", "output", "cacheRead", "cacheWrite", "reasoning"];
+      let total = 0;
+      for (const name of names) {
+        const value = input[name] ?? 0;
+        if (
+          typeof value !== "number" ||
+          !Number.isSafeInteger(value) ||
+          value < 0
+        ) {
+          return slContractError(
+            "vector-input",
+            "resource-total-tokens values must be non-negative safe integers.",
+          );
+        }
+        total += value;
+      }
+      return total;
+    }
+    case "resource-cost-add": {
+      const input = slRequireObject(vector.input, "vector-input");
+      if (
+        typeof input.left !== "string" ||
+        typeof input.right !== "string" ||
+        !/^(0|[1-9][0-9]*)(\.[0-9]{1,12})?$/.test(input.left) ||
+        !/^(0|[1-9][0-9]*)(\.[0-9]{1,12})?$/.test(input.right)
+      ) {
+        return slContractError(
+          "vector-input",
+          "resource-cost-add requires decimal strings.",
+        );
+      }
+      const scaled = (value: string): bigint => {
+        const [whole, fraction = ""] = value.split(".");
+        return BigInt(`${whole}${fraction.padEnd(12, "0")}`);
+      };
+      const total = scaled(input.left) + scaled(input.right);
+      const digits = total.toString().padStart(13, "0");
+      const whole = digits.slice(0, -12);
+      const fraction = digits.slice(-12).replace(/0+$/, "");
+      return fraction ? `${whole}.${fraction}` : whole;
+    }
   }
 }

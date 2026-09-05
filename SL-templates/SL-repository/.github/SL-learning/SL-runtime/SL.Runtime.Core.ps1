@@ -128,7 +128,7 @@ function ConvertTo-SLCanonicalJson {
         return "[$($Parts -join ',')]"
     }
     if ($Value -is [pscustomobject]) {
-        $Names = [string[]] @($Value.PSObject.Properties.Name)
+        $Names = [string[]] @($Value.PSObject.Properties | ForEach-Object { $_.Name })
         [Array]::Sort($Names, [StringComparer]::Ordinal)
         $Parts = foreach ($Name in $Names) {
             "$(ConvertTo-SLJsonString -Value $Name):$(ConvertTo-SLCanonicalJson -Value $Value.$Name)"

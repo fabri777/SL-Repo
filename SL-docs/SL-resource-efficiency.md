@@ -11,6 +11,15 @@ outcome or that two unrelated tasks are comparable.
 
 ## Commands
 
+After initialization, every command below is also available without Node or a
+global CLI through:
+
+```powershell
+$sl = ".github/SL-learning/SL-runtime/SL.ps1"
+pwsh -NoLogo -NoProfile -File $sl resource stats --json
+pwsh -NoLogo -NoProfile -File $sl efficiency --json
+```
+
 Import a single input, an array, or a versioned envelope from a JSON file:
 
 ```powershell

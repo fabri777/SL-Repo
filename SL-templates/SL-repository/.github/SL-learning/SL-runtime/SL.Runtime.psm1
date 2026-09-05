@@ -1,6 +1,6 @@
 Set-StrictMode -Version Latest
 
-$script:SLRuntimeVersion = '0.2.0'
+$script:SLRuntimeVersion = '0.3.0'
 $script:SLExitCodes = @{
     Success = 0
     Usage = 2
@@ -18,6 +18,7 @@ $script:SLExitCodes = @{
 . (Join-Path $PSScriptRoot 'SL.Runtime.Syntax.ps1')
 . (Join-Path $PSScriptRoot 'SL.Runtime.State.ps1')
 . (Join-Path $PSScriptRoot 'SL.Runtime.Artifacts.ps1')
+. (Join-Path $PSScriptRoot 'SL.Runtime.Resource.ps1')
 . (Join-Path $PSScriptRoot 'SL.Runtime.Promotion.ps1')
 . (Join-Path $PSScriptRoot 'SL.Runtime.Lifecycle.ps1')
 . (Join-Path $PSScriptRoot 'SL.Runtime.Conformance.ps1')
@@ -36,7 +37,9 @@ function Get-SLRuntimeHelp {
             [pscustomobject] @{ name = 'capture'; description = 'Capture and register lesson evidence.' }
             [pscustomobject] @{ name = 'vote'; description = 'Record a verified useful/not-useful outcome.' }
             [pscustomobject] @{ name = 'use start|finish'; description = 'Record an application lifecycle.' }
-            [pscustomobject] @{ name = 'project'; description = 'Rebuild state catalogs, registries, indexes, and usage projections.' }
+            [pscustomobject] @{ name = 'resource import|record|baseline|stats'; description = 'Record and analyze provider-neutral resource receipts.' }
+            [pscustomobject] @{ name = 'efficiency'; description = 'Show advisory efficiency metrics and promotion lineage.' }
+            [pscustomobject] @{ name = 'project'; description = 'Rebuild state catalogs, registries, indexes, and usage/resource projections.' }
             [pscustomobject] @{ name = 'stats'; description = 'Read immutable usage projections.' }
             [pscustomobject] @{ name = 'promotion register|evaluate|approve|activate'; description = 'Govern promotion probation and activation.' }
             [pscustomobject] @{ name = 'validate'; description = 'Validate schemas, ownership, events, shards, projections, and runtime drift.' }
@@ -115,7 +118,12 @@ function ConvertFrom-SLArguments {
         '--task-run-id', '--application-id', '--idempotency-key',
         '--verifier-type', '--evidence-ref', '--outcome', '--aggregate',
         '--approval-ref', '--owner-approval-ref', '--target-scope', '--reason',
-        '--now'
+        '--now', '--phase', '--generation-run-id', '--comparison-id',
+        '--scenario-key', '--source', '--quality', '--provider', '--model',
+        '--input-tokens', '--output-tokens', '--cache-read-tokens',
+        '--cache-write-tokens', '--reasoning-tokens', '--wall-clock-ms',
+        '--model-ms', '--tool-ms', '--attempts', '--timestamp',
+        '--cost-amount', '--cost-currency'
     )
     $SwitchOptions = @(
         '--json', '--dry-run', '--help', '--useful', '--not-useful',
@@ -141,7 +149,7 @@ function ConvertFrom-SLArguments {
             }
             continue
         }
-        if ($Argument.StartsWith('-')) {
+        if ($Argument.StartsWith('-') -and $Argument -cne '-') {
             Throw-SLContractError -Code 'usage' -Message "Unknown option: $Argument"
         }
         $Positionals.Add($Argument)
@@ -168,6 +176,75 @@ function Get-SLApplicationScopeOption {
     $TargetPath = [string] (Get-SLFlag $Flags '--target-path' '')
     if (-not $ScopeId -and -not $TargetPath) { return $null }
     return (Resolve-SLScopeDescriptor -Root $Root -ScopeId $ScopeId -TargetPath $TargetPath).scope
+}
+
+function Get-SLIntegerOption {
+    param([hashtable] $Flags, [string] $Name, [switch] $Required, [switch] $Positive)
+
+    if (-not $Flags.ContainsKey($Name)) {
+        if ($Required) { Throw-SLContractError -Code 'usage' -Message "$Name is required." }
+        return $null
+    }
+    $Value = [string] $Flags[$Name]
+    if ($Value -cnotmatch '^(0|[1-9][0-9]*)$') {
+        Throw-SLContractError -Code 'usage' -Message "$Name must be a non-negative integer."
+    }
+    [long] $Parsed = 0
+    if (-not [long]::TryParse($Value, [ref] $Parsed) -or $Parsed -gt 9007199254740991 -or ($Positive -and $Parsed -lt 1)) {
+        Throw-SLContractError -Code 'usage' -Message "$Name must be a $(if ($Positive) { 'positive' } else { 'safe' }) integer."
+    }
+    return $Parsed
+}
+
+function New-SLResourceCliInput {
+    param([hashtable] $Flags, [object] $Scope)
+
+    $CostAmount = [string] (Get-SLFlag $Flags '--cost-amount' '')
+    $CostCurrency = [string] (Get-SLFlag $Flags '--cost-currency' '')
+    if ([bool] $CostAmount -ne [bool] $CostCurrency) {
+        Throw-SLContractError -Code 'usage' -Message '--cost-amount and --cost-currency must be supplied together.'
+    }
+    $Tokens = [ordered] @{
+        input = Get-SLIntegerOption $Flags '--input-tokens' -Required
+        output = Get-SLIntegerOption $Flags '--output-tokens' -Required
+    }
+    foreach ($Pair in @(
+        @('--cache-read-tokens', 'cacheRead'),
+        @('--cache-write-tokens', 'cacheWrite'),
+        @('--reasoning-tokens', 'reasoning')
+    )) {
+        $Value = Get-SLIntegerOption $Flags $Pair[0]
+        if ($null -ne $Value) { $Tokens[$Pair[1]] = $Value }
+    }
+    $ReceiptInput = [ordered] @{
+        idempotencyKey = [string] (Get-SLFlag $Flags '--idempotency-key' '')
+        source = [string] (Get-SLFlag $Flags '--source' 'manual')
+        quality = [string] (Get-SLFlag $Flags '--quality' 'measured')
+        provider = [string] (Get-SLFlag $Flags '--provider' '')
+        modelId = [string] (Get-SLFlag $Flags '--model' '')
+        tokens = [pscustomobject] $Tokens
+        wallClockDurationMs = Get-SLIntegerOption $Flags '--wall-clock-ms' -Required -Positive
+        timestamp = Get-SLNormalizedTimestamp ([string] (Get-SLFlag $Flags '--timestamp' ''))
+        scope = $Scope
+    }
+    foreach ($Pair in @(
+        @('--model-ms', 'modelDurationMs'),
+        @('--tool-ms', 'toolDurationMs'),
+        @('--attempts', 'attemptCount')
+    )) {
+        $Value = Get-SLIntegerOption $Flags $Pair[0] -Positive:($Pair[0] -ceq '--attempts')
+        if ($null -ne $Value) { $ReceiptInput[$Pair[1]] = $Value }
+    }
+    $Evidence = [string] (Get-SLFlag $Flags '--evidence-ref' '')
+    if ($Evidence) { $ReceiptInput['evidenceRef'] = $Evidence }
+    if ($CostAmount) {
+        $ReceiptInput['reportedCost'] = [pscustomobject] @{
+            amount = $CostAmount
+            currency = $CostCurrency.ToUpperInvariant()
+            basis = 'host-reported'
+        }
+    }
+    return [pscustomobject] $ReceiptInput
 }
 
 function Invoke-SLRuntimeCommand {
@@ -204,7 +281,7 @@ function Invoke-SLRuntimeCommand {
             elseif ($Positionals.Count -gt 0) { $Positionals[0] } else { $null }
             break
         }
-        { $_ -cin @('vote', 'use-start', 'use-finish', 'evaluate', 'promotion-evaluate', 'promotion-approve', 'promotion-activate', 'forget', 'undo') } {
+        { $_ -cin @('vote', 'use-start', 'use-finish', 'evaluate', 'promotion-evaluate', 'promotion-approve', 'promotion-activate', 'forget', 'undo', 'resource-record') } {
             if ($Positionals.Count -gt 1) { $Positionals[1] } else { $null }
             break
         }
@@ -212,7 +289,15 @@ function Invoke-SLRuntimeCommand {
             if ($Positionals.Count -gt 2) { $Positionals[2] } else { $null }
             break
         }
-        { $_ -cin @('stats', 'usage') } {
+        'resource-import' {
+            if ($Positionals.Count -gt 1) { $Positionals[1] } else { $null }
+            break
+        }
+        'resource-baseline' {
+            if ($Positionals.Count -gt 0) { $Positionals[0] } else { $null }
+            break
+        }
+        { $_ -cin @('resource-stats', 'efficiency') } {
             if ($Positionals.Count -gt 0 -and $Positionals[0].StartsWith('SL-')) {
                 if ($Positionals.Count -gt 1) { $Positionals[1] } else { $null }
             }
@@ -318,9 +403,81 @@ function Invoke-SLRuntimeCommand {
             $Result = Finish-SLUsage -Root $Root -Reference $Positionals[0] -Outcome $Outcome -Verified:([bool] (Get-SLFlag $Flags '--verified' $false)) -VerifierType ([string] (Get-SLFlag $Flags '--verifier-type' '')) -EvidenceRef ([string] (Get-SLFlag $Flags '--evidence-ref' '')) -IdempotencyKey ([string] (Get-SLFlag $Flags '--idempotency-key' '')) -Now ([string] (Get-SLFlag $Flags '--now' '')) -DryRun:$DryRun
             Write-SLRuntimeOutput $Result -Json:$Json
         }
+        'resource-import' {
+            if ($Positionals.Count -lt 1) { Throw-SLContractError -Code 'usage' -Message 'resource import requires a JSON input path or -.' }
+            $InputText = if ($Positionals[0] -ceq '-') {
+                [Console]::In.ReadToEnd()
+            } else {
+                $InputPath = [IO.Path]::GetFullPath([string] $Positionals[0], (Get-Location).Path)
+                [IO.File]::ReadAllText($InputPath, [Text.UTF8Encoding]::new($false, $true))
+            }
+            if ($InputText.Length -gt 1048576) { Throw-SLContractError -Code 'resource-input' -Message 'Resource input must not exceed 1 MiB.' }
+            try {
+                $InputValue = if ((Get-Command ConvertFrom-Json).Parameters.ContainsKey('DateKind')) {
+                    ConvertFrom-Json $InputText -Depth 100 -DateKind String
+                } else { ConvertFrom-Json $InputText -Depth 100 }
+            } catch { Throw-SLContractError -Code 'resource-input' -Message 'Resource input must be valid JSON.' }
+            $Inputs = @(ConvertFrom-SLResourceInput $InputValue)
+            Write-SLRuntimeOutput (Import-SLResourceReceipts -Root $Root -Inputs $Inputs -DryRun:$DryRun) -Json:$Json
+        }
+        'resource-record' {
+            if ($Positionals.Count -lt 1) { Throw-SLContractError -Code 'usage' -Message 'resource record requires an artifact ID.' }
+            $ArtifactId = [string] $Positionals[0]
+            $Phase = [string] (Get-SLFlag $Flags '--phase' '')
+            if ($Phase -cnotin @('generation', 'application')) { Throw-SLContractError -Code 'usage' -Message '--phase must be generation or application.' }
+            $ComparisonId = [string] (Get-SLFlag $Flags '--comparison-id' '')
+            $ScenarioKey = [string] (Get-SLFlag $Flags '--scenario-key' '')
+            if ([bool] $ComparisonId -ne [bool] $ScenarioKey) { Throw-SLContractError -Code 'usage' -Message '--comparison-id and --scenario-key must be supplied together.' }
+            if ($Phase -ceq 'generation') {
+                $GenerationRunId = [string] (Get-SLFlag $Flags '--generation-run-id' '')
+                if (-not $GenerationRunId) { Throw-SLContractError -Code 'usage' -Message '--generation-run-id is required for generation receipts.' }
+                if ((Get-SLFlag $Flags '--application-id' '') -or $ComparisonId) { Throw-SLContractError -Code 'usage' -Message 'Generation receipts do not accept application or comparison options.' }
+                $Registry = Get-SLRegistry $Root
+                $Artifact = Find-SLArtifact $Registry $ArtifactId
+                if (-not $Artifact.path) { Throw-SLContractError -Code 'resource-correlation' -Message "Generation resource receipt artifact has no active path: $ArtifactId." }
+                $Hash = Get-SLArtifactUsageContentHash (Read-SLSafeText -Root $Root -RelativePath ([string] $Artifact.path))
+                $ReceiptInput = New-SLResourceCliInput $Flags (Normalize-SLScope $Artifact.scope)
+                Set-SLProperty $ReceiptInput 'phase' 'generation'; Set-SLProperty $ReceiptInput 'artifactId' $ArtifactId
+                Set-SLProperty $ReceiptInput 'artifactContentHash' $Hash; Set-SLProperty $ReceiptInput 'generationRunId' $GenerationRunId
+            } else {
+                if (Get-SLFlag $Flags '--generation-run-id' '') { Throw-SLContractError -Code 'usage' -Message 'Application receipts do not accept --generation-run-id.' }
+                $ApplicationId = [string] (Get-SLFlag $Flags '--application-id' '')
+                if (-not $ApplicationId) { Throw-SLContractError -Code 'usage' -Message '--application-id is required for application receipts.' }
+                $Events = @(Get-SLUsageEvents $Root | Where-Object { $_.eventType -ceq 'usage' -and $_.applicationId -ceq $ApplicationId })
+                if ($Events.Count -eq 0) { Throw-SLContractError -Code 'resource-correlation' -Message "Application resource receipt has no usage lifecycle: $ApplicationId" }
+                $First = $Events[0]
+                if ($First.artifactId -cne $ArtifactId) { Throw-SLContractError -Code 'resource-correlation' -Message "Application $ApplicationId belongs to $($First.artifactId), not $ArtifactId." }
+                $ReceiptInput = New-SLResourceCliInput $Flags (Normalize-SLScope $First.scope)
+                Set-SLProperty $ReceiptInput 'phase' 'application'; Set-SLProperty $ReceiptInput 'artifactId' $ArtifactId
+                Set-SLProperty $ReceiptInput 'artifactContentHash' $First.artifactContentHash
+                Set-SLProperty $ReceiptInput 'taskRunId' $First.taskRunId; Set-SLProperty $ReceiptInput 'applicationId' $ApplicationId
+                if ($ComparisonId) { Set-SLProperty $ReceiptInput 'comparison' ([pscustomobject] @{ comparisonId=$ComparisonId; scenarioKey=$ScenarioKey; role='treatment' }) }
+            }
+            Write-SLRuntimeOutput (Import-SLResourceReceipts -Root $Root -Inputs @($ReceiptInput) -DryRun:$DryRun) -Json:$Json
+        }
+        'resource-baseline' {
+            $TaskRunId = [string] (Get-SLFlag $Flags '--task-run-id' '')
+            $ComparisonId = [string] (Get-SLFlag $Flags '--comparison-id' '')
+            $ScenarioKey = [string] (Get-SLFlag $Flags '--scenario-key' '')
+            if (-not $TaskRunId -or -not $ComparisonId -or -not $ScenarioKey) { Throw-SLContractError -Code 'usage' -Message 'resource baseline requires --task-run-id, --comparison-id, and --scenario-key.' }
+            $Scope = Get-SLApplicationScopeOption $Root $Flags
+            if ($null -eq $Scope) { $Scope = (Resolve-SLScopeDescriptor -Root $Root -TargetPath '.').scope }
+            $ReceiptInput = New-SLResourceCliInput $Flags $Scope
+            Set-SLProperty $ReceiptInput 'phase' 'baseline'; Set-SLProperty $ReceiptInput 'taskRunId' $TaskRunId
+            Set-SLProperty $ReceiptInput 'comparison' ([pscustomobject] @{ comparisonId=$ComparisonId; scenarioKey=$ScenarioKey; role='baseline' })
+            Write-SLRuntimeOutput (Import-SLResourceReceipts -Root $Root -Inputs @($ReceiptInput) -DryRun:$DryRun) -Json:$Json
+        }
+        { $_ -cin @('resource-stats', 'efficiency') } {
+            $ArtifactId = if ($Positionals.Count -gt 0 -and $Positionals[0].StartsWith('SL-')) { [string] $Positionals[0] } else { $null }
+            $Report = Get-SLEfficiencyReport -Root $Root -ArtifactId $ArtifactId -ScopeId ([string] (Get-SLFlag $Flags '--scope' '')) -Provider ([string] (Get-SLFlag $Flags '--provider' '')) -ModelId ([string] (Get-SLFlag $Flags '--model' '')) -Quality ([string] (Get-SLFlag $Flags '--quality' ''))
+            if ($Json) { [Console]::Out.WriteLine((ConvertTo-Json $Report -Depth 100 -Compress)) } else { Write-SLRuntimeOutput $Report }
+        }
         { $_ -cin @('project', 'index') } {
             $Changes = [System.Collections.Generic.List[object]]::new()
-            [void] (Invoke-SLWithMutationLock -Root $Root -DryRun:$DryRun -Operation { Sync-SLProjection -Root $Root -DryRun:$DryRun -Changes $Changes })
+            [void] (Invoke-SLWithMutationLock -Root $Root -DryRun:$DryRun -Operation {
+                [void] (Sync-SLProjection -Root $Root -DryRun:$DryRun -Changes $Changes)
+                Sync-SLResourceProjection -Root $Root -DryRun:$DryRun -Changes $Changes
+            })
             Write-SLRuntimeOutput ([pscustomobject] @{ changes = $Changes.ToArray() }) -Json:$Json
         }
         { $_ -cin @('stats', 'usage') } {
@@ -459,6 +616,12 @@ function Invoke-SLRuntime {
             $Subcommand = [string] $Positionals[0]
             $Positionals.RemoveAt(0)
             $Command = "use-$Subcommand"
+        }
+        elseif ($Command -ceq 'resource') {
+            if ($Positionals.Count -eq 0) { Throw-SLContractError -Code 'usage' -Message 'resource requires import, record, baseline, or stats.' }
+            $Subcommand = [string] $Positionals[0]
+            $Positionals.RemoveAt(0)
+            $Command = "resource-$Subcommand"
         }
         elseif ($Command -ceq 'promotion') {
             if ($Positionals.Count -eq 0) { Throw-SLContractError -Code 'usage' -Message 'promotion requires register, evaluate, approve, or activate.' }

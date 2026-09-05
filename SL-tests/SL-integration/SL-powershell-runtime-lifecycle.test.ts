@@ -11,6 +11,7 @@ import {
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import { slInstall } from "../../SL-src/SL-core/SL-installer.js";
+import { slCalculateEfficiencyReport } from "../../SL-src/SL-core/SL-efficiency.js";
 import {
   slCreateTestRepository,
   slRemoveTestRepository,
@@ -613,6 +614,154 @@ describe("repository-local PowerShell lifecycle", () => {
           jsonOutput(runRuntime(root, ["validate"])) as { valid: boolean }
         ).valid,
       ).toBe(true);
+    },
+    SUITE_TEST_TIMEOUT_MS,
+  );
+
+  test(
+    "records, imports, projects, and reports resource efficiency without Node",
+    async () => {
+      const root = await createPowerShellRepository();
+      const lesson = jsonOutput(
+        runRuntime(root, [
+          "capture", "--title", "Resource runtime evidence",
+          "--trigger", "resource-runtime", "--now", FIXED_DATE,
+        ]),
+      ) as { id: string };
+      jsonOutput(
+        runRuntime(root, [
+          "resource", "record", lesson.id, "--phase", "generation",
+          "--generation-run-id", "generation-1",
+          "--idempotency-key", "resource-generation-1",
+          "--source", "host", "--quality", "measured",
+          "--provider", "provider-a", "--model", "model-a",
+          "--input-tokens", "1000", "--output-tokens", "0",
+          "--wall-clock-ms", "10000", "--timestamp", FIXED_DATE,
+        ]),
+      );
+      const usage = jsonOutput(
+        runRuntime(root, [
+          "use", "start", lesson.id, "--application-id", "resource-app-1",
+          "--task-run-id", "resource-task-1", "--idempotency-key", "resource-use-start",
+          "--now", "2026-09-05T10:00:00.000Z",
+        ]),
+      ) as { receiptId: string };
+      jsonOutput(
+        runRuntime(root, [
+          "use", "finish", usage.receiptId, "--outcome", "success", "--verified",
+          "--verifier-type", "test-suite", "--evidence-ref", "run:resource",
+          "--idempotency-key", "resource-use-finish", "--now", "2026-09-05T10:01:00.000Z",
+        ]),
+      );
+      jsonOutput(
+        runRuntime(root, [
+          "resource", "record", lesson.id, "--phase", "application",
+          "--application-id", "resource-app-1", "--comparison-id", "comparison-1",
+          "--scenario-key", "scenario-1", "--idempotency-key", "resource-application-1",
+          "--provider", "provider-a", "--model", "model-a",
+          "--input-tokens", "100", "--output-tokens", "0",
+          "--wall-clock-ms", "1000", "--timestamp", "2026-09-05T10:02:00.000Z",
+        ]),
+      );
+      jsonOutput(
+        runRuntime(root, [
+          "resource", "baseline", "--task-run-id", "baseline-task-1",
+          "--comparison-id", "comparison-1", "--scenario-key", "scenario-1",
+          "--idempotency-key", "resource-baseline-1", "--source", "manual",
+          "--quality", "measured", "--provider", "provider-b", "--model", "model-b",
+          "--input-tokens", "220", "--output-tokens", "0",
+          "--wall-clock-ms", "1500", "--timestamp", "2026-09-05T08:00:00.000Z",
+        ]),
+      );
+      const importPath = join(root, "resource-input.json");
+      await writeFile(importPath, `${JSON.stringify({
+        schemaVersion: 1,
+        receipts: [{
+          idempotencyKey: "resource-baseline-2",
+          phase: "baseline",
+          source: "manual",
+          quality: "measured",
+          provider: "provider-b",
+          modelId: "model-b",
+          tokens: { input: 220, output: 0 },
+          wallClockDurationMs: 1500,
+          timestamp: "2026-09-05T08:01:00.000Z",
+          taskRunId: "baseline-task-2",
+          comparison: {
+            comparisonId: "comparison-2",
+            scenarioKey: "scenario-2",
+            role: "baseline",
+          },
+        }],
+      }, null, 2)}\n`, "utf8");
+      const beforeImport = await repositorySnapshot(root);
+      const plannedImport = jsonOutput(
+        runRuntime(root, ["resource", "import", importPath, "--dry-run"]),
+      ) as { changes: Array<{ detail: string }> };
+      expect(plannedImport.changes.some((change) => change.detail === "planned")).toBe(
+        true,
+      );
+      expect(await repositorySnapshot(root)).toEqual(beforeImport);
+      jsonOutput(runRuntime(root, ["resource", "import", importPath]));
+      const resourceReport = jsonOutput(
+        runRuntime(root, ["resource", "stats", lesson.id]),
+      ) as { advisory: boolean };
+      expect(resourceReport.advisory).toBe(true);
+      const report = jsonOutput(
+        runRuntime(root, ["efficiency", lesson.id]),
+      ) as {
+        advisory: boolean;
+        segments: Array<{
+          generation: { amortizedPerVerifiedSuccess: { inputTokens: number } };
+          pairedBaseline: { medianSavings: { inputTokens: number } };
+        }>;
+      };
+      expect(report.advisory).toBe(true);
+      expect(report.segments[0]?.generation.amortizedPerVerifiedSuccess.inputTokens).toBe(1000);
+      expect(report.segments[0]?.pairedBaseline.medianSavings.inputTokens).toBe(120);
+      expect(report).toEqual(
+        await slCalculateEfficiencyReport(root, { artifactId: lesson.id }),
+      );
+      jsonOutput(runRuntime(root, ["project"]));
+      expect(
+        (jsonOutput(runRuntime(root, ["validate"])) as { valid: boolean }).valid,
+      ).toBe(true);
+    },
+    SUITE_TEST_TIMEOUT_MS,
+  );
+
+  test(
+    "rejects unsafe or unsupported PowerShell resource inputs",
+    async () => {
+      const root = await createPowerShellRepository();
+      const inputPath = join(root, "unsafe-resource.json");
+      await writeFile(
+        inputPath,
+        `${JSON.stringify({
+          idempotencyKey: "unsafe-resource",
+          phase: "baseline",
+          source: "manual",
+          quality: "estimated",
+          provider: "owner@example.com",
+          modelId: "model-a",
+          tokens: { input: 1, output: 1 },
+          wallClockDurationMs: 1,
+          timestamp: FIXED_DATE,
+          taskRunId: "baseline-task",
+          comparison: {
+            comparisonId: "comparison",
+            scenarioKey: "scenario",
+            role: "baseline",
+          },
+          sourcePayload: "must-not-be-persisted",
+        })}\n`,
+        "utf8",
+      );
+
+      const result = runRuntime(root, ["resource", "import", inputPath]);
+
+      expect(result.status).not.toBe(0);
+      expect(String(result.stderr)).toContain("unsupported fields");
     },
     SUITE_TEST_TIMEOUT_MS,
   );
