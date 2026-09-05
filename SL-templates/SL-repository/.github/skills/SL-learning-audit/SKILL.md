@@ -5,5 +5,11 @@ description: Validate and review stale, contradictory, unsafe, or deletion-eligi
 
 # SL learning audit
 
-Run `sl-repo validate` and `sl-repo sweep --dry-run`. Never bypass ownership,
-pinning, dependency, or quarantine checks.
+Run:
+
+```powershell
+pwsh .github/SL-learning/SL-runtime/SL.ps1 validate .
+pwsh .github/SL-learning/SL-runtime/SL.ps1 sweep . --dry-run
+```
+
+Never bypass ownership, pinning, dependency, or quarantine checks.

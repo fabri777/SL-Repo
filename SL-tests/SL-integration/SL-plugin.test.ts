@@ -328,7 +328,6 @@ describe("SL plugin package", () => {
       ].flatMap((step) => (step.uses === undefined ? [] : [step.uses])),
     ).toEqual([
       CHECKOUT_ACTION,
-      SETUP_NODE_ACTION,
       UPLOAD_ARTIFACT_ACTION,
       CHECKOUT_ACTION,
       DOWNLOAD_ARTIFACT_ACTION,
@@ -376,9 +375,7 @@ describe("SL plugin package", () => {
     ]);
   });
 
-  test("pins Azure Pipelines adapters to the reviewed runtime without embedded credentials", async () => {
-    const runtimeCommit =
-      "3c6bb31d1f717595791e9a575d698b5593cbcf10";
+  test("uses the committed local runtime in Azure Pipelines without embedded credentials", async () => {
     const templatePaths = [
       "SL-templates/SL-repository/.azure-pipelines/SL-learning/SL-validation.yml",
       "SL-templates/SL-repository/.azure-pipelines/SL-learning/SL-retention.yml",
@@ -390,12 +387,17 @@ describe("SL plugin package", () => {
         parameters: Array<{ name: string }>;
         jobs: Array<{ steps: Array<Record<string, unknown>> }>;
       };
-      expect(content).toContain(runtimeCommit);
+      expect(content).toContain(
+        ".github/SL-learning/SL-runtime/SL.ps1",
+      );
       expect(content).not.toMatch(/\b(?:pat|password|token)\s*:/i);
       expect(content).not.toMatch(
         /(?:dev\.azure\.com|github\.com)\/[A-Za-z0-9_.-]+/i,
       );
       expect(findFloatingRuntimeRefs(content)).toEqual([]);
+      expect(content).not.toMatch(
+        /\b(?:UseNode|npm|node\s+\$runtime|runtimeRepository|SL-tool)\b/,
+      );
       expect(
         template.parameters.some(
           (parameter) => parameter.name === "runtimeCommit",

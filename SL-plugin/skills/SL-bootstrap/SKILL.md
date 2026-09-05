@@ -5,6 +5,7 @@ description: Bootstrap, update, diagnose, or install the Self Learning repositor
 
 # SL bootstrap
 
-Run the `sl-repo` CLI in dry-run mode, review the managed changes, apply them,
-then run `doctor` and `validate`. Preserve all content outside the SL managed
-block.
+Run the `sl-repo` CLI in dry-run mode for first installation or managed
+updates. Review and apply the managed changes, then run `doctor` and `validate`
+through `.github/SL-learning/SL-runtime/SL.ps1`. Preserve all content outside
+the SL managed block.
