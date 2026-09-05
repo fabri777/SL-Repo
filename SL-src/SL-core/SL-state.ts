@@ -154,9 +154,10 @@ export async function slWriteStateCatalog(
   scopes: Iterable<SLScopeDescriptor>,
   dryRun: boolean,
   changes: SLChange[],
+  writeJson: typeof slWriteJson = slWriteJson,
 ): Promise<SLStateCatalog> {
   const catalog = slBuildStateCatalog(scopes);
-  await slWriteJson(
+  await writeJson(
     root,
     SL_PATHS.stateCatalog,
     catalog,

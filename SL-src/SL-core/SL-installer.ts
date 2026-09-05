@@ -1,7 +1,16 @@
 import fg from "fast-glob";
-import { createHash } from "node:crypto";
-import { chmod, readFile, rm } from "node:fs/promises";
-import { resolve } from "node:path";
+import { createHash, randomUUID } from "node:crypto";
+import {
+  chmod as fsChmod,
+  mkdir,
+  open,
+  readFile,
+  rename,
+  rm,
+  rmdir,
+  stat,
+} from "node:fs/promises";
+import { dirname, resolve } from "node:path";
 import {
   SL_MANAGED_BLOCK_END,
   SL_MANAGED_BLOCK_START,
@@ -16,23 +25,223 @@ import {
   slSaveRegistry,
   slUpsertArtifact,
 } from "./SL-registry.js";
-import type { SLChange, SLRegistryArtifact } from "./SL-types.js";
+import type {
+  SLChange,
+  SLRegistryArtifact,
+  SLRuntimeManifest,
+} from "./SL-types.js";
 import { SL_DEFAULT_SCOPE } from "./SL-state.js";
 import {
+  slAssertRealPathInside,
   slExists,
   slCompareOrdinal,
   slNormalizePath,
   slReadText,
   slResolveInside,
   slSlugify,
+  slWriteJson,
   slWriteText,
 } from "./SL-utils.js";
 import { slWriteIndex } from "../SL-index/SL-index.js";
-import type { SLRuntimeManifest } from "./SL-types.js";
+import { slSynchronizeResourceProjectionUnlocked } from "./SL-resource.js";
 import {
   slLoadRuntimeManifest,
   slVerifyRuntimeDirectory,
 } from "../SL-runtime/SL-runtime-validation.js";
+
+export interface SLInstallerFileOperations {
+  writeText: typeof slWriteText;
+  remove: (path: string) => Promise<void>;
+  chmod: (path: string, mode: number) => Promise<void>;
+}
+
+interface SLInstallFileSnapshot {
+  content?: Buffer;
+  mode?: number;
+}
+
+const SL_DEFAULT_INSTALLER_FILE_OPERATIONS: SLInstallerFileOperations = {
+  writeText: slWriteText,
+  remove: async (path) => rm(path),
+  chmod: fsChmod,
+};
+
+class SLInstallTransaction {
+  readonly writeText: typeof slWriteText;
+  readonly writeJson: typeof slWriteJson;
+  private readonly snapshots = new Map<string, SLInstallFileSnapshot>();
+  private readonly absentDirectories = new Set<string>();
+
+  constructor(
+    private readonly root: string,
+    private readonly dryRun: boolean,
+    private readonly fileOperations: SLInstallerFileOperations,
+  ) {
+    this.writeText = async (
+      root,
+      relativePath,
+      content,
+      dryRun,
+      changes,
+    ) => {
+      await this.snapshot(relativePath);
+      await this.fileOperations.writeText(
+        root,
+        relativePath,
+        content,
+        dryRun,
+        changes,
+      );
+    };
+    this.writeJson = async (
+      root,
+      relativePath,
+      value,
+      dryRun,
+      changes,
+    ) => {
+      await this.writeText(
+        root,
+        relativePath,
+        `${JSON.stringify(value, null, 2)}\n`,
+        dryRun,
+        changes,
+      );
+    };
+  }
+
+  async prepare(): Promise<void> {
+    if (!this.dryRun) {
+      await this.recordAbsentDirectories(
+        slResolveInside(this.root, SL_PATHS.learningRoot),
+      );
+    }
+  }
+
+  async remove(relativePath: string): Promise<void> {
+    await this.snapshot(relativePath);
+    if (!this.dryRun) {
+      await this.fileOperations.remove(
+        slResolveInside(this.root, relativePath),
+      );
+    }
+  }
+
+  async chmod(relativePath: string, mode: number): Promise<void> {
+    await this.snapshot(relativePath);
+    if (!this.dryRun) {
+      await this.fileOperations.chmod(
+        slResolveInside(this.root, relativePath),
+        mode,
+      );
+    }
+  }
+
+  async rollback(): Promise<void> {
+    const rollbackErrors: unknown[] = [];
+    for (const [relativePath, snapshot] of [
+      ...this.snapshots.entries(),
+    ].reverse()) {
+      try {
+        const absolutePath = slResolveInside(this.root, relativePath);
+        if (snapshot.content === undefined) {
+          await rm(absolutePath, { force: true });
+        } else {
+          await this.restoreFile(
+            absolutePath,
+            snapshot.content,
+            snapshot.mode,
+          );
+        }
+      } catch (error) {
+        rollbackErrors.push(error);
+      }
+    }
+    for (const directory of [...this.absentDirectories].sort(
+      (left, right) => right.length - left.length,
+    )) {
+      try {
+        await rmdir(directory);
+      } catch (error) {
+        if (
+          !["ENOENT", "ENOTEMPTY", "EEXIST"].includes(
+            (error as NodeJS.ErrnoException).code ?? "",
+          )
+        ) {
+          rollbackErrors.push(error);
+        }
+      }
+    }
+    if (rollbackErrors.length > 0) {
+      throw new AggregateError(
+        rollbackErrors,
+        "SL installation rollback could not restore every affected path.",
+      );
+    }
+  }
+
+  private async snapshot(relativePath: string): Promise<void> {
+    if (this.dryRun || this.snapshots.has(relativePath)) {
+      return;
+    }
+    await slAssertRealPathInside(this.root, relativePath);
+    const absolutePath = slResolveInside(this.root, relativePath);
+    await this.recordAbsentDirectories(dirname(absolutePath));
+    if (!(await slExists(absolutePath))) {
+      this.snapshots.set(relativePath, {});
+      return;
+    }
+    const fileStat = await stat(absolutePath);
+    if (!fileStat.isFile()) {
+      throw new Error(`Installer target is not a file: ${relativePath}`);
+    }
+    this.snapshots.set(relativePath, {
+      content: await readFile(absolutePath),
+      mode: fileStat.mode,
+    });
+  }
+
+  private async recordAbsentDirectories(
+    absoluteDirectory: string,
+  ): Promise<void> {
+    const absoluteRoot = resolve(this.root);
+    let directory = absoluteDirectory;
+    while (
+      directory !== absoluteRoot &&
+      !(await slExists(directory))
+    ) {
+      this.absentDirectories.add(directory);
+      directory = dirname(directory);
+    }
+  }
+
+  private async restoreFile(
+    absolutePath: string,
+    content: Buffer,
+    mode?: number,
+  ): Promise<void> {
+    await mkdir(dirname(absolutePath), { recursive: true });
+    const temporaryPath =
+      `${absolutePath}.SL-rollback-${randomUUID()}`;
+    let handle: Awaited<ReturnType<typeof open>> | undefined;
+    try {
+      handle = await open(temporaryPath, "wx");
+      await handle.writeFile(content);
+      await handle.close();
+      handle = undefined;
+      if (mode !== undefined) {
+        await fsChmod(temporaryPath, mode & 0o777);
+      }
+      await rename(temporaryPath, absolutePath);
+    } catch (error) {
+      if (handle) {
+        await handle.close().catch(() => undefined);
+      }
+      await rm(temporaryPath, { force: true }).catch(() => undefined);
+      throw error;
+    }
+  }
+}
 
 function slRuntimeTargetPath(relativePath: string): string {
   return `${SL_PATHS.runtimeRoot}/${relativePath}`;
@@ -44,6 +253,7 @@ async function slInstallRuntime(
   mode: "init" | "update",
   dryRun: boolean,
   changes: SLChange[],
+  transaction: SLInstallTransaction,
 ): Promise<{
   managedPaths: Set<string>;
   changedPaths: Set<string>;
@@ -127,7 +337,7 @@ async function slInstallRuntime(
   for (const file of sourceManifest.files) {
     const targetPath = slRuntimeTargetPath(file.path);
     const changeCount = changes.length;
-    await slWriteText(
+    await transaction.writeText(
       root,
       targetPath,
       await slReadText(resolve(templateRuntimeRoot, file.path)),
@@ -147,7 +357,7 @@ async function slInstallRuntime(
       file.path === SL_RUNTIME_BASH_LAUNCHER &&
       process.platform !== "win32"
     ) {
-      await chmod(slResolveInside(root, targetPath), 0o755);
+      await transaction.chmod(targetPath, 0o755);
     }
   }
 
@@ -164,7 +374,7 @@ async function slInstallRuntime(
         detail: dryRun ? "obsolete managed runtime file planned" : "obsolete managed runtime file removed",
       });
       if (!dryRun) {
-        await rm(slResolveInside(root, targetPath));
+        await transaction.remove(targetPath);
       }
       changedPaths.add(targetPath);
       removedPaths.add(targetPath);
@@ -173,7 +383,7 @@ async function slInstallRuntime(
 
   const manifestTargetPath = slRuntimeTargetPath(SL_RUNTIME_MANIFEST_FILE);
   const manifestChangeCount = changes.length;
-  await slWriteText(
+  await transaction.writeText(
     root,
     manifestTargetPath,
     await readFile(
@@ -216,20 +426,46 @@ export async function slInstall(
   root: string,
   mode: "init" | "update",
   dryRun: boolean,
+  fileOperations: Partial<SLInstallerFileOperations> = {},
 ): Promise<SLChange[]> {
   if (!(await slExists(resolve(root, ".git")))) {
     throw new Error(`Target is not a Git repository: ${root}`);
   }
-  return slWithRepositoryMutationLock(root, () =>
-    slInstallUnlocked(root, mode, dryRun),
-    { dryRun },
-  );
+  const transaction = new SLInstallTransaction(root, dryRun, {
+    ...SL_DEFAULT_INSTALLER_FILE_OPERATIONS,
+    ...fileOperations,
+  });
+  await transaction.prepare();
+  let operationStarted = false;
+  try {
+    return await slWithRepositoryMutationLock(
+      root,
+      () => {
+        operationStarted = true;
+        return slInstallUnlocked(root, mode, dryRun, transaction);
+      },
+      { dryRun },
+    );
+  } catch (error) {
+    if (operationStarted && !dryRun) {
+      try {
+        await transaction.rollback();
+      } catch (rollbackError) {
+        throw new AggregateError(
+          [error, rollbackError],
+          "SL installation failed and rollback was incomplete.",
+        );
+      }
+    }
+    throw error;
+  }
 }
 
 async function slInstallUnlocked(
   root: string,
   mode: "init" | "update",
   dryRun: boolean,
+  transaction: SLInstallTransaction,
 ): Promise<SLChange[]> {
   const packageRoot = await slFindPackageRoot(import.meta.url);
   const templateRoot = resolve(packageRoot, "SL-templates/SL-repository");
@@ -263,6 +499,7 @@ async function slInstallUnlocked(
     mode,
     dryRun,
     changes,
+    transaction,
   );
   for (const path of runtime.managedPaths) {
     managedTemplatePaths.add(path);
@@ -311,7 +548,7 @@ async function slInstallUnlocked(
     }
     const content = await slReadText(resolve(templateRoot, templatePathValue));
     const changeCount = changes.length;
-    await slWriteText(root, targetPath, content, dryRun, changes);
+    await transaction.writeText(root, targetPath, content, dryRun, changes);
     managedTemplatePaths.add(targetPath);
     if (
       changes
@@ -342,7 +579,7 @@ async function slInstallUnlocked(
     }
     const content = await slReadText(resolve(schemaRoot, schemaFile));
     const changeCount = changes.length;
-    await slWriteText(root, targetPath, content, dryRun, changes);
+    await transaction.writeText(root, targetPath, content, dryRun, changes);
     managedTemplatePaths.add(targetPath);
     if (
       changes
@@ -362,7 +599,7 @@ async function slInstallUnlocked(
     const existingInstructions = (await slExists(instructionsAbsolutePath))
       ? await slReadText(instructionsAbsolutePath)
       : "";
-    await slWriteText(
+    await transaction.writeText(
       root,
       instructionsPath,
       slMergeManagedBlock(existingInstructions, block),
@@ -436,7 +673,27 @@ async function slInstallUnlocked(
     );
     slUpsertArtifact(registry, artifact);
   }
-  await slSaveRegistry(root, registry, dryRun, changes);
-  await slWriteIndex(root, registry, dryRun, changes);
+  await slSaveRegistry(
+    root,
+    registry,
+    dryRun,
+    changes,
+    transaction.writeJson,
+  );
+  await slWriteIndex(
+    root,
+    registry,
+    dryRun,
+    changes,
+    undefined,
+    transaction.writeJson,
+  );
+  await slSynchronizeResourceProjectionUnlocked(
+    root,
+    dryRun,
+    changes,
+    undefined,
+    transaction.writeJson,
+  );
   return changes;
 }

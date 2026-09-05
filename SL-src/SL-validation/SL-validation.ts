@@ -948,9 +948,6 @@ export async function slValidateRepository(root: string): Promise<SLValidationIs
     }
   }
 
-  const resourceReceiptIds = new Map<string, string>();
-  const resourceIdempotencyKeys = new Map<string, string>();
-  const resourceApplications = new Map<string, string>();
   let resourceFiles: string[] = [];
   try {
     await slAssertRealPathInside(root, SL_PATHS.learningRoot);
@@ -973,7 +970,6 @@ export async function slValidateRepository(root: string): Promise<SLValidationIs
       message: error instanceof Error ? error.message : String(error),
     });
   }
-  const resourceReceipts: SLResourceReceipt[] = [];
   for (const resourceFileValue of resourceFiles.sort(slCompareOrdinal)) {
     const resourceFile = slNormalizePath(resourceFileValue);
     if (!resourceFile.endsWith(".json")) {
@@ -1040,42 +1036,7 @@ export async function slValidateRepository(root: string): Promise<SLValidationIs
           "Resource receipt path does not match its timestamp and identity.",
       });
     }
-    const duplicateIdPath = resourceReceiptIds.get(receipt.receiptId);
-    if (duplicateIdPath) {
-      issues.push({
-        severity: "error",
-        code: "resource-receipt-duplicate-id",
-        path: resourceFile,
-        message: `Resource receipt ID is already present at ${duplicateIdPath}.`,
-      });
-    } else {
-      resourceReceiptIds.set(receipt.receiptId, resourceFile);
-    }
-    const duplicateKeyPath = resourceIdempotencyKeys.get(
-      receipt.idempotencyKey,
-    );
-    if (duplicateKeyPath && duplicateKeyPath !== resourceFile) {
-      issues.push({
-        severity: "error",
-        code: "resource-receipt-duplicate-idempotency",
-        path: resourceFile,
-        message: `Resource idempotency key is already present at ${duplicateKeyPath}.`,
-      });
-    } else {
-      resourceIdempotencyKeys.set(receipt.idempotencyKey, resourceFile);
-    }
     if (receipt.phase === "application") {
-      const priorApplication = resourceApplications.get(receipt.applicationId);
-      if (priorApplication) {
-        issues.push({
-          severity: "error",
-          code: "resource-receipt-duplicate-application",
-          path: resourceFile,
-          message: `Application resource receipt is already present at ${priorApplication}.`,
-        });
-      } else {
-        resourceApplications.set(receipt.applicationId, resourceFile);
-      }
       const usageApplication = applications.get(receipt.applicationId);
       if (
         !usageApplication ||
@@ -1114,18 +1075,11 @@ export async function slValidateRepository(root: string): Promise<SLValidationIs
           "Generation resource receipt references an unknown artifact or owning scope.",
       });
     }
-    resourceReceipts.push(receipt);
   }
 
+  let canonicalResourceReceipts: SLResourceReceipt[] | undefined;
   try {
-    const loadedResourceReceipts = await slLoadResourceReceipts(root);
-    if (loadedResourceReceipts.length !== resourceReceipts.length) {
-      issues.push({
-        severity: "error",
-        code: "resource-receipt-load",
-        message: "Resource receipt inventory could not be loaded consistently.",
-      });
-    }
+    canonicalResourceReceipts = await slLoadResourceReceipts(root);
   } catch (error) {
     issues.push({
       severity: "error",
@@ -1135,7 +1089,7 @@ export async function slValidateRepository(root: string): Promise<SLValidationIs
   }
 
   const resourceProjectionsByScope = new Map<string, SLResourceReceipt[]>();
-  for (const receipt of resourceReceipts) {
+  for (const receipt of canonicalResourceReceipts ?? []) {
     const key = slScopeKey(receipt.scope);
     const scoped = resourceProjectionsByScope.get(key) ?? [];
     scoped.push(receipt);
@@ -1147,6 +1101,12 @@ export async function slValidateRepository(root: string): Promise<SLValidationIs
     }
     const projectionPath = slResolveInside(root, entry.resourceProjectionPath);
     if (!(await slExists(projectionPath))) {
+      issues.push({
+        severity: "error",
+        code: "missing-resource-projection",
+        path: entry.resourceProjectionPath,
+        message: "Generated scope resource projection is missing.",
+      });
       continue;
     }
     const actual = await slReadJson<SLScopeResourceProjection>(projectionPath);
@@ -1158,6 +1118,9 @@ export async function slValidateRepository(root: string): Promise<SLValidationIs
           validateResourceProjection.errors,
         ),
       );
+      continue;
+    }
+    if (!canonicalResourceReceipts) {
       continue;
     }
     const expected: SLScopeResourceProjection = {

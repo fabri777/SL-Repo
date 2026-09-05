@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import { slCaptureLesson } from "../../SL-src/SL-core/SL-capture.js";
@@ -249,6 +249,95 @@ describe("SL immutable resource receipts", () => {
     ).rejects.toThrow("collision");
   });
 
+  test("canonicalizes equivalent cross-month merge receipts to the earliest timestamp", async () => {
+    const root = await slCreateTestRepository();
+    repositories.push(root);
+    const lesson = await createLesson(root);
+    const later = await slRecordResourceReceipt(root, {
+      idempotencyKey: "cross-month-generation-resource",
+      phase: "generation",
+      source: "host",
+      quality: "measured",
+      provider: "openai",
+      modelId: "gpt-5.6-sol",
+      tokens: { input: 200, output: 40 },
+      wallClockDurationMs: 2000,
+      timestamp: "2026-10-05T09:00:00.000Z",
+      artifactId: lesson.id,
+      artifactContentHash: lesson.contentHash,
+      generationRunId: "cross-month-generation-run",
+    });
+    const earlier = {
+      ...later.receipt,
+      timestamp: "2026-09-30T23:59:00.000Z",
+    };
+    await slWriteTestJson(
+      root,
+      slResourceReceiptPath(earlier),
+      earlier,
+    );
+
+    const receipts = await slLoadResourceReceipts(root);
+    expect(receipts).toEqual([earlier]);
+    expect(
+      slProjectResourceReceipts([later.receipt, earlier]),
+    ).toEqual([
+      expect.objectContaining({
+        receiptCount: 1,
+        totalTokens: 240,
+      }),
+    ]);
+
+    await slSynchronizeResourceProjection(root, false);
+    const report = await slCalculateEfficiencyReport(root, {
+      artifactId: lesson.id,
+    });
+    expect(report.segments).toHaveLength(1);
+    expect(report.segments[0]!.generation.totals).toMatchObject({
+      receiptCount: 1,
+      totalTokens: 240,
+    });
+    expect(
+      (await slValidateRepository(root)).filter(
+        (issue) => issue.severity === "error",
+      ),
+    ).toEqual([]);
+  });
+
+  test("rejects conflicting cross-month merge receipts", async () => {
+    const root = await slCreateTestRepository();
+    repositories.push(root);
+    const lesson = await createLesson(root);
+    const later = await slRecordResourceReceipt(root, {
+      idempotencyKey: "cross-month-conflicting-resource",
+      phase: "generation",
+      source: "host",
+      quality: "measured",
+      provider: "openai",
+      modelId: "gpt-5.6-sol",
+      tokens: { input: 200, output: 40 },
+      wallClockDurationMs: 2000,
+      timestamp: "2026-10-05T09:00:00.000Z",
+      artifactId: lesson.id,
+      artifactContentHash: lesson.contentHash,
+      generationRunId: "cross-month-conflicting-run",
+    });
+    const conflicting = {
+      ...later.receipt,
+      tokens: { input: 201, output: 40 },
+      timestamp: "2026-09-30T23:59:00.000Z",
+    };
+    await slWriteTestJson(
+      root,
+      slResourceReceiptPath(conflicting),
+      conflicting,
+    );
+
+    await expect(slLoadResourceReceipts(root)).rejects.toThrow(
+      "Conflicting SL resource receipt identity",
+    );
+  });
+
   test("fails closed for invalid resource accounting and unsafe metadata", () => {
     const base = {
       idempotencyKey: "invalid-resource",
@@ -366,6 +455,24 @@ describe("SL immutable resource receipts", () => {
       }),
     );
     expect(await slLoadResourceReceipts(root)).toHaveLength(1);
+  });
+
+  test("reports a declared resource projection that is missing", async () => {
+    const root = await slCreateTestRepository();
+    repositories.push(root);
+    await slInstall(root, "init", false);
+    const catalog = await slLoadStateCatalog(root);
+    const projectionPath = catalog.scopes[0]!.resourceProjectionPath!;
+    await rm(join(root, ...projectionPath.split("/")));
+
+    const issues = await slValidateRepository(root);
+
+    expect(issues).toContainEqual({
+      severity: "error",
+      code: "missing-resource-projection",
+      path: projectionPath,
+      message: "Generated scope resource projection is missing.",
+    });
   });
 
   test("validates baseline role and exact decimal accounting", () => {

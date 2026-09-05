@@ -613,6 +613,60 @@ function slResourceReceiptsEquivalent(
   );
 }
 
+function slCanonicalizeResourceReceipts(
+  receipts: SLResourceReceipt[],
+): SLResourceReceipt[] {
+  const byId = new Map<string, SLResourceReceipt>();
+  const byIdempotency = new Map<string, SLResourceReceipt>();
+  const byApplication = new Map<string, SLResourceReceipt>();
+  const canonicalById = new Map<string, SLResourceReceipt>();
+  for (const receipt of receipts) {
+    const duplicates = [
+      byId.get(receipt.receiptId),
+      byIdempotency.get(receipt.idempotencyKey),
+    ].filter(
+      (
+        candidate,
+      ): candidate is SLResourceReceipt => candidate !== undefined,
+    );
+    for (const duplicate of duplicates) {
+      if (!slResourceReceiptsEquivalent(duplicate, receipt)) {
+        throw new Error(
+          `Conflicting SL resource receipt identity: ${receipt.receiptId}`,
+        );
+      }
+    }
+    if (receipt.phase === "application") {
+      const priorApplication = byApplication.get(receipt.applicationId);
+      if (
+        priorApplication &&
+        !slResourceReceiptsEquivalent(priorApplication, receipt)
+      ) {
+        throw new Error(
+          `Application ${receipt.applicationId} has conflicting resource receipts.`,
+        );
+      }
+    }
+    const duplicate = duplicates[0];
+    const canonical =
+      duplicate && slCompareOrdinal(duplicate.timestamp, receipt.timestamp) <= 0
+        ? duplicate
+        : receipt;
+    byId.set(receipt.receiptId, canonical);
+    byIdempotency.set(receipt.idempotencyKey, canonical);
+    canonicalById.set(receipt.receiptId, canonical);
+    if (receipt.phase === "application") {
+      byApplication.set(receipt.applicationId, canonical);
+    }
+  }
+  return [...canonicalById.values()].sort((left, right) =>
+    slCompareOrdinal(
+      slResourceReceiptPath(left),
+      slResourceReceiptPath(right),
+    ),
+  );
+}
+
 export function slResourceReceiptPath(receipt: SLResourceReceipt): string {
   const entry = slScopeCatalogEntry(receipt.scope);
   const root =
@@ -710,9 +764,6 @@ export async function slLoadResourceReceipts(
     },
   );
   const receipts: SLResourceReceipt[] = [];
-  const byId = new Map<string, SLResourceReceipt>();
-  const byIdempotency = new Map<string, SLResourceReceipt>();
-  const byApplication = new Map<string, SLResourceReceipt>();
   for (const relativePath of paths
     .map(slNormalizePath)
     .sort(slCompareOrdinal)) {
@@ -724,31 +775,9 @@ export async function slLoadResourceReceipts(
     if (slResourceReceiptPath(receipt) !== relativePath) {
       throw new Error(`SL resource receipt path mismatch: ${relativePath}`);
     }
-    const duplicate =
-      byId.get(receipt.receiptId) ??
-      byIdempotency.get(receipt.idempotencyKey);
-    if (duplicate && !slResourceReceiptsEquivalent(duplicate, receipt)) {
-      throw new Error(
-        `Conflicting SL resource receipt identity: ${receipt.receiptId}`,
-      );
-    }
-    if (receipt.phase === "application") {
-      const priorApplication = byApplication.get(receipt.applicationId);
-      if (
-        priorApplication &&
-        !slResourceReceiptsEquivalent(priorApplication, receipt)
-      ) {
-        throw new Error(
-          `Application ${receipt.applicationId} has conflicting resource receipts.`,
-        );
-      }
-      byApplication.set(receipt.applicationId, receipt);
-    }
-    byId.set(receipt.receiptId, receipt);
-    byIdempotency.set(receipt.idempotencyKey, receipt);
     receipts.push(receipt);
   }
-  return receipts;
+  return slCanonicalizeResourceReceipts(receipts);
 }
 
 async function slValidateResourceCorrelation(
@@ -1023,7 +1052,7 @@ export function slProjectResourceReceipts(
   receipts: SLResourceReceipt[],
 ): SLResourceProjection[] {
   const groups = new Map<string, SLResourceProjection>();
-  for (const receipt of receipts) {
+  for (const receipt of slCanonicalizeResourceReceipts(receipts)) {
     const artifact =
       receipt.phase === "baseline"
         ? {}
@@ -1100,6 +1129,7 @@ export async function slSynchronizeResourceProjectionUnlocked(
   dryRun: boolean,
   changes: SLChange[] = [],
   suppliedReceipts?: SLResourceReceipt[],
+  writeJson: typeof slWriteJson = slWriteJson,
 ): Promise<void> {
   const catalog = await slLoadStateCatalog(root);
   const receipts = suppliedReceipts ?? (await slLoadResourceReceipts(root));
@@ -1118,7 +1148,7 @@ export async function slSynchronizeResourceProjectionUnlocked(
         receiptsByScope.get(slScopeKey(entry.scope)) ?? [],
       ),
     };
-    await slWriteJson(
+    await writeJson(
       root,
       entry.resourceProjectionPath ??
         slScopeCatalogEntry(entry.scope).resourceProjectionPath!,

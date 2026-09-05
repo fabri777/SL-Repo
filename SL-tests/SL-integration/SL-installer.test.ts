@@ -1,15 +1,24 @@
 import {
+  access,
   mkdir,
   readFile,
   readdir,
+  rm,
   symlink,
   writeFile,
 } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
-import { SL_MANAGED_BLOCK_END, SL_MANAGED_BLOCK_START } from "../../SL-src/SL-core/SL-constants.js";
+import {
+  SL_MANAGED_BLOCK_END,
+  SL_MANAGED_BLOCK_START,
+  SL_PATHS,
+  SL_RUNTIME_MANIFEST_FILE,
+} from "../../SL-src/SL-core/SL-constants.js";
 import { slInstall } from "../../SL-src/SL-core/SL-installer.js";
 import { slLoadRegistry } from "../../SL-src/SL-core/SL-registry.js";
+import { slLoadStateCatalog } from "../../SL-src/SL-core/SL-state.js";
 import {
   slProjectUsage,
   slSynchronizeUsageProjection,
@@ -20,6 +29,10 @@ import {
   slCreateTestRepository,
   slRemoveTestRepository,
 } from "../SL-fixtures/SL-test-repository.js";
+import {
+  slCompareOrdinal,
+  slWriteText,
+} from "../../SL-src/SL-core/SL-utils.js";
 
 const repositories: string[] = [];
 const INSTALLER_TEST_TIMEOUT_MS =
@@ -27,6 +40,60 @@ const INSTALLER_TEST_TIMEOUT_MS =
 
 function normalizeLineEndings(value: string): string {
   return value.replaceAll("\r\n", "\n");
+}
+
+async function preparePriorRuntime(root: string) {
+  await slInstall(root, "init", false);
+  const runtimeRoot = join(root, ...SL_PATHS.runtimeRoot.split("/"));
+  const manifestPath = join(runtimeRoot, SL_RUNTIME_MANIFEST_FILE);
+  const managedPath = join(runtimeRoot, "SL.Runtime.Core.ps1");
+  const obsoletePath = join(runtimeRoot, "SL.Runtime.Obsolete.ps1");
+  const manualPath = join(runtimeRoot, "manual-notes.txt");
+  const previousManagedContent = Buffer.from(
+    "# prior reviewed runtime\r\n",
+    "utf8",
+  );
+  const obsoleteContent = Buffer.from("# obsolete reviewed runtime\r\n", "utf8");
+  const manualContent = Buffer.from("preserve user bytes\r\n", "utf8");
+  await writeFile(managedPath, previousManagedContent);
+  await writeFile(obsoletePath, obsoleteContent);
+  await writeFile(manualPath, manualContent);
+  const manifest = JSON.parse(
+    await readFile(manifestPath, "utf8"),
+  ) as {
+    runtimeVersion: string;
+    files: Array<{ path: string; sha256: string }>;
+  };
+  manifest.runtimeVersion = "0.0.9";
+  manifest.files.find(
+    (file) => file.path === "SL.Runtime.Core.ps1",
+  )!.sha256 = createHash("sha256")
+    .update(previousManagedContent.toString("utf8").replaceAll("\r\n", "\n"))
+    .digest("hex");
+  manifest.files.push({
+    path: "SL.Runtime.Obsolete.ps1",
+    sha256: createHash("sha256")
+      .update(obsoleteContent.toString("utf8").replaceAll("\r\n", "\n"))
+      .digest("hex"),
+  });
+  manifest.files.sort((left, right) =>
+    slCompareOrdinal(left.path, right.path),
+  );
+  const previousManifestContent = Buffer.from(
+    `${JSON.stringify(manifest, null, 2)}\n`,
+    "utf8",
+  );
+  await writeFile(manifestPath, previousManifestContent);
+  return {
+    manifestPath,
+    managedPath,
+    obsoletePath,
+    manualPath,
+    previousManifestContent,
+    previousManagedContent,
+    obsoleteContent,
+    manualContent,
+  };
 }
 
 afterEach(async () => {
@@ -106,6 +173,60 @@ describe("SL installer", () => {
       readFile(join(root, ".github", "SL-learning", "SL-config.yml"), "utf8"),
     ).rejects.toThrow();
   });
+
+  test("creates empty usage and resource projection shards", async () => {
+    const root = await slCreateTestRepository();
+    repositories.push(root);
+
+    await slInstall(root, "init", false);
+
+    const catalog = await slLoadStateCatalog(root);
+    expect(catalog.scopes).toHaveLength(1);
+    const entry = catalog.scopes[0]!;
+    await expect(
+      readFile(join(root, ...entry.projectionPath.split("/")), "utf8"),
+    ).resolves.toContain('"projections": []');
+    await expect(
+      readFile(
+        join(root, ...entry.resourceProjectionPath!.split("/")),
+        "utf8",
+      ),
+    ).resolves.toContain('"projections": []');
+  });
+
+  test("rolls back a partial initialization after an injected write failure", async () => {
+    const root = await slCreateTestRepository();
+    repositories.push(root);
+    const agentsPath = join(root, "AGENTS.md");
+    const unrelatedPath = join(root, "user-file.txt");
+    const agentsContent = Buffer.from("# Existing policy\r\n", "utf8");
+    const unrelatedContent = Buffer.from("unrelated user bytes\r\n", "utf8");
+    await writeFile(agentsPath, agentsContent);
+    await writeFile(unrelatedPath, unrelatedContent);
+    let injected = false;
+
+    await expect(
+      slInstall(root, "init", false, {
+        writeText: async (...argumentsList) => {
+          await slWriteText(...argumentsList);
+          if (argumentsList[1] === SL_PATHS.stateCatalog) {
+            injected = true;
+            throw new Error("injected installer write failure");
+          }
+        },
+      }),
+    ).rejects.toThrow("injected installer write failure");
+
+    expect(injected).toBe(true);
+    expect(await readFile(agentsPath)).toEqual(agentsContent);
+    expect(await readFile(unrelatedPath)).toEqual(unrelatedContent);
+    await expect(
+      access(join(root, ...SL_PATHS.learningRoot.split("/"))),
+    ).rejects.toThrow();
+    await expect(
+      access(join(root, ".github", "copilot-instructions.md")),
+    ).rejects.toThrow();
+  }, INSTALLER_TEST_TIMEOUT_MS);
 
   test("does not claim a pre-existing matching skill", async () => {
     const root = await slCreateTestRepository();
@@ -285,6 +406,72 @@ describe("SL installer", () => {
       ),
     ).toEqual([]);
   });
+
+  test("rolls back runtime updates after an injected remove failure", async () => {
+    const root = await slCreateTestRepository();
+    repositories.push(root);
+    const prior = await preparePriorRuntime(root);
+    const catalog = await slLoadStateCatalog(root);
+    const registryPath = join(
+      root,
+      ...catalog.scopes[0]!.registryPath.split("/"),
+    );
+    const previousRegistryContent = await readFile(registryPath);
+    let injected = false;
+
+    await expect(
+      slInstall(root, "update", false, {
+        remove: async (path) => {
+          await rm(path);
+          injected = true;
+          throw new Error("injected installer remove failure");
+        },
+      }),
+    ).rejects.toThrow("injected installer remove failure");
+
+    expect(injected).toBe(true);
+    expect(await readFile(prior.managedPath)).toEqual(
+      prior.previousManagedContent,
+    );
+    expect(await readFile(prior.obsoletePath)).toEqual(prior.obsoleteContent);
+    expect(await readFile(prior.manifestPath)).toEqual(
+      prior.previousManifestContent,
+    );
+    expect(await readFile(prior.manualPath)).toEqual(prior.manualContent);
+    expect(await readFile(registryPath)).toEqual(previousRegistryContent);
+  }, INSTALLER_TEST_TIMEOUT_MS);
+
+  test("restores removed files and the prior manifest after an injected manifest write failure", async () => {
+    const root = await slCreateTestRepository();
+    repositories.push(root);
+    const prior = await preparePriorRuntime(root);
+    let injected = false;
+
+    await expect(
+      slInstall(root, "update", false, {
+        writeText: async (...argumentsList) => {
+          await slWriteText(...argumentsList);
+          if (
+            argumentsList[1] ===
+            `${SL_PATHS.runtimeRoot}/${SL_RUNTIME_MANIFEST_FILE}`
+          ) {
+            injected = true;
+            throw new Error("injected runtime manifest write failure");
+          }
+        },
+      }),
+    ).rejects.toThrow("injected runtime manifest write failure");
+
+    expect(injected).toBe(true);
+    expect(await readFile(prior.managedPath)).toEqual(
+      prior.previousManagedContent,
+    );
+    expect(await readFile(prior.obsoletePath)).toEqual(prior.obsoleteContent);
+    expect(await readFile(prior.manifestPath)).toEqual(
+      prior.previousManifestContent,
+    );
+    expect(await readFile(prior.manualPath)).toEqual(prior.manualContent);
+  }, INSTALLER_TEST_TIMEOUT_MS);
 
   test("rejects a target path that resolves outside the repository", async () => {
     const root = await slCreateTestRepository();
