@@ -847,6 +847,7 @@ function slRequireObject(
 
 export function slValidateRuntimeManifest(
   value: unknown,
+  enforceCurrentPayloadInventory = true,
 ): asserts value is SLRuntimeManifest {
   const manifest = slRequireObject(value, "manifest-type");
   const expectedKeys = [
@@ -954,6 +955,7 @@ export function slValidateRuntimeManifest(
     previous = file.path;
   }
   if (
+    enforceCurrentPayloadInventory &&
     slCanonicalJson([...seen]) !== slCanonicalJson(SL_RUNTIME_PAYLOAD_FILES)
   ) {
     return slContractError(

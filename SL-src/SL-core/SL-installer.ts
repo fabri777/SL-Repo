@@ -281,10 +281,14 @@ async function slInstallRuntime(
   );
   let previousManifest: SLRuntimeManifest | undefined;
   if (await slExists(targetManifestPath)) {
-    previousManifest = await slLoadRuntimeManifest(targetManifestPath);
+    previousManifest = await slLoadRuntimeManifest(
+      targetManifestPath,
+      false,
+    );
     const previousIssues = await slVerifyRuntimeDirectory(
       targetRuntimeRoot,
       previousManifest.runtimeVersion,
+      false,
     );
     if (previousIssues.length > 0) {
       throw new Error(

@@ -62,15 +62,17 @@ export function slPowerShellProbeIssue(probe: {
 
 export async function slLoadRuntimeManifest(
   path: string,
+  enforceCurrentPayloadInventory = true,
 ): Promise<SLRuntimeManifest> {
   const manifest = await slReadJson<unknown>(path);
-  slValidateRuntimeManifest(manifest);
+  slValidateRuntimeManifest(manifest, enforceCurrentPayloadInventory);
   return manifest;
 }
 
 export async function slVerifyRuntimeDirectory(
   runtimeRoot: string,
   expectedRuntimeVersion?: string,
+  enforceCurrentPayloadInventory = true,
 ): Promise<SLValidationIssue[]> {
   const issues: SLValidationIssue[] = [];
   const manifestPath = resolve(runtimeRoot, SL_RUNTIME_MANIFEST_FILE);
@@ -86,7 +88,10 @@ export async function slVerifyRuntimeDirectory(
   }
   let manifest: SLRuntimeManifest;
   try {
-    manifest = await slLoadRuntimeManifest(manifestPath);
+    manifest = await slLoadRuntimeManifest(
+      manifestPath,
+      enforceCurrentPayloadInventory,
+    );
   } catch (error) {
     return [
       {
