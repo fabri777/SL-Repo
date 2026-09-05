@@ -40,6 +40,7 @@ function runtimePath(root: string): string {
 function runRuntime(
   root: string,
   argumentsList: string[],
+  environment: NodeJS.ProcessEnv = {},
 ): ReturnType<typeof spawnSync> {
   return spawnSync(
     "pwsh",
@@ -49,6 +50,28 @@ function runRuntime(
       "-File",
       runtimePath(root),
       "--json",
+      ...argumentsList,
+    ],
+    {
+      cwd: root,
+      encoding: "utf8",
+      timeout: TEST_TIMEOUT_MS,
+      env: { ...process.env, ...environment },
+    },
+  );
+}
+
+function runRuntimeWithoutJson(
+  root: string,
+  argumentsList: string[],
+): ReturnType<typeof spawnSync> {
+  return spawnSync(
+    "pwsh",
+    [
+      "-NoLogo",
+      "-NoProfile",
+      "-File",
+      runtimePath(root),
       ...argumentsList,
     ],
     { cwd: root, encoding: "utf8", timeout: TEST_TIMEOUT_MS },
@@ -635,8 +658,9 @@ describe("repository-local PowerShell lifecycle", () => {
           "--idempotency-key", "resource-generation-1",
           "--source", "host", "--quality", "measured",
           "--provider", "provider-a", "--model", "model-a",
-          "--input-tokens", "1000", "--output-tokens", "0",
+          "--input-tokens", "1001", "--output-tokens", "0",
           "--wall-clock-ms", "10000", "--timestamp", FIXED_DATE,
+          "--cost-amount", "3", "--cost-currency", "USD",
         ]),
       );
       const usage = jsonOutput(
@@ -651,6 +675,20 @@ describe("repository-local PowerShell lifecycle", () => {
           "use", "finish", usage.receiptId, "--outcome", "success", "--verified",
           "--verifier-type", "test-suite", "--evidence-ref", "run:resource",
           "--idempotency-key", "resource-use-finish", "--now", "2026-09-05T10:01:00.000Z",
+        ]),
+      );
+      const secondUsage = jsonOutput(
+        runRuntime(root, [
+          "use", "start", lesson.id, "--application-id", "resource-app-2",
+          "--task-run-id", "resource-task-2", "--idempotency-key", "resource-use-start-2",
+          "--now", "2026-09-05T10:01:30.000Z",
+        ]),
+      ) as { receiptId: string };
+      jsonOutput(
+        runRuntime(root, [
+          "use", "finish", secondUsage.receiptId, "--outcome", "success", "--verified",
+          "--verifier-type", "test-suite", "--evidence-ref", "run:resource-2",
+          "--idempotency-key", "resource-use-finish-2", "--now", "2026-09-05T10:01:45.000Z",
         ]),
       );
       jsonOutput(
@@ -712,16 +750,39 @@ describe("repository-local PowerShell lifecycle", () => {
       ) as {
         advisory: boolean;
         segments: Array<{
-          generation: { amortizedPerVerifiedSuccess: { inputTokens: number } };
+          generation: {
+            amortizedPerVerifiedSuccess: {
+              inputTokens: number;
+              reportedCosts: { USD: string };
+              reportedCostSampleCounts: { USD: number };
+            };
+          };
+          verifiedSuccessApplications: { coverage: number };
           pairedBaseline: { medianSavings: { inputTokens: number } };
         }>;
       };
       expect(report.advisory).toBe(true);
-      expect(report.segments[0]?.generation.amortizedPerVerifiedSuccess.inputTokens).toBe(1000);
+      expect(report.segments[0]?.generation.amortizedPerVerifiedSuccess).toMatchObject({
+        inputTokens: 500.5,
+        reportedCosts: { USD: "1.5" },
+        reportedCostSampleCounts: { USD: 2 },
+      });
+      expect(report.segments[0]?.verifiedSuccessApplications.coverage).toBe(0.5);
       expect(report.segments[0]?.pairedBaseline.medianSavings.inputTokens).toBe(120);
       expect(report).toEqual(
         await slCalculateEfficiencyReport(root, { artifactId: lesson.id }),
       );
+      const plainReport = runRuntimeWithoutJson(root, [
+        "efficiency",
+        lesson.id,
+      ]);
+      expect(plainReport.status, String(plainReport.stderr)).toBe(0);
+      expect(JSON.parse(String(plainReport.stdout))).toEqual(report);
+      expect(
+        String(
+          runRuntimeWithoutJson(root, ["efficiency", lesson.id]).stdout,
+        ),
+      ).toBe(String(plainReport.stdout));
       jsonOutput(runRuntime(root, ["project"]));
       expect(
         (jsonOutput(runRuntime(root, ["validate"])) as { valid: boolean }).valid,
@@ -731,37 +792,351 @@ describe("repository-local PowerShell lifecycle", () => {
   );
 
   test(
-    "rejects unsafe or unsupported PowerShell resource inputs",
+    "enforces nested resource input schemas, phase roles, and recursive privacy checks",
     async () => {
       const root = await createPowerShellRepository();
       const inputPath = join(root, "unsafe-resource.json");
-      await writeFile(
-        inputPath,
-        `${JSON.stringify({
-          idempotencyKey: "unsafe-resource",
-          phase: "baseline",
-          source: "manual",
-          quality: "estimated",
-          provider: "owner@example.com",
-          modelId: "model-a",
-          tokens: { input: 1, output: 1 },
-          wallClockDurationMs: 1,
-          timestamp: FIXED_DATE,
-          taskRunId: "baseline-task",
-          comparison: {
-            comparisonId: "comparison",
-            scenarioKey: "scenario",
-            role: "baseline",
+      const baseline = {
+        idempotencyKey: "unsafe-resource",
+        phase: "baseline",
+        source: "manual",
+        quality: "estimated",
+        provider: "provider-a",
+        modelId: "model-a",
+        tokens: { input: 1, output: 1 },
+        wallClockDurationMs: 1,
+        timestamp: FIXED_DATE,
+        taskRunId: "baseline-task",
+        comparison: {
+          comparisonId: "comparison",
+          scenarioKey: "scenario",
+          role: "baseline",
+        },
+      };
+      const cases: Array<{
+        value: unknown;
+        expected: string;
+      }> = [
+        {
+          value: { ...baseline, tokens: { ...baseline.tokens, extra: 1 } },
+          expected: "receipts[0].tokens contains unsupported fields",
+        },
+        {
+          value: {
+            ...baseline,
+            comparison: { ...baseline.comparison, role: "treatment" },
           },
-          sourcePayload: "must-not-be-persisted",
-        })}\n`,
-        "utf8",
+          expected: "comparison.role must be baseline",
+        },
+        {
+          value: {
+            ...baseline,
+            comparison: {
+              ...baseline.comparison,
+              scenarioKey: "owner@example.com",
+            },
+          },
+          expected: "must not contain secrets, PII, or user paths",
+        },
+        {
+          value: {
+            ...baseline,
+            scope: { id: "SL-SCOPE-ROOT", path: ".", extra: true },
+          },
+          expected: "receipts[0].scope contains unsupported fields",
+        },
+        {
+          value: {
+            ...baseline,
+            reportedCost: {
+              amount: "1",
+              currency: "USD",
+              basis: "host-reported",
+              extra: "invalid",
+            },
+          },
+          expected: "receipts[0].reportedCost contains unsupported fields",
+        },
+        {
+          value: {
+            schemaVersion: 1,
+            receipts: [baseline],
+            extra: true,
+          },
+          expected: "resource input contains unsupported fields",
+        },
+        {
+          value: {
+            ...baseline,
+            phase: "generation",
+            artifactId: "SL-TEST",
+            artifactContentHash: "a".repeat(64),
+            generationRunId: "generation",
+          },
+          expected: "generation input cannot contain taskRunId",
+        },
+      ];
+
+      for (const [index, testCase] of cases.entries()) {
+        await writeFile(
+          inputPath,
+          `${JSON.stringify(testCase.value)}\n`,
+          "utf8",
+        );
+        const before = await repositorySnapshot(root);
+        const result = runRuntime(root, ["resource", "import", inputPath]);
+        expect(result.status).not.toBe(0);
+        expect(String(result.stderr)).toContain(testCase.expected);
+        expect(await repositorySnapshot(root), `case ${index}`).toEqual(before);
+      }
+    },
+    SUITE_TEST_TIMEOUT_MS,
+  );
+
+  test(
+    "deduplicates equivalent resource receipt identities across month paths",
+    async () => {
+      const root = await createPowerShellRepository();
+      jsonOutput(
+        runRuntime(root, [
+          "resource", "baseline", "--task-run-id", "dedupe-task",
+          "--comparison-id", "dedupe-comparison", "--scenario-key", "dedupe-scenario",
+          "--idempotency-key", "dedupe-resource", "--source", "manual",
+          "--quality", "measured", "--provider", "provider-a", "--model", "model-a",
+          "--input-tokens", "10", "--output-tokens", "2",
+          "--wall-clock-ms", "100", "--timestamp", FIXED_DATE,
+        ]),
+      );
+      const snapshot = await repositorySnapshot(root);
+      const originalRelative = [...snapshot.keys()]
+        .map((path) => path.replaceAll("\\", "/"))
+        .find(
+          (path) =>
+            path.includes("/SL-resource-receipts/") &&
+            path.includes("/2026-09/SL-resource-"),
+        );
+      expect(originalRelative).toBeDefined();
+      const receipt = JSON.parse(
+        await readFile(join(root, ...originalRelative!.split("/")), "utf8"),
+      ) as { timestamp: string };
+      receipt.timestamp = "2026-10-05T10:00:00.000Z";
+      const duplicateRelative = originalRelative!.replace(
+        "/2026-09/",
+        "/2026-10/",
+      );
+      const duplicatePath = join(root, ...duplicateRelative.split("/"));
+      await mkdir(dirname(duplicatePath), { recursive: true });
+      await writeFile(duplicatePath, `${JSON.stringify(receipt, null, 2)}\n`);
+
+      const report = jsonOutput(
+        runRuntime(root, ["efficiency"]),
+      ) as { baselineReceiptCount: number };
+      expect(report.baselineReceiptCount).toBe(1);
+      jsonOutput(runRuntime(root, ["project"]));
+      const stateCatalog = JSON.parse(
+        await readFile(
+          join(root, ".github", "SL-learning", "SL-state-catalog.json"),
+          "utf8",
+        ),
+      ) as { scopes: Array<{ resourceProjectionPath: string }> };
+      const projection = JSON.parse(
+        await readFile(
+          join(root, ...stateCatalog.scopes[0]!.resourceProjectionPath.split("/")),
+          "utf8",
+        ),
+      ) as { projections: Array<{ receiptCount: number }> };
+      expect(projection.projections).toHaveLength(1);
+      expect(projection.projections[0]?.receiptCount).toBe(1);
+    },
+    SUITE_TEST_TIMEOUT_MS,
+  );
+
+  test(
+    "matches TypeScript case-sensitive parent exclusion validation",
+    async () => {
+      const root = await createPowerShellRepository();
+      await rm(join(root, ".github", "SL-learning", "SL-scope-catalog.yml"));
+      const catalogPath = join(
+        root,
+        ".github",
+        "SL-learning",
+        "SL-scope-catalog.json",
+      );
+      const catalog = {
+        schemaVersion: 1,
+        scopes: [
+          {
+            id: "SL-SCOPE-ROOT",
+            displayName: "Repository",
+            kind: "repository",
+            includePaths: ["**"],
+            excludePaths: [],
+            dependencyScopeIds: [],
+            ownerAliases: [],
+          },
+          {
+            id: "SL-SCOPE-SERVICE",
+            displayName: "Service",
+            kind: "service",
+            includePaths: ["Services/orders/**"],
+            excludePaths: ["services/**"],
+            parentScopeId: "SL-SCOPE-ROOT",
+            dependencyScopeIds: [],
+            ownerAliases: [],
+          },
+        ],
+      };
+      await writeFile(catalogPath, `${JSON.stringify(catalog, null, 2)}\n`);
+      expect(runRuntime(root, ["scope", "validate"]).status).toBe(0);
+
+      catalog.scopes[1]!.includePaths = ["services/orders/**"];
+      await writeFile(catalogPath, `${JSON.stringify(catalog, null, 2)}\n`);
+      const invalid = runRuntime(root, ["scope", "validate"]);
+      expect(invalid.status).toBe(8);
+      expect(String(invalid.stderr)).toContain("unmatchable-scope");
+    },
+    SUITE_TEST_TIMEOUT_MS,
+  );
+
+  test(
+    "reports a missing declared resource projection as validation failure",
+    async () => {
+      const root = await createPowerShellRepository();
+      const stateCatalog = JSON.parse(
+        await readFile(
+          join(root, ".github", "SL-learning", "SL-state-catalog.json"),
+          "utf8",
+        ),
+      ) as { scopes: Array<{ resourceProjectionPath: string }> };
+      await rm(
+        join(root, ...stateCatalog.scopes[0]!.resourceProjectionPath.split("/")),
       );
 
-      const result = runRuntime(root, ["resource", "import", inputPath]);
+      const validation = runRuntime(root, ["validate"]);
 
-      expect(result.status).not.toBe(0);
-      expect(String(result.stderr)).toContain("unsupported fields");
+      expect(validation.status).toBe(8);
+      expect(JSON.parse(String(validation.stdout)).issues).toContainEqual(
+        expect.objectContaining({ code: "missing-resource-projection" }),
+      );
+    },
+    SUITE_TEST_TIMEOUT_MS,
+  );
+
+  test(
+    "rolls back forget and sweep after injected I/O failures",
+    async () => {
+      const root = await createPowerShellRepository();
+      const capture = jsonOutput(
+        runRuntime(root, [
+          "capture", "--title", "Transactional retention evidence",
+          "--trigger", "transaction", "--now", FIXED_DATE,
+        ]),
+      ) as { id: string };
+      const beforeForget = await repositorySnapshot(root);
+      const failedForget = runRuntime(
+        root,
+        [
+          "forget", capture.id, "--reason", "wrong",
+          "--now", "2026-09-05T10:01:00.000Z",
+        ],
+        { SL_TEST_INJECT_IO_FAILURE_AFTER: "2" },
+      );
+      expect(failedForget.status).toBe(9);
+      expect(String(failedForget.stderr)).toContain("Injected I/O failure");
+      expect(await repositorySnapshot(root)).toEqual(beforeForget);
+
+      jsonOutput(
+        runRuntime(root, [
+          "forget", capture.id, "--reason", "wrong",
+          "--now", "2026-09-05T10:01:00.000Z",
+        ]),
+      );
+      const beforeSweep = await repositorySnapshot(root);
+      const failedSweep = runRuntime(
+        root,
+        ["sweep", "--now", "2026-09-20T10:01:00.000Z"],
+        { SL_TEST_INJECT_IO_FAILURE_AFTER: "2" },
+      );
+      expect(failedSweep.status).toBe(9);
+      expect(String(failedSweep.stderr)).toContain("Injected I/O failure");
+      expect(await repositorySnapshot(root)).toEqual(beforeSweep);
+    },
+    SUITE_TEST_TIMEOUT_MS,
+  );
+
+  test(
+    "rolls back promotion registration and activation after injected I/O failures",
+    async () => {
+      const root = await createPowerShellRepository();
+      const capture = jsonOutput(
+        runRuntime(root, [
+          "capture", "--title", "Transactional promotion evidence",
+          "--trigger", "transaction", "--now", FIXED_DATE,
+        ]),
+      ) as { id: string };
+      const artifactId = "SL-TRANSACTIONAL-PROMOTION";
+      const artifactPath =
+        ".github/instructions/SL-TRANSACTIONAL-PROMOTION.instructions.md";
+      const contractPath = slTestContractPath(artifactId);
+      await slWriteTestPromotedArtifact({
+        root,
+        artifactId,
+        artifactType: "instruction",
+        artifactPath,
+        contractPath,
+      });
+      await slWriteTestJson(
+        root,
+        contractPath,
+        slCreateTestContract({
+          artifactId,
+          artifactType: "instruction",
+          artifactPath,
+          sourceIds: [capture.id],
+        }),
+      );
+      const before = await repositorySnapshot(root);
+
+      const result = runRuntime(
+        root,
+        [
+          "promotion", "register", capture.id, artifactPath,
+          "--now", "2026-09-05T10:03:00.000Z",
+        ],
+        { SL_TEST_INJECT_IO_FAILURE_AFTER: "2" },
+      );
+
+      expect(result.status).toBe(9);
+      expect(String(result.stderr)).toContain("Injected I/O failure");
+      expect(await repositorySnapshot(root)).toEqual(before);
+
+      jsonOutput(
+        runRuntime(root, [
+          "promotion", "register", capture.id, artifactPath,
+          "--now", "2026-09-05T10:03:00.000Z",
+        ]),
+      );
+      jsonOutput(
+        runRuntime(root, [
+          "promotion", "evaluate", artifactId,
+          "--approval-ref", "review:transaction",
+          "--now", "2026-09-05T10:04:00.000Z",
+        ]),
+      );
+      const beforeActivation = await repositorySnapshot(root);
+      const failedActivation = runRuntime(
+        root,
+        [
+          "promotion", "activate", artifactId,
+          "--now", "2026-09-05T10:05:00.000Z",
+        ],
+        { SL_TEST_INJECT_IO_FAILURE_AFTER: "2" },
+      );
+      expect(failedActivation.status).toBe(9);
+      expect(String(failedActivation.stderr)).toContain(
+        "Injected I/O failure",
+      );
+      expect(await repositorySnapshot(root)).toEqual(beforeActivation);
     },
     SUITE_TEST_TIMEOUT_MS,
   );

@@ -67,6 +67,13 @@ function Test-SLRuntimeManifestShape {
         }
         $Previous = $File.path
     }
+    $ManifestPaths = [string[]] @($Manifest.files | ForEach-Object { [string] $_.path })
+    if (
+        $ManifestPaths.Count -ne $script:SLRuntimePayloadFiles.Count -or
+        [string]::Join([char] 0, $ManifestPaths) -cne [string]::Join([char] 0, $script:SLRuntimePayloadFiles)
+    ) {
+        Throw-SLContractError -Code 'manifest-files' -Message 'Runtime manifest payload inventory does not match the contract.'
+    }
 }
 
 function Test-SLRuntimeInstallation {

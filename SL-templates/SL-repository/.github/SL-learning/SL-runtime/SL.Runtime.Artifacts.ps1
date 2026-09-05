@@ -426,17 +426,9 @@ function Write-SLUsageEvent {
         return [pscustomobject] @{ action = 'skip'; path = $RelativePath; detail = 'idempotent event already recorded' }
     }
     if (-not $DryRun) {
-        Update-SLMutationLease
-        [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($Path)) | Out-Null
-        $Stream = [IO.File]::Open($Path, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
-        try {
-            $Content = "$(ConvertTo-Json $Event -Depth 100)`n".Replace("`r`n", "`n").Replace("`r", "`n")
-            $Bytes = [Text.UTF8Encoding]::new($false).GetBytes($Content)
-            $Stream.Write($Bytes, 0, $Bytes.Length)
-        }
-        finally {
-            $Stream.Dispose()
-        }
+        Write-SLImmutableText -Root $Root -RelativePath $RelativePath -Content (
+            "$(ConvertTo-Json $Event -Depth 100)`n"
+        )
     }
     return [pscustomobject] @{ action = 'create'; path = $RelativePath; detail = $(if ($DryRun) { 'planned' } else { 'written' }) }
 }

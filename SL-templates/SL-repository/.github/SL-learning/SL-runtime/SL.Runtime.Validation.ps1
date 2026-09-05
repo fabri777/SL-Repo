@@ -351,7 +351,10 @@ function Test-SLRepository {
     foreach ($Entry in @($StateCatalog.scopes)) {
         $ResourceProjectionPath = [string] $Entry.resourceProjectionPath
         $AbsoluteProjectionPath = Resolve-SLContainedPath -Root $Root -RelativePath $ResourceProjectionPath
-        if (-not [IO.File]::Exists($AbsoluteProjectionPath)) { continue }
+        if (-not [IO.File]::Exists($AbsoluteProjectionPath)) {
+            $Issues.Add((New-SLValidationIssue error 'missing-resource-projection' 'Generated scope resource projection is missing.' $ResourceProjectionPath))
+            continue
+        }
         try {
             $Actual = Read-SLJson -Root $Root -RelativePath $ResourceProjectionPath
             [object[]] $ScopedReceipts = @($ResourceReceipts | Where-Object { (Get-SLScopeKey $_.scope) -ceq (Get-SLScopeKey $Entry.scope) })

@@ -16,7 +16,7 @@
     },
     {
       "path": "SL.Runtime.Artifacts.ps1",
-      "sha256": "8711bb5355aca350fe0410a183782847bbeb8e2aece8d0980e5b6b0e4a194386"
+      "sha256": "90084253da93d3dc3c771aa42a291efdc69a540ae2c9c7378685452987c30099"
     },
     {
       "path": "SL.Runtime.Conformance.ps1",
@@ -24,11 +24,11 @@
     },
     {
       "path": "SL.Runtime.Core.ps1",
-      "sha256": "656c856e41477acb092f645c8e225923132c855354c7185e213a54dfb9006a6a"
+      "sha256": "0c79e895ac84fde2589214c9e29f227924fac74ceac91258492c976c7e3fcb58"
     },
     {
       "path": "SL.Runtime.Doctor.ps1",
-      "sha256": "039b099ca029e82a3766e9f71b22d52f8453e85b75aca944a0f035f01a45a7bf"
+      "sha256": "b814b1a4373aeffbb362473cf2f7444ed96eae0a2782f8aaa75569eed9dcbe13"
     },
     {
       "path": "SL.Runtime.Lifecycle.ps1",
@@ -40,11 +40,11 @@
     },
     {
       "path": "SL.Runtime.Resource.ps1",
-      "sha256": "3aaa1d4d047550dd46e09744f3367705c1c92bdd687a8ae68a325b144020dbd3"
+      "sha256": "c81f0bff1202490288ad08db9dca963599de51bc705b6d403dadb9ed7956aa30"
     },
     {
       "path": "SL.Runtime.State.ps1",
-      "sha256": "ddee1400342e6a24ce2ef1dd311675456bc045ce6cbf0c250873451d32c0b099"
+      "sha256": "2c014281664d592ea2b63dc2cb2c3713ee82bc5c74b0d1f553e8666019287457"
     },
     {
       "path": "SL.Runtime.Syntax.ps1",
@@ -52,15 +52,15 @@
     },
     {
       "path": "SL.Runtime.Validation.ps1",
-      "sha256": "a5dd2d4782740541d52697f6543cc67ce8821f9a59bee9fd4f1468064f653ccd"
+      "sha256": "79d19c711069eaf5d9728697c856f1e51d83b8f87b2117a2dfd7dc60cd4f6ce6"
     },
     {
       "path": "SL.Runtime.psm1",
-      "sha256": "f48fff511085202d291e6a7db6c1272459d203162e0fafdc85187a924f2cfb48"
+      "sha256": "1316c3e7a9bd46bc4ecbd55aea5cf2ba632bd230f249fd79687801c85edce3e9"
     },
     {
       "path": "SL.ps1",
-      "sha256": "57d645bd0cf1c6171fb0c9d38c48dbdd496ee8eb46654bfe35173f025c1fe125"
+      "sha256": "068cecc1e80695f7f1b21b92fe3b427facf4b9fd70b7b25dec4c2e0824e70033"
     },
     {
       "path": "SL.sh",

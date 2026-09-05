@@ -1,4 +1,10 @@
-import { readFile } from "node:fs/promises";
+import {
+  cp,
+  mkdir,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { resolve } from "node:path";
 import { describe, expect, test } from "vitest";
 import {
@@ -111,6 +117,62 @@ describe("SL PowerShell runtime contract", () => {
     expect(first.files.map((file) => file.path)).toEqual(
       SL_RUNTIME_PAYLOAD_FILES,
     );
+    expect(() =>
+      slValidateRuntimeManifest({
+        ...first,
+        files: first.files.filter(
+          (file) => file.path !== "SL.Runtime.Resource.ps1",
+        ),
+      }),
+    ).toThrow("payload inventory does not match");
+  });
+
+  test("rolls back runtime build files when a staged update fails", async () => {
+    const packageRoot = resolve(
+      "SL-tests",
+      "SL-fixtures",
+      "SL-runtime-build-transaction",
+    );
+    const isolatedRuntimeRoot = resolve(
+      packageRoot,
+      "SL-templates",
+      "SL-repository",
+      ".github",
+      "SL-learning",
+      "SL-runtime",
+    );
+    const isolatedSchemaRoot = resolve(packageRoot, "SL-schemas");
+    await rm(packageRoot, { recursive: true, force: true });
+    await mkdir(isolatedSchemaRoot, { recursive: true });
+    await cp(runtimeRoot, isolatedRuntimeRoot, { recursive: true });
+    await cp(
+      resolve("SL-schemas", "SL-runtime-manifest.schema.json"),
+      resolve(isolatedSchemaRoot, "SL-runtime-manifest.schema.json"),
+    );
+    const schemaPath = resolve(
+      isolatedRuntimeRoot,
+      "SL-runtime-manifest.schema.json",
+    );
+    const manifestPath = resolve(
+      isolatedRuntimeRoot,
+      "SL-runtime.manifest.json",
+    );
+    const originalManifest = await readFile(manifestPath, "utf8");
+    const staleSchema = '{"stale":true}\n';
+
+    try {
+      await writeFile(schemaPath, staleSchema, "utf8");
+      await expect(
+        slBuildRuntimeManifest({
+          injectFailureAfterSchemaWrite: true,
+          packageRoot,
+        }),
+      ).rejects.toThrow("Injected runtime build failure");
+      expect(await readFile(schemaPath, "utf8")).toBe(staleSchema);
+      expect(await readFile(manifestPath, "utf8")).toBe(originalManifest);
+    } finally {
+      await rm(packageRoot, { recursive: true, force: true });
+    }
   });
 
   test("classifies missing and unsupported PowerShell probes", () => {

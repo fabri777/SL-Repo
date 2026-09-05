@@ -375,6 +375,35 @@ describe("SL plugin package", () => {
     ]);
   });
 
+  test("retention workflows use trusted local runtimes and guard every PowerShell exit", async () => {
+    const rootWorkflow = await readFile(
+      resolve(".github/workflows/SL-forget.yml"),
+      "utf8",
+    );
+    const templateWorkflow = await readFile(
+      resolve(
+        "SL-templates/SL-repository/.github/workflows/SL-learning-forget.yml",
+      ),
+      "utf8",
+    );
+
+    expect(rootWorkflow).toContain(
+      "SL-templates/SL-repository/.github/SL-learning/SL-runtime/SL.ps1",
+    );
+    expect(rootWorkflow).toContain("--repo-root $env:GITHUB_WORKSPACE");
+    expect(rootWorkflow).not.toContain(
+      "pwsh .github/SL-learning/SL-runtime/SL.ps1",
+    );
+    for (const workflow of [rootWorkflow, templateWorkflow]) {
+      const invocationCount = workflow.match(/& pwsh\b/g)?.length ?? 0;
+      const exitGuardCount =
+        workflow.match(/\$LASTEXITCODE -ne 0/g)?.length ?? 0;
+      expect(invocationCount).toBeGreaterThan(0);
+      expect(exitGuardCount).toBe(invocationCount);
+      expect(workflow).not.toMatch(/\b(?:node|npm|npx)\b/);
+    }
+  });
+
   test("uses the committed local runtime in Azure Pipelines without embedded credentials", async () => {
     const templatePaths = [
       "SL-templates/SL-repository/.azure-pipelines/SL-learning/SL-validation.yml",

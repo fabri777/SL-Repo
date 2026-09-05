@@ -42,6 +42,18 @@ function runPowerShell(
   );
 }
 
+function powerShellExecutable(): string {
+  const probe = spawnSync(
+    "pwsh",
+    ["-NoLogo", "-NoProfile", "-Command", "(Get-Process -Id $PID).Path"],
+    { encoding: "utf8" },
+  );
+  if (probe.status !== 0) {
+    throw new Error(String(probe.stderr));
+  }
+  return String(probe.stdout).trim();
+}
+
 describe("repository-local PowerShell runtime", () => {
   test("installs a self-contained runtime and runs exact conformance", async () => {
     const root = await slCreateTestRepository();
@@ -121,6 +133,90 @@ describe("repository-local PowerShell runtime", () => {
     await expect(
       access(join(root, ".github", "SL-learning", "SL-runtime")),
     ).rejects.toThrow();
+  });
+
+  test("runs end to end with no Node executable available", async () => {
+    const root = await slCreateTestRepository();
+    repositories.push(root);
+    await slInstall(root, "init", false);
+    const runtimeRoot = join(root, ".github", "SL-learning", "SL-runtime");
+    const emptyPath = join(root, "empty-path");
+    await mkdir(emptyPath);
+
+    const result = spawnSync(
+      powerShellExecutable(),
+      [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        join(runtimeRoot, "SL.ps1"),
+        "--json",
+        "--repo-root",
+        root,
+        "conformance",
+      ],
+      {
+        cwd: root,
+        encoding: "utf8",
+        env: { ...process.env, PATH: emptyPath },
+      },
+    );
+
+    expect(result.status, String(result.stderr)).toBe(0);
+    expect(JSON.parse(String(result.stdout))).toMatchObject({
+      command: "conformance",
+      result: { passed: 33, failed: 0 },
+    });
+  });
+
+  test("verifies executable payloads before importing the runtime module", async () => {
+    const root = await slCreateTestRepository();
+    repositories.push(root);
+    await slInstall(root, "init", false);
+    const runtimeRoot = join(root, ".github", "SL-learning", "SL-runtime");
+    const scriptPath = join(runtimeRoot, "SL.ps1");
+    const markerPath = join(root, "corrupt-module-executed.txt");
+    const modulePath = join(runtimeRoot, "SL.Runtime.Core.ps1");
+    const original = await readFile(modulePath, "utf8");
+    await writeFile(
+      modulePath,
+      `Set-Content -LiteralPath '${markerPath.replaceAll("'", "''")}' -Value 'executed'\n${original}`,
+      "utf8",
+    );
+
+    const result = runPowerShell(scriptPath, ["version", "--json"], root);
+
+    expect(result.status).toBe(6);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      command: "bootstrap",
+      healthy: false,
+      checks: [
+        expect.objectContaining({
+          code: "runtime-hash-drift",
+          message: "Runtime file hash drift: SL.Runtime.Core.ps1",
+        }),
+      ],
+    });
+    await expect(access(markerPath)).rejects.toThrow();
+  });
+
+  test("fails bootstrap when a declared executable payload is missing", async () => {
+    const root = await slCreateTestRepository();
+    repositories.push(root);
+    await slInstall(root, "init", false);
+    const runtimeRoot = join(root, ".github", "SL-learning", "SL-runtime");
+    const scriptPath = join(runtimeRoot, "SL.ps1");
+    await rm(join(runtimeRoot, "SL.Runtime.Resource.ps1"));
+
+    const result = runPowerShell(scriptPath, ["doctor", "--json"], root);
+
+    expect(result.status).toBe(6);
+    expect(JSON.parse(result.stdout).checks).toContainEqual(
+      expect.objectContaining({
+        code: "runtime-file-missing",
+        message: "Runtime file is missing: SL.Runtime.Resource.ps1",
+      }),
+    );
   });
 
   test("rejects local runtime drift and preserves unrelated files", async () => {

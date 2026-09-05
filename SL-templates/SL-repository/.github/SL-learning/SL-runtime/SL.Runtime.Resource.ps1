@@ -1,5 +1,250 @@
 Set-StrictMode -Version Latest
 
+function Test-SLResourceSensitiveString {
+    param([Parameter(Mandatory)][AllowEmptyString()][string] $Value)
+
+    if (
+        (Test-SLSensitiveText $Value) -or
+        $Value -match '[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}' -or
+        $Value -match '(?:^|[^0-9])(?:\d{1,3}\.){3}\d{1,3}(?:$|[^0-9])'
+    ) {
+        return $true
+    }
+    foreach ($Match in [Regex]::Matches($Value, '(?<![A-Za-z0-9])(?:[A-Fa-f0-9]{0,4}:){2,7}[A-Fa-f0-9:]{0,4}(?![A-Za-z0-9])')) {
+        [Net.IPAddress] $Address = $null
+        if ([Net.IPAddress]::TryParse($Match.Value, [ref] $Address) -and $Address.AddressFamily -eq [Net.Sockets.AddressFamily]::InterNetworkV6) {
+            return $true
+        }
+    }
+    return $false
+}
+
+function Assert-SLResourceNoSensitiveStrings {
+    param(
+        [Parameter(Mandatory)][AllowNull()][object] $Value,
+        [string] $Path = 'resource input'
+    )
+
+    if ($null -eq $Value) {
+        return
+    }
+    if ($Value -is [string]) {
+        if (Test-SLResourceSensitiveString $Value) {
+            Throw-SLContractError -Code 'resource-privacy' -Message "$Path must not contain secrets, PII, or user paths."
+        }
+        return
+    }
+    if ($Value -is [System.Collections.IDictionary]) {
+        foreach ($Key in $Value.Keys) {
+            Assert-SLResourceNoSensitiveStrings -Value $Value[$Key] -Path "$Path.$Key"
+        }
+        return
+    }
+    if ($Value -is [pscustomobject]) {
+        foreach ($Property in $Value.PSObject.Properties) {
+            Assert-SLResourceNoSensitiveStrings -Value $Property.Value -Path "$Path.$($Property.Name)"
+        }
+        return
+    }
+    if ($Value -is [System.Collections.IEnumerable]) {
+        $Index = 0
+        foreach ($Item in $Value) {
+            Assert-SLResourceNoSensitiveStrings -Value $Item -Path "$Path[$Index]"
+            $Index += 1
+        }
+    }
+}
+
+function Get-SLResourcePropertyNames {
+    param([Parameter(Mandatory)][object] $Value)
+
+    if ($Value -is [System.Collections.IDictionary]) {
+        return [string[]] @($Value.Keys | ForEach-Object { [string] $_ })
+    }
+    return [string[]] @($Value.PSObject.Properties.Name)
+}
+
+function Assert-SLResourceKnownProperties {
+    param(
+        [Parameter(Mandatory)][string] $Name,
+        [Parameter(Mandatory)][object] $Value,
+        [Parameter(Mandatory)][string[]] $Allowed
+    )
+
+    $Unexpected = @(Get-SLResourcePropertyNames $Value | Where-Object { $_ -cnotin $Allowed } | Sort-Object -CaseSensitive)
+    if ($Unexpected.Count -gt 0) {
+        Throw-SLContractError -Code 'resource-input' -Message "$Name contains unsupported fields: $($Unexpected -join ', ')."
+    }
+}
+
+function Assert-SLResourceRequiredProperties {
+    param(
+        [Parameter(Mandatory)][string] $Name,
+        [Parameter(Mandatory)][object] $Value,
+        [Parameter(Mandatory)][string[]] $Required
+    )
+
+    $Missing = @($Required | Where-Object { -not (Test-SLProperty $Value $_) })
+    if ($Missing.Count -gt 0) {
+        Throw-SLContractError -Code 'resource-input' -Message "$Name is missing required fields: $($Missing -join ', ')."
+    }
+}
+
+function Assert-SLResourceStringProperty {
+    param(
+        [Parameter(Mandatory)][string] $Name,
+        [Parameter(Mandatory)][object] $Value,
+        [switch] $Optional
+    )
+
+    if ($null -eq $Value -and $Optional) {
+        return
+    }
+    if ($Value -isnot [string]) {
+        Throw-SLContractError -Code 'resource-input' -Message "$Name must be a string."
+    }
+}
+
+function Assert-SLResourceNumberProperty {
+    param(
+        [Parameter(Mandatory)][string] $Name,
+        [Parameter(Mandatory)][object] $Value,
+        [switch] $Optional
+    )
+
+    if ($null -eq $Value -and $Optional) {
+        return
+    }
+    if (
+        $Value -isnot [byte] -and
+        $Value -isnot [sbyte] -and
+        $Value -isnot [int16] -and
+        $Value -isnot [uint16] -and
+        $Value -isnot [int32] -and
+        $Value -isnot [uint32] -and
+        $Value -isnot [int64] -and
+        $Value -isnot [uint64] -and
+        $Value -isnot [single] -and
+        $Value -isnot [double] -and
+        $Value -isnot [decimal]
+    ) {
+        Throw-SLContractError -Code 'resource-input' -Message "$Name must be a number."
+    }
+}
+
+function Assert-SLResourceInputShape {
+    param(
+        [Parameter(Mandatory)][object] $Entry,
+        [Parameter(Mandatory)][int] $Index
+    )
+
+    $Name = "receipts[$Index]"
+    if (-not (Test-SLMap $Entry)) {
+        Throw-SLContractError -Code 'resource-input' -Message "$Name must be a JSON object."
+    }
+    $Allowed = @(
+        'idempotencyKey','phase','source','quality','provider','modelId','tokens',
+        'wallClockDurationMs','modelDurationMs','toolDurationMs','attemptCount',
+        'timestamp','evidenceRef','scope','reportedCost','artifactId',
+        'artifactContentHash','generationRunId','taskRunId','applicationId','comparison'
+    )
+    Assert-SLResourceKnownProperties -Name $Name -Value $Entry -Allowed $Allowed
+    Assert-SLResourceRequiredProperties -Name $Name -Value $Entry -Required @(
+        'idempotencyKey','phase','source','quality','provider','modelId','tokens',
+        'wallClockDurationMs','timestamp'
+    )
+    foreach ($Field in @('idempotencyKey','phase','source','quality','provider','modelId','timestamp')) {
+        Assert-SLResourceStringProperty -Name "$Name.$Field" -Value (Get-SLProperty $Entry $Field)
+    }
+    foreach ($Field in @('artifactId','artifactContentHash','generationRunId','taskRunId','applicationId','evidenceRef')) {
+        if (Test-SLProperty $Entry $Field) {
+            Assert-SLResourceStringProperty -Name "$Name.$Field" -Value (Get-SLProperty $Entry $Field)
+        }
+    }
+    foreach ($Field in @('wallClockDurationMs','modelDurationMs','toolDurationMs','attemptCount')) {
+        if (Test-SLProperty $Entry $Field) {
+            Assert-SLResourceNumberProperty -Name "$Name.$Field" -Value (Get-SLProperty $Entry $Field)
+        }
+    }
+    if (-not (Test-SLMap $Entry.tokens)) {
+        Throw-SLContractError -Code 'resource-input' -Message "$Name.tokens must be a JSON object."
+    }
+    Assert-SLResourceKnownProperties -Name "$Name.tokens" -Value $Entry.tokens -Allowed @('input','output','cacheRead','cacheWrite','reasoning')
+    Assert-SLResourceRequiredProperties -Name "$Name.tokens" -Value $Entry.tokens -Required @('input','output')
+    foreach ($Field in @('input','output','cacheRead','cacheWrite','reasoning')) {
+        if (Test-SLProperty $Entry.tokens $Field) {
+            Assert-SLResourceNumberProperty -Name "$Name.tokens.$Field" -Value (Get-SLProperty $Entry.tokens $Field)
+        }
+    }
+    if (Test-SLProperty $Entry 'scope') {
+        if (-not (Test-SLMap $Entry.scope)) {
+            Throw-SLContractError -Code 'resource-input' -Message "$Name.scope must be a JSON object."
+        }
+        Assert-SLResourceKnownProperties -Name "$Name.scope" -Value $Entry.scope -Allowed @('id','path')
+        Assert-SLResourceRequiredProperties -Name "$Name.scope" -Value $Entry.scope -Required @('id','path')
+        Assert-SLResourceStringProperty -Name "$Name.scope.id" -Value $Entry.scope.id
+        Assert-SLResourceStringProperty -Name "$Name.scope.path" -Value $Entry.scope.path
+    }
+    if (Test-SLProperty $Entry 'reportedCost') {
+        if (-not (Test-SLMap $Entry.reportedCost)) {
+            Throw-SLContractError -Code 'resource-input' -Message "$Name.reportedCost must be a JSON object."
+        }
+        Assert-SLResourceKnownProperties -Name "$Name.reportedCost" -Value $Entry.reportedCost -Allowed @('amount','currency','basis')
+        Assert-SLResourceRequiredProperties -Name "$Name.reportedCost" -Value $Entry.reportedCost -Required @('amount','currency','basis')
+        foreach ($Field in @('amount','currency','basis')) {
+            Assert-SLResourceStringProperty -Name "$Name.reportedCost.$Field" -Value (Get-SLProperty $Entry.reportedCost $Field)
+        }
+    }
+    if (Test-SLProperty $Entry 'comparison') {
+        if (-not (Test-SLMap $Entry.comparison)) {
+            Throw-SLContractError -Code 'resource-input' -Message "$Name.comparison must be a JSON object."
+        }
+        Assert-SLResourceKnownProperties -Name "$Name.comparison" -Value $Entry.comparison -Allowed @('comparisonId','scenarioKey','role')
+        Assert-SLResourceRequiredProperties -Name "$Name.comparison" -Value $Entry.comparison -Required @('comparisonId','scenarioKey','role')
+        foreach ($Field in @('comparisonId','scenarioKey','role')) {
+            Assert-SLResourceStringProperty -Name "$Name.comparison.$Field" -Value (Get-SLProperty $Entry.comparison $Field)
+        }
+    }
+    $Phase = [string] $Entry.phase
+    if ($Phase -cnotin @('generation','application','baseline')) {
+        Throw-SLContractError -Code 'resource-input' -Message "$Name.phase is not supported."
+    }
+    if ([string] $Entry.source -cnotin @('host','ci','manual')) {
+        Throw-SLContractError -Code 'resource-input' -Message "$Name.source is not supported."
+    }
+    if ([string] $Entry.quality -cnotin @('measured','estimated')) {
+        Throw-SLContractError -Code 'resource-input' -Message "$Name.quality is not supported."
+    }
+    if ($Phase -ceq 'generation') {
+        Assert-SLResourceRequiredProperties -Name $Name -Value $Entry -Required @('artifactId','artifactContentHash','generationRunId')
+        foreach ($Field in @('taskRunId','applicationId','comparison')) {
+            if (Test-SLProperty $Entry $Field) {
+                Throw-SLContractError -Code 'resource-input' -Message "$Name generation input cannot contain $Field."
+            }
+        }
+    }
+    elseif ($Phase -ceq 'application') {
+        Assert-SLResourceRequiredProperties -Name $Name -Value $Entry -Required @('artifactId','artifactContentHash','taskRunId','applicationId')
+        if (Test-SLProperty $Entry 'generationRunId') {
+            Throw-SLContractError -Code 'resource-input' -Message "$Name application input cannot contain generationRunId."
+        }
+        if ((Test-SLProperty $Entry 'comparison') -and [string] $Entry.comparison.role -cne 'treatment') {
+            Throw-SLContractError -Code 'resource-input' -Message "$Name.comparison.role must be treatment."
+        }
+    }
+    else {
+        Assert-SLResourceRequiredProperties -Name $Name -Value $Entry -Required @('taskRunId','comparison')
+        foreach ($Field in @('artifactId','artifactContentHash','generationRunId','applicationId')) {
+            if (Test-SLProperty $Entry $Field) {
+                Throw-SLContractError -Code 'resource-input' -Message "$Name baseline input cannot contain $Field."
+            }
+        }
+        if ([string] $Entry.comparison.role -cne 'baseline') {
+            Throw-SLContractError -Code 'resource-input' -Message "$Name.comparison.role must be baseline."
+        }
+    }
+}
+
 function Assert-SLResourceOpaqueId {
     param([Parameter(Mandatory)][string] $Name, [Parameter(Mandatory)][string] $Value)
 
@@ -23,6 +268,45 @@ function Assert-SLResourceInteger {
 function Assert-SLResourceReceipt {
     param([Parameter(Mandatory)][object] $Receipt)
 
+    Assert-SLResourceNoSensitiveStrings -Value $Receipt -Path 'resource receipt'
+    if (-not (Test-SLMap $Receipt)) {
+        Throw-SLContractError -Code 'resource-input' -Message 'Resource receipt must be a JSON object.'
+    }
+    Assert-SLResourceKnownProperties -Name 'resource receipt' -Value $Receipt -Allowed @(
+        'schemaVersion','receiptId','idempotencyKey','phase','source','quality',
+        'provider','modelId','tokens','wallClockDurationMs','modelDurationMs',
+        'toolDurationMs','attemptCount','timestamp','evidenceRef','scope',
+        'reportedCost','artifactId','artifactVersion','artifactContentHash',
+        'generationRunId','taskRunId','applicationId','comparison'
+    )
+    Assert-SLResourceRequiredProperties -Name 'resource receipt' -Value $Receipt -Required @(
+        'schemaVersion','receiptId','idempotencyKey','phase','source','quality',
+        'provider','modelId','tokens','wallClockDurationMs','timestamp','scope'
+    )
+    if (-not (Test-SLMap $Receipt.tokens)) {
+        Throw-SLContractError -Code 'resource-tokens' -Message 'tokens must be an object.'
+    }
+    Assert-SLResourceKnownProperties -Name 'resource receipt.tokens' -Value $Receipt.tokens -Allowed @('input','output','cacheRead','cacheWrite','reasoning')
+    Assert-SLResourceRequiredProperties -Name 'resource receipt.tokens' -Value $Receipt.tokens -Required @('input','output')
+    if (-not (Test-SLMap $Receipt.scope)) {
+        Throw-SLContractError -Code 'resource-scope' -Message 'scope must be an object.'
+    }
+    Assert-SLResourceKnownProperties -Name 'resource receipt.scope' -Value $Receipt.scope -Allowed @('id','path')
+    Assert-SLResourceRequiredProperties -Name 'resource receipt.scope' -Value $Receipt.scope -Required @('id','path')
+    if (Test-SLProperty $Receipt 'reportedCost') {
+        if (-not (Test-SLMap $Receipt.reportedCost)) {
+            Throw-SLContractError -Code 'resource-cost' -Message 'reportedCost must be an object.'
+        }
+        Assert-SLResourceKnownProperties -Name 'resource receipt.reportedCost' -Value $Receipt.reportedCost -Allowed @('amount','currency','basis')
+        Assert-SLResourceRequiredProperties -Name 'resource receipt.reportedCost' -Value $Receipt.reportedCost -Required @('amount','currency','basis')
+    }
+    if (Test-SLProperty $Receipt 'comparison') {
+        if (-not (Test-SLMap $Receipt.comparison)) {
+            Throw-SLContractError -Code 'resource-comparison' -Message 'comparison must be an object.'
+        }
+        Assert-SLResourceKnownProperties -Name 'resource receipt.comparison' -Value $Receipt.comparison -Allowed @('comparisonId','scenarioKey','role')
+        Assert-SLResourceRequiredProperties -Name 'resource receipt.comparison' -Value $Receipt.comparison -Required @('comparisonId','scenarioKey','role')
+    }
     if (
         $Receipt.schemaVersion -ne 1 -or
         [string] $Receipt.receiptId -cnotmatch '^SL-RESOURCE-[A-F0-9]{32}$' -or
@@ -95,6 +379,7 @@ function Assert-SLResourceReceipt {
         }
     }
     if ($Receipt.phase -ceq 'generation') {
+        Assert-SLResourceRequiredProperties -Name 'resource receipt' -Value $Receipt -Required @('artifactId','artifactVersion','artifactContentHash','generationRunId')
         Assert-SLResourceOpaqueId generationRunId ([string] $Receipt.generationRunId)
         if (
             (Test-SLProperty $Receipt 'taskRunId') -or
@@ -105,6 +390,7 @@ function Assert-SLResourceReceipt {
         }
     }
     elseif ($Receipt.phase -ceq 'application') {
+        Assert-SLResourceRequiredProperties -Name 'resource receipt' -Value $Receipt -Required @('artifactId','artifactVersion','artifactContentHash','taskRunId','applicationId')
         Assert-SLResourceOpaqueId taskRunId ([string] $Receipt.taskRunId)
         Assert-SLResourceOpaqueId applicationId ([string] $Receipt.applicationId)
         if (Test-SLProperty $Receipt 'generationRunId') {
@@ -119,6 +405,7 @@ function Assert-SLResourceReceipt {
         }
     }
     else {
+        Assert-SLResourceRequiredProperties -Name 'resource receipt' -Value $Receipt -Required @('taskRunId','comparison')
         Assert-SLResourceOpaqueId taskRunId ([string] $Receipt.taskRunId)
         if (-not (Test-SLProperty $Receipt 'comparison')) {
             Throw-SLContractError -Code 'resource-baseline-fields' -Message 'Baseline receipts require comparison identity.'
@@ -139,6 +426,7 @@ function Assert-SLResourceReceipt {
 function New-SLResourceReceipt {
     param([Parameter(Mandatory)][object] $ReceiptInput)
 
+    Assert-SLResourceNoSensitiveStrings -Value $ReceiptInput
     $RawKey = ([string] $ReceiptInput.idempotencyKey).Trim()
     if (-not $RawKey) {
         Throw-SLContractError -Code 'resource-idempotency' -Message 'idempotencyKey is required.'
@@ -185,7 +473,6 @@ function New-SLResourceReceipt {
         $Common['applicationId'] = $ReceiptInput.applicationId
         if (Test-SLProperty $ReceiptInput 'comparison') {
             $Comparison = Copy-SLValue $ReceiptInput.comparison
-            Set-SLProperty $Comparison 'role' 'treatment'
             $Common['comparison'] = $Comparison
         }
     }
@@ -194,7 +481,6 @@ function New-SLResourceReceipt {
             Throw-SLContractError -Code 'resource-baseline-fields' -Message 'Baseline receipts require taskRunId and comparison identity.'
         }
         $Comparison = Copy-SLValue $ReceiptInput.comparison
-        Set-SLProperty $Comparison 'role' 'baseline'
         $Common['taskRunId'] = $ReceiptInput.taskRunId
         $Common['comparison'] = $Comparison
     }
@@ -272,6 +558,9 @@ function Get-SLResourceReceipts {
             }
             $ByApplication[[string] $Receipt.applicationId] = $Receipt
         }
+        if ($null -ne $Collision) {
+            continue
+        }
         $ById[[string] $Receipt.receiptId] = $Receipt
         $ByKey[[string] $Receipt.idempotencyKey] = $Receipt
         $Receipts.Add($Receipt)
@@ -293,15 +582,9 @@ function Write-SLResourceReceipt {
         return [pscustomobject] @{ action = 'skip'; path = $RelativePath; detail = 'idempotent receipt already recorded' }
     }
     if (-not $DryRun) {
-        Update-SLMutationLease
-        [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($Path)) | Out-Null
-        $Stream = [IO.File]::Open($Path, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
-        try {
-            $Content = "$(ConvertTo-Json $Receipt -Depth 100)`n".Replace("`r`n", "`n").Replace("`r", "`n")
-            $Bytes = [Text.UTF8Encoding]::new($false).GetBytes($Content)
-            $Stream.Write($Bytes, 0, $Bytes.Length)
-        }
-        finally { $Stream.Dispose() }
+        Write-SLImmutableText -Root $Root -RelativePath $RelativePath -Content (
+            "$(ConvertTo-Json $Receipt -Depth 100)`n"
+        )
     }
     return [pscustomobject] @{ action = 'create'; path = $RelativePath; detail = $(if ($DryRun) { 'planned' } else { 'written' }) }
 }
@@ -598,9 +881,29 @@ function Get-SLAverageSummary {
 function Get-SLAmortizedSummary {
     param([object] $Summary, [int] $Divisor)
     if ($Divisor -eq 0 -or $Summary.receiptCount -eq 0) { return $null }
-    $Average = Get-SLAverageSummary $Summary $Divisor
-    foreach ($Property in $Average.reportedCostSampleCounts.PSObject.Properties) { $Average.reportedCostSampleCounts.($Property.Name) = $Divisor }
-    return $Average
+    $Costs = [ordered] @{}
+    $CostCounts = [ordered] @{}
+    foreach ($Property in $Summary.reportedCosts.PSObject.Properties) {
+        $Costs[$Property.Name] = ConvertFrom-SLScaledDecimal (
+            Divide-SLScaledDecimal (ConvertTo-SLScaledDecimal ([string] $Property.Value)) $Divisor
+        )
+        $CostCounts[$Property.Name] = $Divisor
+    }
+    return [pscustomobject] @{
+        sampleCount = $Divisor
+        inputTokens = $Summary.inputTokens / $Divisor
+        outputTokens = $Summary.outputTokens / $Divisor
+        cacheReadTokens = $Summary.cacheReadTokens / $Divisor
+        cacheWriteTokens = $Summary.cacheWriteTokens / $Divisor
+        reasoningTokens = $Summary.reasoningTokens / $Divisor
+        totalTokens = $Summary.totalTokens / $Divisor
+        wallClockDurationMs = $Summary.wallClockDurationMs / $Divisor
+        modelDurationMs = $Summary.modelDurationMs / $Divisor
+        toolDurationMs = $Summary.toolDurationMs / $Divisor
+        attemptCount = $Summary.attemptCount / $Divisor
+        reportedCosts = [pscustomobject] $Costs
+        reportedCostSampleCounts = [pscustomobject] $CostCounts
+    }
 }
 
 function Subtract-SLMetricValues {
@@ -852,18 +1155,27 @@ function Get-SLEfficiencyReport {
 function ConvertFrom-SLResourceInput {
     param([Parameter(Mandatory)][object] $Value)
 
-    $Allowed = @('idempotencyKey','phase','source','quality','provider','modelId','tokens','wallClockDurationMs','modelDurationMs','toolDurationMs','attemptCount','timestamp','evidenceRef','scope','reportedCost','artifactId','artifactContentHash','generationRunId','taskRunId','applicationId','comparison')
-    $Entries = if ($Value -is [array]) { @($Value) } elseif ((Test-SLProperty $Value 'receipts') -or (Test-SLProperty $Value 'schemaVersion')) {
-        if ($Value.schemaVersion -ne 1 -or -not (Test-SLProperty $Value 'receipts')) {
+    Assert-SLResourceNoSensitiveStrings -Value $Value
+    $Entries = if ($Value -is [array]) {
+        @($Value)
+    }
+    elseif ((Test-SLProperty $Value 'receipts') -or (Test-SLProperty $Value 'schemaVersion')) {
+        if (-not (Test-SLMap $Value)) {
+            Throw-SLContractError -Code 'resource-input' -Message 'Resource input envelope must be a JSON object.'
+        }
+        Assert-SLResourceKnownProperties -Name 'resource input' -Value $Value -Allowed @('schemaVersion','receipts')
+        if ($Value.schemaVersion -ne 1 -or -not (Test-SLProperty $Value 'receipts') -or $Value.receipts -isnot [array]) {
             Throw-SLContractError -Code 'resource-input' -Message 'Resource input envelope requires schemaVersion 1 and a receipts array.'
         }
         @($Value.receipts)
-    } else { @($Value) }
+    }
+    else {
+        @($Value)
+    }
     if ($Entries.Count -eq 0) { Throw-SLContractError -Code 'resource-input' -Message 'Resource input must contain at least one receipt.' }
-    foreach ($Entry in $Entries) {
-        if (-not (Test-SLMap $Entry)) { Throw-SLContractError -Code 'resource-input' -Message 'Resource receipt input must be a JSON object.' }
-        $Unexpected = @($Entry.PSObject.Properties | ForEach-Object { $_.Name } | Where-Object { $_ -cnotin $Allowed })
-        if ($Unexpected.Count -gt 0) { Throw-SLContractError -Code 'resource-input' -Message "Resource input contains unsupported fields: $($Unexpected -join ', ')." }
+    for ($Index = 0; $Index -lt $Entries.Count; $Index += 1) {
+        $Entry = $Entries[$Index]
+        Assert-SLResourceInputShape -Entry $Entry -Index $Index
         [void] (New-SLResourceReceipt $Entry)
     }
     return $Entries

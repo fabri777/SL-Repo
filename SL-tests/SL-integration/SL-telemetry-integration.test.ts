@@ -776,16 +776,25 @@ describe("SL telemetry integration", () => {
     expect(planningSteps.get("Preview")).toEqual({
       name: "Preview",
       shell: "pwsh",
-      run: "pwsh .github/SL-learning/SL-runtime/SL.ps1 sweep . --dry-run",
+      run:
+        '$ErrorActionPreference = "Stop"\n' +
+        '$runtime = Join-Path $env:GITHUB_WORKSPACE ".github/SL-learning/SL-runtime/SL.ps1"\n' +
+        "& pwsh -NoLogo -NoProfile -File $runtime --repo-root $env:GITHUB_WORKSPACE sweep $env:GITHUB_WORKSPACE --dry-run\n" +
+        "if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }\n",
     });
     expect(planningSteps.get("Apply")).toEqual({
       name: "Apply",
       if: "${{ github.event_name == 'workflow_dispatch' && inputs.apply }}",
       shell: "pwsh",
       run:
-        "pwsh .github/SL-learning/SL-runtime/SL.ps1 sweep .\n" +
-        "pwsh .github/SL-learning/SL-runtime/SL.ps1 project .\n" +
-        "pwsh .github/SL-learning/SL-runtime/SL.ps1 validate .\n",
+        '$ErrorActionPreference = "Stop"\n' +
+        '$runtime = Join-Path $env:GITHUB_WORKSPACE ".github/SL-learning/SL-runtime/SL.ps1"\n' +
+        "& pwsh -NoLogo -NoProfile -File $runtime --repo-root $env:GITHUB_WORKSPACE sweep $env:GITHUB_WORKSPACE\n" +
+        "if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }\n" +
+        "& pwsh -NoLogo -NoProfile -File $runtime --repo-root $env:GITHUB_WORKSPACE project $env:GITHUB_WORKSPACE\n" +
+        "if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }\n" +
+        "& pwsh -NoLogo -NoProfile -File $runtime --repo-root $env:GITHUB_WORKSPACE validate $env:GITHUB_WORKSPACE\n" +
+        "if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }\n",
     });
     expect(planningSteps.get("Capture retention patch")?.run).toContain(
       "git diff --cached --binary --full-index",

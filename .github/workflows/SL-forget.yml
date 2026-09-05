@@ -29,17 +29,29 @@ jobs:
           persist-credentials: false
       - name: Preview forgetting
         shell: pwsh
-        run: pwsh .github/SL-learning/SL-runtime/SL.ps1 sweep . --dry-run
+        run: |
+          $ErrorActionPreference = "Stop"
+          $runtime = Join-Path $env:GITHUB_WORKSPACE "SL-templates/SL-repository/.github/SL-learning/SL-runtime/SL.ps1"
+          & pwsh -NoLogo -NoProfile -File $runtime --repo-root $env:GITHUB_WORKSPACE sweep $env:GITHUB_WORKSPACE --dry-run
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Apply forgetting
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.apply }}
         shell: pwsh
         run: |
-          pwsh .github/SL-learning/SL-runtime/SL.ps1 sweep .
-          pwsh .github/SL-learning/SL-runtime/SL.ps1 project .
+          $ErrorActionPreference = "Stop"
+          $runtime = Join-Path $env:GITHUB_WORKSPACE "SL-templates/SL-repository/.github/SL-learning/SL-runtime/SL.ps1"
+          & pwsh -NoLogo -NoProfile -File $runtime --repo-root $env:GITHUB_WORKSPACE sweep $env:GITHUB_WORKSPACE
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & pwsh -NoLogo -NoProfile -File $runtime --repo-root $env:GITHUB_WORKSPACE project $env:GITHUB_WORKSPACE
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Validate integrated projections
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.apply }}
         shell: pwsh
-        run: pwsh .github/SL-learning/SL-runtime/SL.ps1 validate .
+        run: |
+          $ErrorActionPreference = "Stop"
+          $runtime = Join-Path $env:GITHUB_WORKSPACE "SL-templates/SL-repository/.github/SL-learning/SL-runtime/SL.ps1"
+          & pwsh -NoLogo -NoProfile -File $runtime --repo-root $env:GITHUB_WORKSPACE validate $env:GITHUB_WORKSPACE
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Capture retention patch
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.apply }}
         run: |

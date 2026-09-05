@@ -1,6 +1,7 @@
 Set-StrictMode -Version Latest
 
 $script:SLActiveMutationLockPath = $null
+$script:SLActiveMutationTransaction = $null
 
 function Throw-SLContractError {
     param(
@@ -136,6 +137,78 @@ function ConvertTo-SLCanonicalJson {
         return "{$($Parts -join ',')}"
     }
     Throw-SLContractError -Code 'canonical-json-type' -Message "Canonical JSON does not support $($Value.GetType().FullName)."
+}
+
+function ConvertTo-SLReportJson {
+    param(
+        [Parameter(Mandatory)]
+        [AllowNull()]
+        [object] $Value
+    )
+
+    if ($null -eq $Value) {
+        return 'null'
+    }
+    if ($Value -is [string]) {
+        return ConvertTo-SLJsonString -Value $Value
+    }
+    if ($Value -is [bool]) {
+        return $(if ($Value) { 'true' } else { 'false' })
+    }
+    if (
+        $Value -is [byte] -or
+        $Value -is [sbyte] -or
+        $Value -is [int16] -or
+        $Value -is [uint16] -or
+        $Value -is [int32] -or
+        $Value -is [uint32] -or
+        $Value -is [int64] -or
+        $Value -is [uint64]
+    ) {
+        if ([decimal] $Value -lt -9007199254740991 -or [decimal] $Value -gt 9007199254740991) {
+            Throw-SLContractError -Code 'report-json-number' -Message 'Report JSON supports safe integers and finite fractional numbers only.'
+        }
+        return ([System.Convert]::ToString($Value, [Globalization.CultureInfo]::InvariantCulture))
+    }
+    if ($Value -is [double] -or $Value -is [single]) {
+        $Number = [double] $Value
+        if ([double]::IsNaN($Number) -or [double]::IsInfinity($Number)) {
+            Throw-SLContractError -Code 'report-json-number' -Message 'Report JSON supports safe integers and finite fractional numbers only.'
+        }
+        if ($Number -eq 0) {
+            return '0'
+        }
+        return $Number.ToString('R', [Globalization.CultureInfo]::InvariantCulture)
+    }
+    if ($Value -is [decimal]) {
+        return ([decimal] $Value).ToString('G29', [Globalization.CultureInfo]::InvariantCulture)
+    }
+    if ($Value -is [System.Collections.IDictionary]) {
+        $Names = [string[]] @($Value.Keys | ForEach-Object { [string] $_ })
+        [Array]::Sort($Names, [StringComparer]::Ordinal)
+        $Parts = foreach ($Name in $Names) {
+            "$(ConvertTo-SLJsonString -Value $Name):$(ConvertTo-SLReportJson -Value $Value[$Name])"
+        }
+        return "{$($Parts -join ',')}"
+    }
+    if (
+        $Value -is [System.Collections.IEnumerable] -and
+        $Value -isnot [string]
+    ) {
+        $Parts = foreach ($Item in $Value) {
+            ConvertTo-SLReportJson -Value $Item
+        }
+        return "[$($Parts -join ',')]"
+    }
+    if ($Value -is [pscustomobject]) {
+        $Names = [string[]] @($Value.PSObject.Properties | ForEach-Object { $_.Name })
+        [Array]::Sort($Names, [StringComparer]::Ordinal)
+        $Parts = foreach ($Name in $Names) {
+            "$(ConvertTo-SLJsonString -Value $Name):$(ConvertTo-SLReportJson -Value $Value.$Name)"
+        }
+        return "{$($Parts -join ',')}"
+    }
+    Throw-SLContractError -Code 'report-json-type' -Message "Report JSON does not support $($Value.GetType().FullName)."
 }
 
 function Get-SLSha256 {
@@ -326,12 +399,14 @@ function Write-SLSafeText {
     if ($DryRun) {
         return [pscustomobject] @{ action = 'planned'; path = (ConvertTo-SLNormalizedPath $RelativePath) }
     }
+    Add-SLMutationSnapshot -Root $Root -RelativePath $RelativePath
     $Directory = [IO.Path]::GetDirectoryName($Path)
     [IO.Directory]::CreateDirectory($Directory) | Out-Null
     $TemporaryPath = "$Path.SL-tmp-$([Guid]::NewGuid().ToString('N'))"
     try {
         [IO.File]::WriteAllText($TemporaryPath, $Normalized, [Text.UTF8Encoding]::new($false))
         [IO.File]::Move($TemporaryPath, $Path, $true)
+        Complete-SLMutationStep
     }
     finally {
         if ([IO.File]::Exists($TemporaryPath)) {
@@ -339,6 +414,44 @@ function Write-SLSafeText {
         }
     }
     return [pscustomobject] @{ action = 'written'; path = (ConvertTo-SLNormalizedPath $RelativePath) }
+}
+
+function Write-SLImmutableText {
+    param(
+        [Parameter(Mandatory)]
+        [string] $Root,
+
+        [Parameter(Mandatory)]
+        [string] $RelativePath,
+
+        [Parameter(Mandatory)]
+        [AllowEmptyString()]
+        [string] $Content
+    )
+
+    Update-SLMutationLease
+    $NormalizedPath = ConvertTo-SLNormalizedPath $RelativePath
+    $Path = Resolve-SLContainedPath -Root $Root -RelativePath $NormalizedPath
+    if ([IO.File]::Exists($Path) -or [IO.Directory]::Exists($Path)) {
+        Throw-SLContractError -Code 'file-clobber' -Message "Cannot overwrite existing immutable file: $NormalizedPath"
+    }
+    Add-SLMutationSnapshot -Root $Root -RelativePath $NormalizedPath
+    [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($Path)) | Out-Null
+    $TemporaryPath = "$Path.SL-tmp-$([Guid]::NewGuid().ToString('N'))"
+    try {
+        [IO.File]::WriteAllText(
+            $TemporaryPath,
+            $Content.Replace("`r`n", "`n").Replace("`r", "`n"),
+            [Text.UTF8Encoding]::new($false)
+        )
+        [IO.File]::Move($TemporaryPath, $Path, $false)
+        Complete-SLMutationStep
+    }
+    finally {
+        if ([IO.File]::Exists($TemporaryPath)) {
+            [IO.File]::Delete($TemporaryPath)
+        }
+    }
 }
 
 function Test-SLProperty {
@@ -599,8 +712,11 @@ function Move-SLContainedFile {
         detail = "$SourceRelativePath -> $TargetRelativePath"
     })
     if (-not $DryRun) {
+        Add-SLMutationSnapshot -Root $Root -RelativePath $SourceRelativePath
+        Add-SLMutationSnapshot -Root $Root -RelativePath $TargetRelativePath
         [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($Target)) | Out-Null
         [IO.File]::Move($Source, $Target)
+        Complete-SLMutationStep
     }
 }
 
@@ -631,7 +747,9 @@ function Remove-SLContainedFile {
         detail = 'retention elapsed'
     })
     if (-not $DryRun) {
+        Add-SLMutationSnapshot -Root $Root -RelativePath $RelativePath
         [IO.File]::Delete($Path)
+        Complete-SLMutationStep
     }
 }
 
@@ -720,6 +838,121 @@ function Test-SLOpaqueReference {
     return $true
 }
 
+function Add-SLMutationSnapshot {
+    param(
+        [Parameter(Mandatory)]
+        [string] $Root,
+
+        [Parameter(Mandatory)]
+        [string] $RelativePath
+    )
+
+    if ($null -eq $script:SLActiveMutationTransaction) {
+        return
+    }
+    $NormalizedPath = ConvertTo-SLNormalizedPath $RelativePath
+    if ($script:SLActiveMutationTransaction.snapshots.ContainsKey($NormalizedPath)) {
+        return
+    }
+    $Path = Resolve-SLContainedPath -Root $Root -RelativePath $NormalizedPath
+    $Exists = [IO.File]::Exists($Path)
+    $script:SLActiveMutationTransaction.snapshots[$NormalizedPath] = [pscustomobject] @{
+        path = $NormalizedPath
+        exists = $Exists
+        bytes = $(if ($Exists) { [IO.File]::ReadAllBytes($Path) } else { $null })
+    }
+    $script:SLActiveMutationTransaction.order.Add($NormalizedPath)
+}
+
+function Complete-SLMutationStep {
+    if ($null -eq $script:SLActiveMutationTransaction) {
+        return
+    }
+    $script:SLActiveMutationTransaction.mutationCount += 1
+    $FailureAfterText = [Environment]::GetEnvironmentVariable('SL_TEST_INJECT_IO_FAILURE_AFTER')
+    [int] $FailureAfter = 0
+    if (
+        $FailureAfterText -and
+        [int]::TryParse($FailureAfterText, [ref] $FailureAfter) -and
+        $FailureAfter -gt 0 -and
+        $script:SLActiveMutationTransaction.mutationCount -eq $FailureAfter
+    ) {
+        Throw-SLContractError -Code 'file-write-injected' -Message "Injected I/O failure after mutation $FailureAfter."
+    }
+}
+
+function Restore-SLMutationTransaction {
+    param(
+        [Parameter(Mandatory)]
+        [string] $Root,
+
+        [Parameter(Mandatory)]
+        [object] $Transaction
+    )
+
+    for ($Index = $Transaction.order.Count - 1; $Index -ge 0; $Index -= 1) {
+        $RelativePath = [string] $Transaction.order[$Index]
+        $Snapshot = $Transaction.snapshots[$RelativePath]
+        $Path = Resolve-SLContainedPath -Root $Root -RelativePath $RelativePath
+        if (-not $Snapshot.exists) {
+            if ([IO.File]::Exists($Path)) {
+                [IO.File]::Delete($Path)
+            }
+            continue
+        }
+        [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($Path)) | Out-Null
+        $TemporaryPath = "$Path.SL-rollback-$([Guid]::NewGuid().ToString('N'))"
+        try {
+            [IO.File]::WriteAllBytes($TemporaryPath, [byte[]] $Snapshot.bytes)
+            [IO.File]::Move($TemporaryPath, $Path, $true)
+        }
+        finally {
+            if ([IO.File]::Exists($TemporaryPath)) {
+                [IO.File]::Delete($TemporaryPath)
+            }
+        }
+    }
+}
+
+function Invoke-SLWithMutationTransaction {
+    param(
+        [Parameter(Mandatory)]
+        [string] $Root,
+
+        [Parameter(Mandatory)]
+        [scriptblock] $Operation,
+
+        [switch] $DryRun
+    )
+
+    if ($DryRun -or $null -ne $script:SLActiveMutationTransaction) {
+        return & $Operation
+    }
+    $Transaction = [pscustomobject] @{
+        snapshots = @{}
+        order = [System.Collections.Generic.List[string]]::new()
+        mutationCount = 0
+    }
+    $script:SLActiveMutationTransaction = $Transaction
+    try {
+        return & $Operation
+    }
+    catch {
+        $OriginalError = $_
+        $script:SLActiveMutationTransaction = $null
+        try {
+            Restore-SLMutationTransaction -Root $Root -Transaction $Transaction
+        }
+        catch {
+            Throw-SLContractError -Code 'file-rollback' -Message "SL mutation rollback failed after '$($OriginalError.Exception.Message)': $($_.Exception.Message)"
+        }
+        throw $OriginalError
+    }
+    finally {
+        $script:SLActiveMutationTransaction = $null
+    }
+}
+
 function Invoke-SLWithMutationLock {
     param(
         [Parameter(Mandatory)]
@@ -804,7 +1037,7 @@ function Invoke-SLWithMutationLock {
     $PreviousActiveLockPath = $script:SLActiveMutationLockPath
     $script:SLActiveMutationLockPath = $LockPath
     try {
-        return & $Operation
+        return Invoke-SLWithMutationTransaction -Root $Root -Operation $Operation
     }
     finally {
         $script:SLActiveMutationLockPath = $PreviousActiveLockPath

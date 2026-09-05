@@ -28,8 +28,11 @@ sl-repo resource import .\SL-resource-input.json . --json
 
 Pass `-` as the input path to read at most 1 MiB from stdin. The input contract
 is published as `SL-schemas/SL-resource-input.schema.json`. Import rejects
-unknown fields so provider payloads, prompts, responses, user paths, and other
-unreviewed metadata cannot be silently persisted.
+unknown fields at every object level, enforces phase-specific required and
+forbidden fields plus exact baseline/treatment roles, and recursively scans
+all strings for secrets, PII, and user paths before persistence. Provider
+payloads, prompts, responses, invalid role values, and other unreviewed
+metadata cannot be silently normalized or stored.
 
 Record generation resources using the current immutable artifact identity:
 
@@ -75,7 +78,9 @@ sl-repo resource baseline . `
 
 All write commands accept `--dry-run`. Stable idempotency keys make retries
 safe. A retry may use a new timestamp, but changing any other immutable field
-is a collision. Writes use exclusive creation and never overwrite a receipt.
+is a collision. Equivalent receipt IDs or idempotency keys found in more than
+one valid month path are counted once; conflicting duplicates fail closed.
+Writes use exclusive creation and never overwrite a receipt.
 
 ## Efficiency report
 

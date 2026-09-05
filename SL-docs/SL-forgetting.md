@@ -29,10 +29,10 @@ success rates remain scope-local. Before deletion, SL checks ownership,
 pinning, active references, source evidence, registry consistency, and the
 quarantine grace period.
 
-Restore is transactional across the artifact file, scope registry shards,
-scope index/projection shards, the root state catalog, and immutable lifecycle
-event append. A failed restore reinstates each prior file byte-for-byte or
-restores its prior absence.
+Forget, restore, sweep, and promotion transitions are transactional across
+artifact files, scope registry shards, scope index/projection shards, the root
+state catalog, and immutable lifecycle event append. A failed mutation
+reinstates each prior file byte-for-byte or restores its prior absence.
 
 These checks are repository-wide, not shard-local. A lesson in a library scope
 cannot be forgotten while an active or probationary service/root artifact
@@ -51,10 +51,14 @@ validated as read-only compatibility data and are never appended to. Deleted
 content remains recoverable from Git history.
 
 The optional GitHub retention workflow schedules read-only previews only. A
-maintainer can manually request an apply run, but the pinned external runtime
-still executes without repository write credentials. It produces a binary
-patch artifact that a separate trusted job applies before opening an
-unmerged, review-required pull request.
+maintainer can manually request an apply run, but the checked-out,
+manifest-verified repository runtime still executes without repository write
+credentials. Every PowerShell invocation is checked immediately so a later
+command cannot mask a failure. It produces a binary patch artifact that a
+separate trusted job applies before opening an unmerged, review-required pull
+request. This repository's own workflow uses the bundled template runtime with
+an explicit repository root; installed consumer workflows use their committed
+runtime at `.github/SL-learning/SL-runtime/SL.ps1`.
 
 The optional Azure Pipelines adapter also defaults scheduled runs to preview.
 A manual sweep mutates only the disposable pipeline workspace and publishes a

@@ -1,6 +1,23 @@
 Set-StrictMode -Version Latest
 
 $script:SLRuntimeVersion = '0.3.0'
+$script:SLRuntimePayloadFiles = [string[]] @(
+    'SL-conformance-vectors.json',
+    'SL-runtime-manifest.schema.json',
+    'SL.Runtime.Artifacts.ps1',
+    'SL.Runtime.Conformance.ps1',
+    'SL.Runtime.Core.ps1',
+    'SL.Runtime.Doctor.ps1',
+    'SL.Runtime.Lifecycle.ps1',
+    'SL.Runtime.Promotion.ps1',
+    'SL.Runtime.Resource.ps1',
+    'SL.Runtime.State.ps1',
+    'SL.Runtime.Syntax.ps1',
+    'SL.Runtime.Validation.ps1',
+    'SL.Runtime.psm1',
+    'SL.ps1',
+    'SL.sh'
+)
 $script:SLExitCodes = @{
     Success = 0
     Usage = 2
@@ -104,6 +121,12 @@ function Write-SLRuntimeError {
     else {
         [Console]::Error.WriteLine($Message)
     }
+}
+
+function Write-SLRuntimeReportOutput {
+    param([Parameter(Mandatory)][AllowNull()][object] $Value)
+
+    [Console]::Out.WriteLine((ConvertTo-SLReportJson -Value $Value))
 }
 
 function ConvertFrom-SLArguments {
@@ -470,7 +493,7 @@ function Invoke-SLRuntimeCommand {
         { $_ -cin @('resource-stats', 'efficiency') } {
             $ArtifactId = if ($Positionals.Count -gt 0 -and $Positionals[0].StartsWith('SL-')) { [string] $Positionals[0] } else { $null }
             $Report = Get-SLEfficiencyReport -Root $Root -ArtifactId $ArtifactId -ScopeId ([string] (Get-SLFlag $Flags '--scope' '')) -Provider ([string] (Get-SLFlag $Flags '--provider' '')) -ModelId ([string] (Get-SLFlag $Flags '--model' '')) -Quality ([string] (Get-SLFlag $Flags '--quality' ''))
-            if ($Json) { [Console]::Out.WriteLine((ConvertTo-Json $Report -Depth 100 -Compress)) } else { Write-SLRuntimeOutput $Report }
+            Write-SLRuntimeReportOutput $Report
         }
         { $_ -cin @('project', 'index') } {
             $Changes = [System.Collections.Generic.List[object]]::new()

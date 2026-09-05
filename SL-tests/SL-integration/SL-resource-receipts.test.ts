@@ -195,7 +195,7 @@ describe("SL immutable resource receipts", () => {
     });
     expect(changes).toEqual([
       {
-        action: "create",
+        action: "update",
         path: projectionPath,
         detail: "written",
       },
@@ -422,7 +422,7 @@ describe("SL immutable resource receipts", () => {
           path: expect.stringContaining("SL-resource-receipts"),
         }),
         expect.objectContaining({
-          action: "create",
+          action: "update",
           path: expect.stringContaining("SL-resource-projection.json"),
         }),
       ]),

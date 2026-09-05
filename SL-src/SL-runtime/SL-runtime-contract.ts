@@ -4,6 +4,7 @@ import type {
   SLRuntimeManifest,
 } from "../SL-core/SL-types.js";
 import {
+  SL_RUNTIME_PAYLOAD_FILES,
   SL_SECRET_PATTERNS,
   SL_USER_PATH_PATTERN,
 } from "../SL-core/SL-constants.js";
@@ -951,6 +952,14 @@ export function slValidateRuntimeManifest(
     }
     seen.add(file.path);
     previous = file.path;
+  }
+  if (
+    slCanonicalJson([...seen]) !== slCanonicalJson(SL_RUNTIME_PAYLOAD_FILES)
+  ) {
+    return slContractError(
+      "manifest-files",
+      "Runtime manifest payload inventory does not match the contract.",
+    );
   }
 }
 

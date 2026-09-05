@@ -331,6 +331,25 @@ function Get-SLScopeKey {
     return "$($Normalized.id)$([char]0)$($Normalized.path)"
 }
 
+function Test-SLDefiniteExclusionCoversInclude {
+    param(
+        [Parameter(Mandatory)][string] $IncludePattern,
+        [Parameter(Mandatory)][string] $ExcludePattern
+    )
+
+    if ($ExcludePattern -ceq '**' -or $IncludePattern -ceq $ExcludePattern) {
+        return $true
+    }
+    if ($ExcludePattern.EndsWith('/**', [StringComparison]::Ordinal)) {
+        $ExcludedRoot = $ExcludePattern.Substring(0, $ExcludePattern.Length - 3)
+        return $IncludePattern.StartsWith("$ExcludedRoot/", [StringComparison]::Ordinal)
+    }
+    if ($IncludePattern -notmatch '[*?\[\]{}()!+@]') {
+        return Test-SLGlob -Pattern $ExcludePattern -Path $IncludePattern
+    }
+    return $false
+}
+
 function Test-SLScopeCatalog {
     param([Parameter(Mandatory)][object] $Catalog)
 
@@ -372,8 +391,9 @@ function Test-SLScopeCatalog {
         if (@($Scope.includePaths).Count -gt 0) {
             $Usable = @($Scope.includePaths | Where-Object {
                 $Include = [string] $_
-                -not (@($Scope.excludePaths) -contains $Include) -and
-                -not (@($Scope.excludePaths) -contains '**')
+                @($Scope.excludePaths | Where-Object {
+                    Test-SLDefiniteExclusionCoversInclude -IncludePattern $Include -ExcludePattern ([string] $_)
+                }).Count -eq 0
             }).Count -gt 0
             if (-not $Usable) {
                 $Issues.Add([pscustomobject] @{ code = 'unmatchable-scope'; message = "Scope $($Scope.id) has no include pattern outside its exclusions." })
@@ -822,6 +842,9 @@ function Save-SLRegistry {
         }
         Write-SLJson -Root $Root -RelativePath ([string] $Entry.registryPath) -Value $Shard -Changes $Changes -DryRun:$DryRun
     }
+    if ($null -ne (Get-Command Sync-SLResourceProjection -ErrorAction SilentlyContinue)) {
+        Sync-SLResourceProjection -Root $Root -DryRun:$DryRun -Changes $Changes
+    }
     return $Catalog
 }
 
@@ -875,17 +898,9 @@ function Write-SLLifecycleEvents {
             continue
         }
         if (-not $DryRun) {
-            Update-SLMutationLease
-            [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($Path)) | Out-Null
-            $Stream = [IO.File]::Open($Path, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
-            try {
-                $Content = "$(ConvertTo-Json $Event -Depth 50)`n".Replace("`r`n", "`n").Replace("`r", "`n")
-                $Bytes = [Text.UTF8Encoding]::new($false).GetBytes($Content)
-                $Stream.Write($Bytes, 0, $Bytes.Length)
-            }
-            finally {
-                $Stream.Dispose()
-            }
+            Write-SLImmutableText -Root $Root -RelativePath $RelativePath -Content (
+                "$(ConvertTo-Json $Event -Depth 50)`n"
+            )
         }
     }
 }

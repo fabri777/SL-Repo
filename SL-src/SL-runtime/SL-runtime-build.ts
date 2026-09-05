@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
@@ -56,8 +56,47 @@ async function slWriteIfChanged(path: string, content: string): Promise<void> {
   await writeFile(path, content, "utf8");
 }
 
-export async function slBuildRuntimeManifest(): Promise<SLRuntimeManifest> {
-  const packageRoot = await slFindPackageRoot(import.meta.url);
+interface SLRuntimeBuildOptions {
+  injectFailureAfterSchemaWrite?: boolean;
+  packageRoot?: string;
+}
+
+interface SLRuntimeFileSnapshot {
+  path: string;
+  content?: Buffer;
+}
+
+async function slSnapshotRuntimeFile(
+  path: string,
+): Promise<SLRuntimeFileSnapshot> {
+  try {
+    return { path, content: await readFile(path) };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return { path };
+    }
+    throw error;
+  }
+}
+
+async function slRestoreRuntimeFiles(
+  snapshots: SLRuntimeFileSnapshot[],
+): Promise<void> {
+  for (const snapshot of [...snapshots].reverse()) {
+    if (snapshot.content === undefined) {
+      await rm(snapshot.path, { force: true });
+    } else {
+      await mkdir(dirname(snapshot.path), { recursive: true });
+      await writeFile(snapshot.path, snapshot.content);
+    }
+  }
+}
+
+export async function slBuildRuntimeManifest(
+  options: SLRuntimeBuildOptions = {},
+): Promise<SLRuntimeManifest> {
+  const packageRoot =
+    options.packageRoot ?? (await slFindPackageRoot(import.meta.url));
   const runtimeRoot = resolve(
     packageRoot,
     "SL-templates",
@@ -72,16 +111,20 @@ export async function slBuildRuntimeManifest(): Promise<SLRuntimeManifest> {
     "SL-runtime-manifest.schema.json",
   );
   const schemaTarget = resolve(runtimeRoot, SL_RUNTIME_MANIFEST_SCHEMA_FILE);
-  await slWriteIfChanged(
-    schemaTarget,
-    (await readFile(schemaSource, "utf8"))
-      .replaceAll("\r\n", "\n")
-      .replaceAll("\r", "\n"),
-  );
+  const schemaContent = (await readFile(schemaSource, "utf8"))
+    .replaceAll("\r\n", "\n")
+    .replaceAll("\r", "\n");
 
-  const discoveredPaths = (await slListFiles(runtimeRoot))
-    .filter((path) => path !== SL_RUNTIME_MANIFEST_FILE)
-    .sort(slCompareOrdinal);
+  const discoveredPaths = [
+    ...new Set([
+      ...(await slListFiles(runtimeRoot)).filter(
+        (path) =>
+          path !== SL_RUNTIME_MANIFEST_FILE &&
+          path !== SL_RUNTIME_MANIFEST_SCHEMA_FILE,
+      ),
+      SL_RUNTIME_MANIFEST_SCHEMA_FILE,
+    ]),
+  ].sort(slCompareOrdinal);
   const paths = [...SL_RUNTIME_PAYLOAD_FILES];
   if (JSON.stringify(discoveredPaths) !== JSON.stringify(paths)) {
     throw new Error(
@@ -92,6 +135,7 @@ export async function slBuildRuntimeManifest(): Promise<SLRuntimeManifest> {
     resolve(runtimeRoot, "SL.Runtime.psm1"),
     "utf8",
   );
+  const bootstrap = await readFile(resolve(runtimeRoot, "SL.ps1"), "utf8");
   for (const expected of [
     `$script:SLRuntimeVersion = '${SL_RUNTIME_VERSION}'`,
     `runtimeVersion = $script:SLRuntimeVersion`,
@@ -104,9 +148,29 @@ export async function slBuildRuntimeManifest(): Promise<SLRuntimeManifest> {
       throw new Error(`PowerShell runtime constant drift: ${expected}`);
     }
   }
+  if (
+    !bootstrap.includes(
+      `$ExpectedRuntimeVersion = '${SL_RUNTIME_VERSION}'`,
+    )
+  ) {
+    throw new Error("PowerShell bootstrap runtime version drift.");
+  }
+  for (const path of paths) {
+    if (
+      !bootstrap.includes(`'${path}'`) ||
+      !rootModule.includes(`'${path}'`)
+    ) {
+      throw new Error(
+        `PowerShell bootstrap payload inventory drift: ${path}`,
+      );
+    }
+  }
   const files: SLRuntimeManifestFile[] = [];
   for (const path of paths) {
-    const content = await readFile(resolve(runtimeRoot, path), "utf8");
+    const content =
+      path === SL_RUNTIME_MANIFEST_SCHEMA_FILE
+        ? schemaContent
+        : await readFile(resolve(runtimeRoot, path), "utf8");
     files.push({
       path,
       sha256: createHash("sha256")
@@ -124,10 +188,24 @@ export async function slBuildRuntimeManifest(): Promise<SLRuntimeManifest> {
     files,
   };
   slValidateRuntimeManifest(manifest);
-  await slWriteIfChanged(
-    resolve(runtimeRoot, SL_RUNTIME_MANIFEST_FILE),
-    `${JSON.stringify(manifest, null, 2)}\n`,
-  );
+  const manifestPath = resolve(runtimeRoot, SL_RUNTIME_MANIFEST_FILE);
+  const snapshots = await Promise.all([
+    slSnapshotRuntimeFile(schemaTarget),
+    slSnapshotRuntimeFile(manifestPath),
+  ]);
+  try {
+    await slWriteIfChanged(schemaTarget, schemaContent);
+    if (options.injectFailureAfterSchemaWrite) {
+      throw new Error("Injected runtime build failure after schema write.");
+    }
+    await slWriteIfChanged(
+      manifestPath,
+      `${JSON.stringify(manifest, null, 2)}\n`,
+    );
+  } catch (error) {
+    await slRestoreRuntimeFiles(snapshots);
+    throw error;
+  }
   return manifest;
 }
 

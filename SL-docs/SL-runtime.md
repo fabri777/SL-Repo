@@ -14,7 +14,7 @@ promotion governance, validation, forgetting, and diagnostics.
 
 | Path | Contract |
 |---|---|
-| `SL.ps1` | PowerShell 7 entry point and version gate |
+| `SL.ps1` | PowerShell 7 entry point, minimal integrity bootstrap, and version gate |
 | `SL.sh` | Thin Bash launcher that only locates `pwsh` and invokes `SL.ps1` |
 | `SL.Runtime.psm1` | Root module and structured command dispatcher |
 | `SL.Runtime.Core.ps1` | Canonical JSON, SHA-256, path containment, and safe file I/O |
@@ -33,6 +33,25 @@ promotion governance, validation, forgetting, and diagnostics.
 
 Only files listed in `SL-runtime.manifest.json`, plus the manifest itself, are
 SL-managed runtime files. Unknown files below `SL-runtime/` are preserved.
+
+## Integrity bootstrap and trust boundary
+
+`SL.ps1` parses the runtime manifest and verifies the LF-normalized SHA-256 of
+every declared payload before it imports `SL.Runtime.psm1`. The bootstrap also
+requires the complete, ordinally ordered payload inventory, so removing a
+module from the manifest cannot make that module execute without verification.
+Missing manifests fail with exit `5`; invalid manifests, missing payloads, and
+hash drift fail with the documented manifest/integrity/mixed-version codes
+before any runtime module is dot-sourced.
+
+The repository commit, workflow definition, `SL.ps1` bootstrap, and
+`SL-runtime.manifest.json` are the trust boundary. Payload hashes detect
+accidental corruption or an unreviewed payload-only change; they cannot defend
+against a malicious change that rewrites both the trusted bootstrap/manifest
+and payload in the same commit. Workflows therefore execute only the runtime
+from their checked-out, reviewed repository commit and do not download a
+runtime or invoke Node. Directly importing `SL.Runtime.psm1` is unsupported
+because it bypasses the entry-point bootstrap.
 
 ## Command and exit contract
 
@@ -59,7 +78,10 @@ starting path.
 standard error. Every mutating command accepts `--dry-run`; dry runs acquire
 no lock and write no files. Real mutations use a repository-scoped lease lock
 with owner identity, bounded waiting, heartbeat refresh, and conservative
-stale-owner recovery.
+stale-owner recovery. File writes, moves, deletes, and immutable event/receipt
+creation are journaled inside that lock. If any step fails, the runtime restores
+every touched file byte-for-byte (or restores its prior absence), preventing
+partial registry, projection, artifact, or event state.
 
 | Exit | Meaning |
 |---:|---|
@@ -81,6 +103,11 @@ ordering, JSON string escaping, array order preservation, and only
 `null`/boolean/string/safe-integer/array/object values. SHA-256 is lowercase
 hex over UTF-8 bytes. Runtime file hashes normalize CRLF and CR to LF first,
 so a Git checkout's line-ending policy does not create false drift.
+
+Advisory efficiency reports use a separate deterministic JSON serializer that
+accepts finite fractional metrics. Canonical JSON remains integer-only, so
+receipt IDs, event IDs, content hashes, and conformance vectors retain the
+safe-integer hashing contract.
 
 Repository paths normalize `\` to `/`, collapse separators and `.` segments,
 and resolve internal `..` segments. Absolute paths, drive-relative paths,
@@ -161,6 +188,9 @@ does it replace files declared by the previous manifest, add new managed
 paths that are unoccupied, remove obsolete previously managed paths, and
 write the new manifest last. Manual or unrelated files are preserved. A
 dry-run performs all preflight checks and reports changes without writing.
+Runtime manifest builds snapshot the generated schema and manifest and restore
+both if staging fails, so a failed package build cannot leave a mixed generated
+runtime contract.
 
 ## Conformance
 
