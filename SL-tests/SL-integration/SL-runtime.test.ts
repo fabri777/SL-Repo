@@ -11,6 +11,7 @@ import { delimiter, dirname, join, resolve } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import { slInstall } from "../../SL-src/SL-core/SL-installer.js";
 import { slLoadRegistry } from "../../SL-src/SL-core/SL-registry.js";
+import { slLoadStateCatalog } from "../../SL-src/SL-core/SL-state.js";
 import {
   slCreateTestRepository,
   slRemoveTestRepository,
@@ -114,6 +115,87 @@ describe("repository-local PowerShell runtime", () => {
       repositoryRoot: root,
       dryRun: true,
       healthy: true,
+    });
+  });
+
+  test("smokes an empty repository through the committed PowerShell runtime", async () => {
+    const root = await slCreateTestRepository();
+    repositories.push(root);
+    await slInstall(root, "init", false);
+    const scriptPath = join(
+      root,
+      ".github",
+      "SL-learning",
+      "SL-runtime",
+      "SL.ps1",
+    );
+
+    const project = runPowerShell(scriptPath, ["--json", "project"], root);
+    const projectOutput = JSON.parse(project.stdout) as { changes: unknown };
+
+    const catalog = await slLoadStateCatalog(root);
+    const scope = catalog.scopes[0]!;
+    const usageProjection = JSON.parse(
+      await readFile(join(root, ...scope.projectionPath.split("/")), "utf8"),
+    ) as { projections: unknown };
+    const resourceProjection = JSON.parse(
+      await readFile(
+        join(root, ...scope.resourceProjectionPath!.split("/")),
+        "utf8",
+      ),
+    ) as { projections: unknown };
+
+    const doctor = runPowerShell(scriptPath, ["--json", "doctor"], root);
+    const doctorOutput = JSON.parse(doctor.stdout) as {
+      command: string;
+      repositoryRoot: string;
+      healthy: boolean;
+      issueCount: number;
+      issues: unknown;
+    };
+
+    const validate = runPowerShell(scriptPath, ["--json", "validate"], root);
+    const validateOutput = JSON.parse(validate.stdout) as {
+      valid: boolean;
+      issues: unknown;
+    };
+
+    expect({
+      scopeCount: catalog.scopes.length,
+      projectStatus: project.status,
+      projectError: project.stderr,
+      projectChangesAreArray: Array.isArray(projectOutput.changes),
+      usageProjections: usageProjection.projections,
+      resourceProjections: resourceProjection.projections,
+      doctorStatus: doctor.status,
+      doctorError: doctor.stderr,
+      doctorCommand: doctorOutput.command,
+      doctorRepositoryRoot: doctorOutput.repositoryRoot,
+      doctorHealthy: doctorOutput.healthy,
+      doctorIssueCount: doctorOutput.issueCount,
+      doctorIssues: doctorOutput.issues,
+      validateStatus: validate.status,
+      validateError: validate.stderr,
+      validateValid: validateOutput.valid,
+      validateIssues: validateOutput.issues,
+    }).toEqual({
+      scopeCount: 1,
+      projectStatus: 0,
+      projectError: "",
+      projectChangesAreArray: true,
+      usageProjections: [],
+      resourceProjections: [],
+      doctorStatus: 0,
+      doctorError: "",
+      doctorCommand: "doctor",
+      doctorRepositoryRoot: root,
+      doctorHealthy: true,
+      doctorIssueCount: 0,
+      doctorIssues: [],
+      validateStatus: 0,
+      validateError: "",
+      validateValid: true,
+      validateIssues: [],
     });
   });
 
