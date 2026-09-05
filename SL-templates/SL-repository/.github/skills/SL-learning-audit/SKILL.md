@@ -5,11 +5,11 @@ description: Validate and review stale, contradictory, unsafe, or deletion-eligi
 
 # SL learning audit
 
-Run:
+Run through PowerShell 7:
 
 ```powershell
-pwsh .github/SL-learning/SL-runtime/SL.ps1 validate .
-pwsh .github/SL-learning/SL-runtime/SL.ps1 sweep . --dry-run
+pwsh -NoProfile -File .github/SL-learning/SL-runtime/SL.ps1 validate .
+pwsh -NoProfile -File .github/SL-learning/SL-runtime/SL.ps1 sweep . --dry-run
 ```
 
 Never bypass ownership, pinning, dependency, or quarantine checks.

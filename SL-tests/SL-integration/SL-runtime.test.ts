@@ -58,13 +58,13 @@ describe("repository-local PowerShell runtime", () => {
     const nested = join(root, "services", "orders");
     await mkdir(nested, { recursive: true });
 
-    expect(manifest.runtimeVersion).toBe("0.1.0");
-    expect(manifest.files).toHaveLength(9);
+    expect(manifest.runtimeVersion).toBe("0.2.0");
+    expect(manifest.files).toHaveLength(14);
     expect(
       registry.artifacts.filter((artifact) =>
         artifact.path?.startsWith(".github/SL-learning/SL-runtime/"),
       ),
-    ).toHaveLength(10);
+    ).toHaveLength(15);
     expect(
       registry.artifacts
         .filter((artifact) =>
@@ -88,7 +88,7 @@ describe("repository-local PowerShell runtime", () => {
     expect(JSON.parse(conformance.stdout)).toMatchObject({
       command: "conformance",
       repositoryRoot: root,
-      result: { conformanceVersion: 1, passed: 21, failed: 0 },
+      result: { conformanceVersion: 1, passed: 30, failed: 0 },
     });
 
     const doctor = runPowerShell(
@@ -173,7 +173,7 @@ describe("repository-local PowerShell runtime", () => {
     expect(await readFile(manualPath, "utf8")).toBe("preserve\n");
     expect(
       JSON.parse(await readFile(manifestPath, "utf8")).runtimeVersion,
-    ).toBe("0.1.0");
+    ).toBe("0.2.0");
   });
 
   test("rejects a runtime without its previous manifest", async () => {

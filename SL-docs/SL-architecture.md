@@ -23,9 +23,9 @@ Copilot discovery but is not required by the SL data model or CLI.
 
 The managed runtime lives at `.github/SL-learning/SL-runtime/`. Its manifest
 defines the complete managed boundary and hashes every payload file. The
-current milestone implements command dispatch, health/integrity validation,
-safe primitives, supported syntax, and cross-language conformance. Lifecycle
-command parity is intentionally deferred; see
+runtime implements command dispatch, health/integrity validation, safe
+primitives, supported syntax, cross-language conformance, and the complete
+post-initialization lifecycle without Node/npm/global CLI dependencies. See
 [Repository-local PowerShell runtime contract](SL-runtime.md).
 
 ## Source-of-truth boundaries

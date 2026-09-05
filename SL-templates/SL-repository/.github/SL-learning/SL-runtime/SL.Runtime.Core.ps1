@@ -1,5 +1,7 @@
 Set-StrictMode -Version Latest
 
+$script:SLActiveMutationLockPath = $null
+
 function Throw-SLContractError {
     param(
         [Parameter(Mandatory)]
@@ -318,6 +320,7 @@ function Write-SLSafeText {
         [switch] $DryRun
     )
 
+    Update-SLMutationLease
     $Path = Resolve-SLContainedPath -Root $Root -RelativePath $RelativePath
     $Normalized = $Content.Replace("`r`n", "`n").Replace("`r", "`n")
     if ($DryRun) {
@@ -336,4 +339,493 @@ function Write-SLSafeText {
         }
     }
     return [pscustomobject] @{ action = 'written'; path = (ConvertTo-SLNormalizedPath $RelativePath) }
+}
+
+function Test-SLProperty {
+    param(
+        [Parameter(Mandatory)]
+        [AllowNull()]
+        [object] $Value,
+
+        [Parameter(Mandatory)]
+        [string] $Name
+    )
+
+    if ($null -eq $Value) {
+        return $false
+    }
+    if ($Value -is [System.Collections.IDictionary]) {
+        return $Value.Contains($Name)
+    }
+    return $null -ne $Value.PSObject.Properties[$Name]
+}
+
+function Test-SLMap {
+    param(
+        [Parameter(Mandatory)]
+        [AllowNull()]
+        [object] $Value
+    )
+
+    return (
+        $null -ne $Value -and
+        (
+            $Value -is [System.Collections.IDictionary] -or
+            $Value.GetType().FullName -ceq 'System.Management.Automation.PSCustomObject'
+        )
+    )
+}
+
+function Get-SLProperty {
+    param(
+        [Parameter(Mandatory)]
+        [AllowNull()]
+        [object] $Value,
+
+        [Parameter(Mandatory)]
+        [string] $Name,
+
+        [AllowNull()]
+        [object] $Default = $null
+    )
+
+    if ($null -eq $Value) {
+        return ,$Default
+    }
+    if ($Value -is [System.Collections.IDictionary]) {
+        [object] $Result = $(if ($Value.Contains($Name)) { $Value[$Name] } else { $Default })
+        return ,$Result
+    }
+    $Property = $Value.PSObject.Properties[$Name]
+    [object] $Result = $(if ($null -ne $Property) { $Property.Value } else { $Default })
+    return ,$Result
+}
+
+function Set-SLProperty {
+    param(
+        [Parameter(Mandatory)]
+        [object] $Value,
+
+        [Parameter(Mandatory)]
+        [string] $Name,
+
+        [Parameter(Mandatory)]
+        [AllowNull()]
+        [object] $PropertyValue
+    )
+
+    if ($Value -is [System.Collections.IDictionary]) {
+        $Value[$Name] = $PropertyValue
+        return
+    }
+    if ($null -ne $Value.PSObject.Properties[$Name]) {
+        $Value.$Name = $PropertyValue
+    }
+    else {
+        $Value | Add-Member -NotePropertyName $Name -NotePropertyValue $PropertyValue
+    }
+}
+
+function Remove-SLProperty {
+    param(
+        [Parameter(Mandatory)]
+        [object] $Value,
+
+        [Parameter(Mandatory)]
+        [string] $Name
+    )
+
+    if ($Value -is [System.Collections.IDictionary]) {
+        [void] $Value.Remove($Name)
+        return
+    }
+    if ($null -ne $Value.PSObject.Properties[$Name]) {
+        $Value.PSObject.Properties.Remove($Name)
+    }
+}
+
+function Copy-SLValue {
+    param(
+        [Parameter(Mandatory)]
+        [AllowNull()]
+        [object] $Value
+    )
+
+    if ($null -eq $Value) {
+        return $null
+    }
+    return ConvertFrom-Json -InputObject (ConvertTo-Json -InputObject $Value -Depth 100 -Compress) -Depth 100
+}
+
+function Read-SLJson {
+    param(
+        [Parameter(Mandatory)]
+        [string] $Root,
+
+        [Parameter(Mandatory)]
+        [string] $RelativePath
+    )
+
+    $Content = Read-SLSafeText -Root $Root -RelativePath $RelativePath
+    try {
+        if ((Get-Command ConvertFrom-Json).Parameters.ContainsKey('DateKind')) {
+            return ConvertFrom-Json -InputObject $Content -Depth 100 -DateKind String
+        }
+        return ConvertFrom-Json -InputObject $Content -Depth 100
+    }
+    catch {
+        Throw-SLContractError -Code 'json-parse' -Message "Invalid JSON in $RelativePath`: $($_.Exception.Message)"
+    }
+}
+
+function Write-SLJson {
+    param(
+        [Parameter(Mandatory)]
+        [string] $Root,
+
+        [Parameter(Mandatory)]
+        [string] $RelativePath,
+
+        [Parameter(Mandatory)]
+        [AllowNull()]
+        [object] $Value,
+
+        [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
+        [System.Collections.Generic.List[object]] $Changes,
+
+        [switch] $DryRun
+    )
+
+    $NormalizedPath = ConvertTo-SLNormalizedPath -Path $RelativePath
+    $Path = Resolve-SLContainedPath -Root $Root -RelativePath $NormalizedPath
+    $Content = "$(ConvertTo-Json -InputObject $Value -Depth 100)`n".Replace("`r`n", "`n")
+    if ([IO.File]::Exists($Path)) {
+        $Existing = [IO.File]::ReadAllText($Path, [Text.UTF8Encoding]::new($false, $true))
+        if ($Existing.Replace("`r`n", "`n").Replace("`r", "`n") -ceq $Content) {
+            $Changes.Add([pscustomobject] @{
+                action = 'skip'
+                path = $NormalizedPath
+                detail = 'already current'
+            })
+            return
+        }
+    }
+    $Changes.Add([pscustomobject] @{
+        action = $(if ([IO.File]::Exists($Path)) { 'update' } else { 'create' })
+        path = $NormalizedPath
+        detail = $(if ($DryRun) { 'planned' } else { 'written' })
+    })
+    if (-not $DryRun) {
+        [void] (Write-SLSafeText -Root $Root -RelativePath $NormalizedPath -Content $Content)
+    }
+}
+
+function Write-SLTextChange {
+    param(
+        [Parameter(Mandatory)]
+        [string] $Root,
+
+        [Parameter(Mandatory)]
+        [string] $RelativePath,
+
+        [Parameter(Mandatory)]
+        [AllowEmptyString()]
+        [string] $Content,
+
+        [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
+        [System.Collections.Generic.List[object]] $Changes,
+
+        [switch] $DryRun
+    )
+
+    $NormalizedPath = ConvertTo-SLNormalizedPath -Path $RelativePath
+    $Path = Resolve-SLContainedPath -Root $Root -RelativePath $NormalizedPath
+    $NormalizedContent = $Content.Replace("`r`n", "`n").Replace("`r", "`n")
+    if ([IO.File]::Exists($Path)) {
+        $Existing = [IO.File]::ReadAllText($Path, [Text.UTF8Encoding]::new($false, $true))
+        if ($Existing.Replace("`r`n", "`n").Replace("`r", "`n") -ceq $NormalizedContent) {
+            $Changes.Add([pscustomobject] @{
+                action = 'skip'
+                path = $NormalizedPath
+                detail = 'already current'
+            })
+            return
+        }
+    }
+    $Changes.Add([pscustomobject] @{
+        action = $(if ([IO.File]::Exists($Path)) { 'update' } else { 'create' })
+        path = $NormalizedPath
+        detail = $(if ($DryRun) { 'planned' } else { 'written' })
+    })
+    if (-not $DryRun) {
+        [void] (Write-SLSafeText -Root $Root -RelativePath $NormalizedPath -Content $NormalizedContent)
+    }
+}
+
+function Move-SLContainedFile {
+    param(
+        [Parameter(Mandatory)]
+        [string] $Root,
+
+        [Parameter(Mandatory)]
+        [string] $SourceRelativePath,
+
+        [Parameter(Mandatory)]
+        [string] $TargetRelativePath,
+
+        [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
+        [System.Collections.Generic.List[object]] $Changes,
+
+        [switch] $DryRun
+    )
+
+    Update-SLMutationLease
+    $SourceRelativePath = ConvertTo-SLNormalizedPath $SourceRelativePath
+    $TargetRelativePath = ConvertTo-SLNormalizedPath $TargetRelativePath
+    $Source = Resolve-SLContainedPath -Root $Root -RelativePath $SourceRelativePath
+    $Target = Resolve-SLContainedPath -Root $Root -RelativePath $TargetRelativePath
+    if (-not [IO.File]::Exists($Source)) {
+        Throw-SLContractError -Code 'file-missing' -Message "Cannot move missing artifact: $SourceRelativePath"
+    }
+    if ([IO.File]::Exists($Target) -or [IO.Directory]::Exists($Target)) {
+        Throw-SLContractError -Code 'file-clobber' -Message "Cannot overwrite existing artifact: $TargetRelativePath"
+    }
+    $Changes.Add([pscustomobject] @{
+        action = 'move'
+        path = $SourceRelativePath
+        detail = "$SourceRelativePath -> $TargetRelativePath"
+    })
+    if (-not $DryRun) {
+        [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($Target)) | Out-Null
+        [IO.File]::Move($Source, $Target)
+    }
+}
+
+function Remove-SLContainedFile {
+    param(
+        [Parameter(Mandatory)]
+        [string] $Root,
+
+        [Parameter(Mandatory)]
+        [string] $RelativePath,
+
+        [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
+        [System.Collections.Generic.List[object]] $Changes,
+
+        [switch] $DryRun
+    )
+
+    Update-SLMutationLease
+    $RelativePath = ConvertTo-SLNormalizedPath $RelativePath
+    $Path = Resolve-SLContainedPath -Root $Root -RelativePath $RelativePath
+    if (-not [IO.File]::Exists($Path)) {
+        Throw-SLContractError -Code 'file-missing' -Message "Cannot delete missing artifact: $RelativePath"
+    }
+    $Changes.Add([pscustomobject] @{
+        action = 'delete'
+        path = $RelativePath
+        detail = 'retention elapsed'
+    })
+    if (-not $DryRun) {
+        [IO.File]::Delete($Path)
+    }
+}
+
+function Get-SLNormalizedTimestamp {
+    param(
+        [AllowNull()]
+        [string] $Value
+    )
+
+    if (-not $Value) {
+        return [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ss.fffZ', [Globalization.CultureInfo]::InvariantCulture)
+    }
+    [DateTimeOffset] $Parsed = [DateTimeOffset]::MinValue
+    if (-not [DateTimeOffset]::TryParse(
+        $Value,
+        [Globalization.CultureInfo]::InvariantCulture,
+        [Globalization.DateTimeStyles]::AssumeUniversal,
+        [ref] $Parsed
+    )) {
+        Throw-SLContractError -Code 'timestamp' -Message "Invalid timestamp: $Value"
+    }
+    return $Parsed.UtcDateTime.ToString('yyyy-MM-ddTHH:mm:ss.fffZ', [Globalization.CultureInfo]::InvariantCulture)
+}
+
+function ConvertTo-SLSlug {
+    param(
+        [Parameter(Mandatory)]
+        [string] $Value,
+
+        [int] $MaximumLength = 50
+    )
+
+    $Normalized = $Value.Normalize([Text.NormalizationForm]::FormKD)
+    $Builder = [Text.StringBuilder]::new()
+    foreach ($Character in $Normalized.ToCharArray()) {
+        $Category = [Globalization.CharUnicodeInfo]::GetUnicodeCategory($Character)
+        if ($Category -eq [Globalization.UnicodeCategory]::NonSpacingMark) {
+            continue
+        }
+        if ([char]::IsLetterOrDigit($Character) -or $Character -eq '_' -or $Character -eq '-' -or [char]::IsWhiteSpace($Character)) {
+            [void] $Builder.Append($Character)
+        }
+    }
+    $Slug = $Builder.ToString().Trim().ToLowerInvariant()
+    $Slug = [Regex]::Replace($Slug, '[\s_]+', '-')
+    $Slug = [Regex]::Replace($Slug, '-+', '-').Trim('-')
+    if ($Slug.Length -gt $MaximumLength) {
+        $Slug = $Slug.Substring(0, $MaximumLength).TrimEnd('-')
+    }
+    return $Slug
+}
+
+function Test-SLSensitiveText {
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyString()]
+        [string] $Value
+    )
+
+    $UserProfilePattern =
+        '(?:[A-Za-z]:\\' + 'Users\\[^\\\r\n]+|/Users' +
+        '/[^/\r\n]+|/home' + '/[^/\r\n]+)'
+    return (
+        $Value -match '-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----' -or
+        $Value -match '\bgh[oprsu]_[A-Za-z0-9_]{20,}\b' -or
+        $Value -match '\b(?:password|api[_-]?key|token)\s*[:=]\s*["'']?[^\s"'']{12,}' -or
+        $Value -match '\b(?:AccountKey|SharedAccessKey|Password)=[^;\s]{8,}' -or
+        $Value -match $UserProfilePattern
+    )
+}
+
+function Test-SLOpaqueReference {
+    param(
+        [Parameter(Mandatory)]
+        [string] $Value
+    )
+
+    if (
+        $Value -cnotmatch '^(?:[A-Za-z][A-Za-z0-9+.-]*:[^\s@\\]{1,240}|[A-Za-z0-9][A-Za-z0-9._/#:-]{0,255})$' -or
+        $Value -match '[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}' -or
+        $Value -match '(?:^|[^0-9])(?:\d{1,3}\.){3}\d{1,3}(?:$|[^0-9])|(?:^|[^A-F0-9])(?:[A-F0-9]{0,4}:){2,7}[A-F0-9]{0,4}(?:$|[^A-F0-9])' -or
+        (Test-SLSensitiveText $Value)
+    ) {
+        return $false
+    }
+    return $true
+}
+
+function Invoke-SLWithMutationLock {
+    param(
+        [Parameter(Mandatory)]
+        [string] $Root,
+
+        [Parameter(Mandatory)]
+        [scriptblock] $Operation,
+
+        [switch] $DryRun,
+
+        [int] $StaleMilliseconds = 120000,
+
+        [int] $TimeoutMilliseconds = 120000
+    )
+
+    if ($DryRun) {
+        return & $Operation
+    }
+    $RelativeLock = '.github/SL-learning/.SL-repository-mutation.lock'
+    $LockPath = Resolve-SLContainedPath -Root $Root -RelativePath $RelativeLock
+    [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($LockPath)) | Out-Null
+    $LeaseId = [Guid]::NewGuid().ToString()
+    $Deadline = [DateTime]::UtcNow.AddMilliseconds($TimeoutMilliseconds)
+    $Acquired = $false
+    while ([DateTime]::UtcNow -lt $Deadline) {
+        try {
+            New-Item -ItemType Directory -Path $LockPath -ErrorAction Stop | Out-Null
+            $OwnerPath = [IO.Path]::Combine($LockPath, 'SL-owner.json')
+            $Owner = [ordered] @{
+                schemaVersion = 1
+                token = $LeaseId
+                pid = $PID
+                hostname = [Environment]::MachineName
+                acquiredAt = Get-SLNormalizedTimestamp
+            }
+            [IO.File]::WriteAllText(
+                $OwnerPath,
+                "$(ConvertTo-Json $Owner -Depth 10)`n",
+                [Text.UTF8Encoding]::new($false)
+            )
+            $Acquired = $true
+            break
+        }
+        catch {
+            if ([IO.Directory]::Exists($LockPath)) {
+                $Info = [IO.DirectoryInfo]::new($LockPath)
+                $Expired = ([DateTime]::UtcNow - $Info.LastWriteTimeUtc).TotalMilliseconds -ge $StaleMilliseconds
+                $OwnerPath = [IO.Path]::Combine($LockPath, 'SL-owner.json')
+                $Live = $false
+                try {
+                    $Owner = ConvertFrom-Json ([IO.File]::ReadAllText($OwnerPath)) -Depth 10
+                    if ($Owner.hostname -ceq [Environment]::MachineName) {
+                        try {
+                            $Process = [Diagnostics.Process]::GetProcessById([int] $Owner.pid)
+                            $Live = -not $Process.HasExited
+                        }
+                        catch {
+                            $Live = $false
+                        }
+                    }
+                }
+                catch {
+                    $Live = $false
+                }
+                if ($Expired -and -not $Live) {
+                    $StalePath = "$LockPath.SL-stale-$([Guid]::NewGuid().ToString('N'))"
+                    try {
+                        [IO.Directory]::Move($LockPath, $StalePath)
+                        [IO.Directory]::Delete($StalePath, $true)
+                        continue
+                    }
+                    catch {
+                    }
+                }
+            }
+            Start-Sleep -Milliseconds 25
+        }
+    }
+    if (-not $Acquired) {
+        Throw-SLContractError -Code 'mutation-lock-timeout' -Message "Timed out waiting for SL repository mutation lock: $RelativeLock"
+    }
+    $PreviousActiveLockPath = $script:SLActiveMutationLockPath
+    $script:SLActiveMutationLockPath = $LockPath
+    try {
+        return & $Operation
+    }
+    finally {
+        $script:SLActiveMutationLockPath = $PreviousActiveLockPath
+        $OwnerPath = [IO.Path]::Combine($LockPath, 'SL-owner.json')
+        try {
+            $Owner = ConvertFrom-Json ([IO.File]::ReadAllText($OwnerPath)) -Depth 10
+            if ($Owner.token -ceq $LeaseId) {
+                [IO.Directory]::Delete($LockPath, $true)
+            }
+        }
+        catch {
+        }
+    }
+}
+
+function Update-SLMutationLease {
+    if ($script:SLActiveMutationLockPath -and [IO.Directory]::Exists($script:SLActiveMutationLockPath)) {
+        try {
+            [IO.Directory]::SetLastWriteTimeUtc($script:SLActiveMutationLockPath, [DateTime]::UtcNow)
+        }
+        catch {
+        }
+    }
 }

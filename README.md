@@ -124,11 +124,19 @@ package; installed copies support review, editors, and repository-local
 auditing. `update` replaces only files already registered as SL-managed
 system artifacts and the delimited agent instruction blocks.
 
-It also installs the self-contained PowerShell 7 runtime foundation under
-`.github/SL-learning/SL-runtime/`. Its `doctor`, `validate-runtime`, and
-`conformance` commands need no Node/npm/global SL CLI after initialization.
-Lifecycle command parity is intentionally deferred. See
-[the runtime contract](SL-docs/SL-runtime.md).
+It also installs the self-contained PowerShell 7 runtime under
+`.github/SL-learning/SL-runtime/`. After initialization, agents can invoke
+scope resolution, capture, retrieval, usage, projection, promotion,
+validation, retention, doctor, and conformance commands without
+Node/npm/global SL CLI. See [the runtime contract](SL-docs/SL-runtime.md).
+
+```powershell
+$sl = ".github/SL-learning/SL-runtime/SL.ps1"
+pwsh -NoLogo -NoProfile -File $sl scope resolve --file src/example.ts --json
+pwsh -NoLogo -NoProfile -File $sl retrieve --path src/example.ts --json
+pwsh -NoLogo -NoProfile -File $sl project --json
+pwsh -NoLogo -NoProfile -File $sl validate --json
+```
 
 Both optional automation adapters use the reviewed immutable SL Repo commit.
 They never intentionally execute mutable `main` as the runtime. See

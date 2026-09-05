@@ -2,7 +2,15 @@
 
 ## Unreleased
 
-- Add provider-neutral resource import, artifact resource recording, paired
+### Added
+
+- Complete repository-local PowerShell 7 lifecycle runtime for scopes,
+  retrieval, capture, immutable usage, projection, promotion, validation,
+  forgetting, rollback, deterministic output, and stale-safe mutation locks.
+- Shared TypeScript/PowerShell conformance vectors for lifecycle identifiers,
+  scope shards, promotion ownership, retention, Unicode slugs, and safe
+  evidence references.
+- Provider-neutral resource import, artifact resource recording, paired
   baseline commands, segmented advisory efficiency metrics, and promotion
   lineage resource reporting.
 

@@ -5,12 +5,13 @@ description: Install, update, or diagnose the repository-local Self Learning lay
 
 # SL bootstrap
 
-Use `sl-repo update --dry-run` only for managed runtime updates. After the
-runtime is installed, diagnose and validate with:
+Use `sl-repo init --dry-run` for first installation and `sl-repo update
+--dry-run` for managed runtime updates. After installation, diagnose and
+validate through the committed PowerShell 7 runtime:
 
 ```powershell
-pwsh .github/SL-learning/SL-runtime/SL.ps1 doctor .
-pwsh .github/SL-learning/SL-runtime/SL.ps1 validate .
+pwsh -NoProfile -File .github/SL-learning/SL-runtime/SL.ps1 doctor .
+pwsh -NoProfile -File .github/SL-learning/SL-runtime/SL.ps1 validate .
 ```
 
 Preserve non-SL content.

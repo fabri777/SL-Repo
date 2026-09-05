@@ -52,6 +52,68 @@ function Invoke-SLConformanceVector {
             }
             return Test-SLGlob -Pattern $Vector.input.pattern -Path $Vector.input.path
         }
+        'slugify' {
+            if ($Vector.input -isnot [string]) {
+                Throw-SLContractError -Code 'vector-input' -Message 'slugify input must be a string.'
+            }
+            return ConvertTo-SLSlug $Vector.input
+        }
+        'scope-shard' {
+            if (
+                -not (Test-SLMap $Vector.input) -or
+                $Vector.input.id -isnot [string] -or
+                $Vector.input.path -isnot [string]
+            ) {
+                Throw-SLContractError -Code 'vector-input' -Message 'scope-shard input requires id and path strings.'
+            }
+            return Get-SLScopeShardName ([pscustomobject] @{
+                id = $Vector.input.id
+                path = ConvertTo-SLNormalizedPath $Vector.input.path
+            })
+        }
+        'usage-event-id' {
+            if ($Vector.input -isnot [string] -or -not $Vector.input.Trim()) {
+                Throw-SLContractError -Code 'vector-input' -Message 'usage-event-id input must be a non-empty string.'
+            }
+            $Hash = Get-SLSha256 $Vector.input.Trim()
+            return "SL-USE-$($Hash.Substring(0, 32).ToUpperInvariant())"
+        }
+        'lifecycle-event-id' {
+            if (-not (Test-SLMap $Vector.input)) {
+                Throw-SLContractError -Code 'vector-input' -Message 'lifecycle-event-id input must be an object.'
+            }
+            return (New-SLLifecycleEvent $Vector.input).eventId
+        }
+        'retention-deadline' {
+            if (
+                -not (Test-SLMap $Vector.input) -or
+                $Vector.input.timestamp -isnot [string] -or
+                $Vector.input.days -isnot [long]
+            ) {
+                Throw-SLContractError -Code 'vector-input' -Message 'retention-deadline requires timestamp and integer days.'
+            }
+            $Timestamp = [DateTimeOffset]::Parse(
+                $Vector.input.timestamp,
+                [Globalization.CultureInfo]::InvariantCulture
+            )
+            return $Timestamp.AddDays($Vector.input.days).UtcDateTime.ToString(
+                'yyyy-MM-ddTHH:mm:ss.fffZ',
+                [Globalization.CultureInfo]::InvariantCulture
+            )
+        }
+        'promotion-owner-set' {
+            if (-not (Test-SLMap $Vector.input)) {
+                Throw-SLContractError -Code 'vector-input' -Message 'promotion-owner-set requires ownerAliases strings.'
+            }
+            $Aliases = Sort-SLOrdinal @($Vector.input.ownerAliases)
+            return "SL-OWNERS-$((Get-SLSha256 (ConvertTo-SLCanonicalJson $Aliases)).Substring(0, 16).ToUpperInvariant())"
+        }
+        'safe-reference' {
+            if ($Vector.input -isnot [string]) {
+                Throw-SLContractError -Code 'vector-input' -Message 'safe-reference input must be a string.'
+            }
+            return Test-SLOpaqueReference $Vector.input
+        }
         default {
             Throw-SLContractError -Code 'vector-operation' -Message "Unknown conformance operation: $($Vector.operation)"
         }
@@ -64,10 +126,7 @@ function Invoke-SLRuntimeConformance {
         [string] $RuntimeHome
     )
 
-    $VectorPath = [IO.Path]::Combine($RuntimeHome, 'SL-conformance-vectors.json')
-    $Suite = ConvertFrom-Json -InputObject (
-        [IO.File]::ReadAllText($VectorPath, [Text.UTF8Encoding]::new($false, $true))
-    ) -Depth 100
+    $Suite = Read-SLJson -Root $RuntimeHome -RelativePath 'SL-conformance-vectors.json'
     if (
         $Suite.schemaVersion -ne 1 -or
         $Suite.conformanceVersion -ne 1 -or

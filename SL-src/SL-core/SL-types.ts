@@ -82,7 +82,14 @@ export type SLRuntimeConformanceOperation =
   | "parse-yaml"
   | "parse-frontmatter"
   | "validate-value"
-  | "glob-match";
+  | "glob-match"
+  | "slugify"
+  | "scope-shard"
+  | "usage-event-id"
+  | "lifecycle-event-id"
+  | "retention-deadline"
+  | "promotion-owner-set"
+  | "safe-reference";
 
 export interface SLRuntimeConformanceVector {
   id: string;

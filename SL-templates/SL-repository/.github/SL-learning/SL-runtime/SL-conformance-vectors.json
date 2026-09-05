@@ -253,6 +253,78 @@
         "path": "src/file.ts"
       },
       "error": "glob-syntax"
+    },
+    {
+      "id": "capture-slug-normalizes-unicode",
+      "operation": "slugify",
+      "input": "Crème brûlée / retries",
+      "expected": "creme-brulee-retries"
+    },
+    {
+      "id": "state-shard-is-deterministic",
+      "operation": "scope-shard",
+      "input": {
+        "id": "SL-SCOPE-ROOT",
+        "path": "."
+      },
+      "expected": "SL-sl-scope-root-47ab59b49ac7"
+    },
+    {
+      "id": "usage-event-id-is-idempotent",
+      "operation": "usage-event-id",
+      "input": "vote:α",
+      "expected": "SL-USE-781272EDCBF75D918511DC4768864784"
+    },
+    {
+      "id": "lifecycle-event-id-is-content-addressed",
+      "operation": "lifecycle-event-id",
+      "input": {
+        "schemaVersion": 1,
+        "timestamp": "2026-09-05T12:00:00.000Z",
+        "artifactId": "SL-EXAMPLE",
+        "action": "captured",
+        "toStatus": "raw",
+        "toPath": ".github/SL-learning/SL-lessons/example.md"
+      },
+      "expected": "SL-EVENT-795E7B6F54CE46C284954709662F1261"
+    },
+    {
+      "id": "retention-deadline-uses-utc-days",
+      "operation": "retention-deadline",
+      "input": {
+        "timestamp": "2026-09-05T12:00:00.000Z",
+        "days": 30
+      },
+      "expected": "2026-10-05T12:00:00.000Z"
+    },
+    {
+      "id": "promotion-owner-set-is-order-independent",
+      "operation": "promotion-owner-set",
+      "input": {
+        "ownerAliases": [
+          "@example/root",
+          "@example/platform"
+        ]
+      },
+      "expected": "SL-OWNERS-4911559F9F528B22"
+    },
+    {
+      "id": "safe-reference-accepts-opaque-run",
+      "operation": "safe-reference",
+      "input": "run:build-123",
+      "expected": true
+    },
+    {
+      "id": "safe-reference-rejects-email",
+      "operation": "safe-reference",
+      "input": "owner@example.com",
+      "expected": false
+    },
+    {
+      "id": "safe-reference-rejects-ip-address",
+      "operation": "safe-reference",
+      "input": "host:10.0.0.1",
+      "expected": false
     }
   ]
 }

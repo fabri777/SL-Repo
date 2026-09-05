@@ -8,9 +8,9 @@
 - A Git repository to receive the SL layer
 
 No CI provider is required. Node is currently required to build, initialize,
-or update SL. After initialization, the implemented runtime foundation
-commands run through repository-local PowerShell without Node, npm, npx, or a
-global SL CLI. Lifecycle parity commands are not part of this contract yet.
+or update SL. After initialization, the complete operational lifecycle runs
+through repository-local PowerShell without Node, npm, npx, a global SL CLI,
+network access, or external PowerShell modules.
 
 SL Repo 0.3.0 supports both single repositories and hierarchical monorepos.
 Existing 0.2 root state is migrated additively into deterministic scope shards.
@@ -28,12 +28,23 @@ sl-repo validate C:\path\to\target
 ```
 
 Initialization installs the runtime at
-`.github/SL-learning/SL-runtime/`. Run its implemented foundation commands
-directly:
+`.github/SL-learning/SL-runtime/`. Run it directly:
 
 ```powershell
 pwsh -NoLogo -NoProfile -File `
   C:\path\to\target\.github\SL-learning\SL-runtime\SL.ps1 doctor --json
+```
+
+All lifecycle commands use the same entry point:
+
+```powershell
+$sl = "C:\path\to\target\.github\SL-learning\SL-runtime\SL.ps1"
+pwsh -NoLogo -NoProfile -File $sl capture `
+  --title "Verified local lesson" --trigger "local cue" --json
+pwsh -NoLogo -NoProfile -File $sl retrieve --path src/example.ts --json
+pwsh -NoLogo -NoProfile -File $sl use start SL-LESSON-ID --json
+pwsh -NoLogo -NoProfile -File $sl project --json
+pwsh -NoLogo -NoProfile -File $sl validate --json
 ```
 
 From Bash:

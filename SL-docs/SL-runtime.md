@@ -1,14 +1,14 @@
 # Repository-local PowerShell runtime contract
 
 SL installs a self-contained PowerShell 7 runtime under
-`.github/SL-learning/SL-runtime/`. The runtime foundation never invokes Node,
+`.github/SL-learning/SL-runtime/`. The runtime never invokes Node,
 npm, npx, or a globally installed `sl-repo` command. Node remains an
 installer/build dependency until a later release provides a non-Node
 bootstrap path.
 
-This contract establishes the runtime, integrity, parser, validation, and
-dispatch foundations. It does **not** claim parity for capture, retrieval,
-projection, promotion, usage, or forgetting commands.
+The installed runtime owns the complete post-initialization operational
+lifecycle: scope resolution, capture, retrieval, immutable usage, projection,
+promotion governance, validation, forgetting, and diagnostics.
 
 ## Managed layout
 
@@ -19,6 +19,11 @@ projection, promotion, usage, or forgetting commands.
 | `SL.Runtime.psm1` | Root module and structured command dispatcher |
 | `SL.Runtime.Core.ps1` | Canonical JSON, SHA-256, path containment, and safe file I/O |
 | `SL.Runtime.Syntax.ps1` | YAML/frontmatter parser, typed validator, and glob matcher |
+| `SL.Runtime.State.ps1` | Scope resolution, sharded registry/state catalog, immutable lifecycle events, and indexes |
+| `SL.Runtime.Artifacts.ps1` | Capture, ownership checks, immutable usage events, votes, receipts, and projections |
+| `SL.Runtime.Promotion.ps1` | Validation contracts, probation, evidence/approval gates, conflicts, and activation |
+| `SL.Runtime.Lifecycle.ps1` | Retrieval, quarantine, sweep, restore, and rollback |
+| `SL.Runtime.Validation.ps1` | Repository validation, projection drift detection, and doctor aggregation |
 | `SL.Runtime.Conformance.ps1` | PowerShell golden-vector runner |
 | `SL.Runtime.Doctor.ps1` | Manifest, hash, version, and launcher checks |
 | `SL-conformance-vectors.json` | Shared TypeScript/PowerShell golden vectors |
@@ -34,14 +39,25 @@ SL-managed runtime files. Unknown files below `SL-runtime/` are preserved.
 SL.ps1 [--json] [--dry-run] [--repo-root <path>] <command>
 ```
 
-Implemented foundation commands are `help`, `version`, `doctor`,
-`validate-runtime`, and `conformance`. Options may appear before or after the
-command. Commands resolve the repository root by walking upward for a `.git`
-file or directory unless `--repo-root` supplies the starting path.
+Implemented commands are:
+
+- `root`, `scope list|resolve|validate`, and `retrieve`;
+- `capture`, `vote`, `use start`, `use finish`, `stats`, and `project`;
+- `evaluate` and `promotion register|evaluate|approve|activate`;
+- `validate`, `doctor`, `forget`, `undo`, and `sweep`;
+- `help`, `version`, `validate-runtime`, and `conformance`.
+
+Legacy command spellings `promote`, `promotion-evaluate`,
+`promotion-activate`, `usage`, and `index` remain accepted. Options may appear
+before or after the command. Commands resolve the repository root by walking
+upward for a `.git` file or directory unless `--repo-root` supplies the
+starting path.
 
 `--json` emits one canonical JSON value to standard output. Diagnostics go to
-standard error. `--dry-run` is accepted by every implemented command and
-cannot write. Foundation commands are read-only today.
+standard error. Every mutating command accepts `--dry-run`; dry runs acquire
+no lock and write no files. Real mutations use a repository-scoped lease lock
+with owner identity, bounded waiting, heartbeat refresh, and conservative
+stale-owner recovery.
 
 | Exit | Meaning |
 |---:|---|
@@ -147,6 +163,14 @@ dry-run performs all preflight checks and reports changes without writing.
 ## Conformance
 
 The shared vector file covers canonical JSON and hash output, Windows and
-POSIX path forms, YAML/frontmatter scalars and lists, typed validation, and
-glob behavior. TypeScript and PowerShell runners compare exact canonical
-output and exact fail-closed error codes.
+POSIX path forms, YAML/frontmatter scalars and lists, typed validation, glob
+behavior, Unicode capture slugs, scope shards, usage/lifecycle event IDs,
+retention deadlines, promotion owner sets, and opaque evidence references.
+TypeScript and PowerShell runners compare exact canonical output and exact
+fail-closed error codes.
+
+Validation contracts containing Node/npm executable checks remain
+non-executable in the repository-local runtime by design. They fail the
+activation gate rather than invoking an unavailable or unreviewed external
+runtime. Static scenarios, content hashes, provenance, owner approval,
+scope-distributed evidence, and conflict/override rules remain enforced.

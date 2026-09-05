@@ -3,7 +3,15 @@ import type {
   SLRuntimeConformanceVector,
   SLRuntimeManifest,
 } from "../SL-core/SL-types.js";
-import { slCanonicalJson, slCompareOrdinal } from "../SL-core/SL-utils.js";
+import {
+  SL_SECRET_PATTERNS,
+  SL_USER_PATH_PATTERN,
+} from "../SL-core/SL-constants.js";
+import {
+  slCanonicalJson,
+  slCompareOrdinal,
+  slSlugify,
+} from "../SL-core/SL-utils.js";
 
 export const SL_RUNTIME_EXIT_CODES = {
   success: 0,
@@ -1001,6 +1009,100 @@ export function slRunRuntimeVector(
         );
       }
       return slRuntimeGlobMatch(input.pattern, input.path);
+    }
+    case "slugify":
+      if (typeof vector.input !== "string") {
+        return slContractError("vector-input", "slugify input must be a string.");
+      }
+      return slSlugify(vector.input);
+    case "scope-shard": {
+      const input = slRequireObject(vector.input, "vector-input");
+      if (typeof input.id !== "string" || typeof input.path !== "string") {
+        return slContractError(
+          "vector-input",
+          "scope-shard input requires id and path strings.",
+        );
+      }
+      const key = `${input.id}\0${slNormalizeRuntimePath(input.path)}`;
+      const slug =
+        slSlugify(
+          slNormalizeRuntimePath(input.path) === "."
+            ? input.id
+            : `${input.id}-${slNormalizeRuntimePath(input.path)}`,
+        ).slice(0, 40) || "scope";
+      return `SL-${slug}-${slRuntimeSha256(key).slice(0, 12)}`;
+    }
+    case "usage-event-id":
+      if (typeof vector.input !== "string" || vector.input.trim().length === 0) {
+        return slContractError(
+          "vector-input",
+          "usage-event-id input must be a non-empty string.",
+        );
+      }
+      return `SL-USE-${slRuntimeSha256(vector.input.trim())
+        .slice(0, 32)
+        .toUpperCase()}`;
+    case "lifecycle-event-id": {
+      const input = slRequireObject(vector.input, "vector-input");
+      return `SL-EVENT-${slRuntimeSha256(JSON.stringify(input))
+        .slice(0, 32)
+        .toUpperCase()}`;
+    }
+    case "retention-deadline": {
+      const input = slRequireObject(vector.input, "vector-input");
+      if (
+        typeof input.timestamp !== "string" ||
+        typeof input.days !== "number" ||
+        !Number.isSafeInteger(input.days)
+      ) {
+        return slContractError(
+          "vector-input",
+          "retention-deadline requires timestamp and integer days.",
+        );
+      }
+      const timestamp = new Date(input.timestamp);
+      if (Number.isNaN(timestamp.getTime())) {
+        return slContractError(
+          "vector-input",
+          "retention-deadline timestamp is invalid.",
+        );
+      }
+      return new Date(timestamp.getTime() + input.days * 86_400_000).toISOString();
+    }
+    case "promotion-owner-set": {
+      const input = slRequireObject(vector.input, "vector-input");
+      if (
+        !Array.isArray(input.ownerAliases) ||
+        input.ownerAliases.some((value) => typeof value !== "string")
+      ) {
+        return slContractError(
+          "vector-input",
+          "promotion-owner-set requires ownerAliases strings.",
+        );
+      }
+      return `SL-OWNERS-${slRuntimeSha256(
+        JSON.stringify([...input.ownerAliases].sort(slCompareOrdinal)),
+      )
+        .slice(0, 16)
+        .toUpperCase()}`;
+    }
+    case "safe-reference": {
+      if (typeof vector.input !== "string") {
+        return slContractError(
+          "vector-input",
+          "safe-reference input must be a string.",
+        );
+      }
+      const reference = vector.input;
+      return /^(?:[A-Za-z][A-Za-z0-9+.-]*:[^\s@\\]{1,240}|[A-Za-z0-9][A-Za-z0-9._/#:-]{0,255})$/.test(
+        reference,
+      ) &&
+        !/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(reference) &&
+        !/(?:^|[^0-9])(?:\d{1,3}\.){3}\d{1,3}(?:$|[^0-9])|(?:^|[^A-F0-9])(?:[A-F0-9]{0,4}:){2,7}[A-F0-9]{0,4}(?:$|[^A-F0-9])/i.test(
+          reference,
+        ) &&
+        !SL_USER_PATH_PATTERN.test(reference) &&
+        !SL_SECRET_PATTERNS.some(({ pattern }) => pattern.test(reference));
     }
   }
 }

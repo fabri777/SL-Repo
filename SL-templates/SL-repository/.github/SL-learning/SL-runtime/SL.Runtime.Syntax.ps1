@@ -395,7 +395,7 @@ function Assert-SLTypedValue {
     }
     $ValidType = switch -CaseSensitive ($Contract.type) {
         'object' {
-            $Value -is [pscustomobject] -or $Value -is [System.Collections.IDictionary]
+            Test-SLMap $Value
             break
         }
         'array' {
@@ -541,7 +541,7 @@ function Assert-SLTypedValue {
         else {
             [pscustomobject] @{}
         }
-        if ($Properties -isnot [pscustomobject]) {
+        if (-not (Test-SLMap $Properties)) {
             Throw-SLContractError -Code 'validation-contract' -Message "properties must be an object at $Path."
         }
         foreach ($Property in $Properties.PSObject.Properties) {
@@ -656,4 +656,129 @@ function Test-SLGlob {
     }
     $Expression += '$'
     return [Regex]::IsMatch($NormalizedPath, $Expression, [Text.RegularExpressions.RegexOptions]::CultureInvariant)
+}
+
+function ConvertTo-SLYamlScalar {
+    param(
+        [Parameter(Mandatory)]
+        [AllowNull()]
+        [object] $Value
+    )
+
+    if ($null -eq $Value) {
+        return 'null'
+    }
+    if ($Value -is [bool]) {
+        return $(if ($Value) { 'true' } else { 'false' })
+    }
+    if (
+        $Value -is [byte] -or
+        $Value -is [sbyte] -or
+        $Value -is [int16] -or
+        $Value -is [uint16] -or
+        $Value -is [int32] -or
+        $Value -is [uint32] -or
+        $Value -is [int64] -or
+        $Value -is [uint64]
+    ) {
+        return [Convert]::ToString($Value, [Globalization.CultureInfo]::InvariantCulture)
+    }
+    if ($Value -is [string]) {
+        return ConvertTo-SLJsonString -Value $Value
+    }
+    Throw-SLContractError -Code 'yaml-write-type' -Message "Unsupported YAML scalar type $($Value.GetType().FullName)."
+}
+
+function ConvertTo-SLYaml {
+    param(
+        [Parameter(Mandatory)]
+        [object] $Value,
+
+        [int] $Indent = 0
+    )
+
+    $Prefix = ' ' * $Indent
+    $Lines = [System.Collections.Generic.List[string]]::new()
+    if (Test-SLMap $Value) {
+        $Names = if ($Value -is [System.Collections.IDictionary]) {
+            [string[]] @($Value.Keys | ForEach-Object { [string] $_ })
+        }
+        else {
+            [string[]] @($Value.PSObject.Properties.Name)
+        }
+        [Array]::Sort($Names, [StringComparer]::Ordinal)
+        foreach ($Name in $Names) {
+            if ($Name -cnotmatch '^[A-Za-z][A-Za-z0-9_-]*$') {
+                Throw-SLContractError -Code 'yaml-write-key' -Message "Invalid YAML mapping key: $Name"
+            }
+            [object] $Child = $null
+            if ($Value -is [System.Collections.IDictionary]) {
+                $Child = [object] $Value[$Name]
+            }
+            else {
+                $Child = [object] $Value.$Name
+            }
+            if (
+                (Test-SLMap $Child) -or
+                (
+                    $Child -is [System.Collections.IEnumerable] -and
+                    $Child -isnot [string]
+                )
+            ) {
+                $Array = @($Child)
+                if ($Array.Count -eq 0) {
+                    $Lines.Add("$Prefix$Name`: []")
+                }
+                else {
+                    $Lines.Add("$Prefix$Name`:")
+                    $Nested = ConvertTo-SLYaml -Value $Child -Indent ($Indent + 2)
+                    foreach ($Line in $Nested.Split("`n")) {
+                        if ($Line.Length -gt 0) {
+                            $Lines.Add($Line)
+                        }
+                    }
+                }
+            }
+            else {
+                $Lines.Add("$Prefix$Name`: $(ConvertTo-SLYamlScalar -Value $Child)")
+            }
+        }
+        return $Lines -join "`n"
+    }
+    if ($Value -is [System.Collections.IEnumerable] -and $Value -isnot [string]) {
+        foreach ($Child in @($Value)) {
+            if (Test-SLMap $Child) {
+                $Nested = ConvertTo-SLYaml -Value $Child -Indent ($Indent + 2)
+                $NestedLines = $Nested.Split("`n")
+                if ($NestedLines.Count -eq 0) {
+                    $Lines.Add("$Prefix- {}")
+                    continue
+                }
+                $First = $NestedLines[0].Substring($Indent + 2)
+                $Lines.Add("$Prefix- $First")
+                foreach ($Line in $NestedLines[1..($NestedLines.Count - 1)]) {
+                    $Lines.Add($Line)
+                }
+            }
+            else {
+                $Lines.Add("$Prefix- $(ConvertTo-SLYamlScalar -Value $Child)")
+            }
+        }
+        return $Lines -join "`n"
+    }
+    return "$Prefix$(ConvertTo-SLYamlScalar -Value $Value)"
+}
+
+function ConvertTo-SLFrontmatterText {
+    param(
+        [Parameter(Mandatory)]
+        [object] $Frontmatter,
+
+        [Parameter(Mandatory)]
+        [AllowEmptyString()]
+        [string] $Body
+    )
+
+    $NormalizedBody = $Body.Replace("`r`n", "`n").Replace("`r", "`n")
+    return "---`n$(ConvertTo-SLYaml -Value $Frontmatter)`n---`n$NormalizedBody".TrimEnd("`n") + "`n"
 }

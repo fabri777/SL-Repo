@@ -29,7 +29,7 @@ describe("SL PowerShell runtime contract", () => {
 
     expect(result).toEqual({
       conformanceVersion: 1,
-      passed: 21,
+      passed: 30,
       failed: 0,
       failures: [],
     });
