@@ -108,6 +108,8 @@ export function slScopeCatalogEntry(
     indexPath: `${root}/SL-index.json`,
     projectionPath: `${root}/SL-usage-projection.json`,
     usageEventsPath: `${root}/SL-usage-events`,
+    resourceReceiptsPath: `${root}/SL-resource-receipts`,
+    resourceProjectionPath: `${root}/SL-resource-projection.json`,
   };
 }
 
@@ -181,7 +183,11 @@ export function slAssertCatalogEntryPaths(entry: SLScopeCatalogEntry): void {
       entry.registryPath === `${root}/SL-registry.json` &&
       entry.indexPath === `${root}/SL-index.json` &&
       entry.projectionPath === `${root}/SL-usage-projection.json` &&
-      entry.usageEventsPath === `${root}/SL-usage-events`
+      entry.usageEventsPath === `${root}/SL-usage-events` &&
+      (entry.resourceReceiptsPath === undefined ||
+        entry.resourceReceiptsPath === `${root}/SL-resource-receipts`) &&
+      (entry.resourceProjectionPath === undefined ||
+        entry.resourceProjectionPath === `${root}/SL-resource-projection.json`)
     ) {
       return;
     }
@@ -198,7 +204,11 @@ export function slAssertCatalogEntryPaths(entry: SLScopeCatalogEntry): void {
     entry.registryPath !== expected.registryPath ||
     entry.indexPath !== expected.indexPath ||
     entry.projectionPath !== expected.projectionPath ||
-    entry.usageEventsPath !== expected.usageEventsPath
+    entry.usageEventsPath !== expected.usageEventsPath ||
+    (entry.resourceReceiptsPath !== undefined &&
+      entry.resourceReceiptsPath !== expected.resourceReceiptsPath) ||
+    (entry.resourceProjectionPath !== undefined &&
+      entry.resourceProjectionPath !== expected.resourceProjectionPath)
   ) {
     throw new Error(
       `Scope catalog paths do not match deterministic shard ${expected.shard}.`,

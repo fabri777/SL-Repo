@@ -214,6 +214,8 @@ export interface SLScopeCatalogEntry {
   indexPath: string;
   projectionPath: string;
   usageEventsPath: string;
+  resourceReceiptsPath?: string;
+  resourceProjectionPath?: string;
 }
 
 export interface SLStateCatalog {
@@ -232,6 +234,109 @@ export interface SLScopeUsageProjection {
   scope: SLScopeDescriptor;
   currentArtifactVersions: Record<string, string>;
   projections: SLUsageProjection[];
+}
+
+export type SLResourcePhase = "generation" | "application" | "baseline";
+export type SLResourceSource = "host" | "ci" | "manual";
+export type SLResourceQuality = "measured" | "estimated";
+
+export interface SLResourceTokenUsage {
+  input: number;
+  output: number;
+  cacheRead?: number;
+  cacheWrite?: number;
+  reasoning?: number;
+}
+
+export interface SLReportedCost {
+  amount: string;
+  currency: string;
+  basis: "host-reported";
+}
+
+export interface SLResourceComparison {
+  comparisonId: string;
+  scenarioKey: string;
+  role: "baseline" | "treatment";
+}
+
+export interface SLResourceReceiptBase {
+  schemaVersion: 1;
+  receiptId: string;
+  idempotencyKey: string;
+  phase: SLResourcePhase;
+  source: SLResourceSource;
+  quality: SLResourceQuality;
+  provider: string;
+  modelId: string;
+  tokens: SLResourceTokenUsage;
+  wallClockDurationMs: number;
+  modelDurationMs?: number;
+  toolDurationMs?: number;
+  attemptCount?: number;
+  timestamp: string;
+  evidenceRef?: string;
+  scope: SLScopeDescriptor;
+  reportedCost?: SLReportedCost;
+}
+
+export interface SLGenerationResourceReceipt extends SLResourceReceiptBase {
+  phase: "generation";
+  artifactId: string;
+  artifactVersion: string;
+  artifactContentHash: string;
+  generationRunId: string;
+}
+
+export interface SLApplicationResourceReceipt extends SLResourceReceiptBase {
+  phase: "application";
+  artifactId: string;
+  artifactVersion: string;
+  artifactContentHash: string;
+  taskRunId: string;
+  applicationId: string;
+  comparison?: SLResourceComparison & { role: "treatment" };
+}
+
+export interface SLBaselineResourceReceipt extends SLResourceReceiptBase {
+  phase: "baseline";
+  taskRunId: string;
+  comparison: SLResourceComparison & { role: "baseline" };
+}
+
+export type SLResourceReceipt =
+  | SLGenerationResourceReceipt
+  | SLApplicationResourceReceipt
+  | SLBaselineResourceReceipt;
+
+export interface SLResourceProjection {
+  scope: SLScopeDescriptor;
+  artifactId?: string;
+  artifactVersion?: string;
+  artifactContentHash?: string;
+  phase: SLResourcePhase;
+  source: SLResourceSource;
+  quality: SLResourceQuality;
+  provider: string;
+  modelId: string;
+  receiptCount: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  reasoningTokens: number;
+  totalTokens: number;
+  wallClockDurationMs: number;
+  modelDurationMs: number;
+  toolDurationMs: number;
+  attemptCount: number;
+  reportedCosts: Record<string, string>;
+}
+
+export interface SLScopeResourceProjection {
+  schemaVersion: 1;
+  scope: SLScopeDescriptor;
+  projections: SLResourceProjection[];
 }
 
 export interface SLEvent {

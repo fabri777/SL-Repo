@@ -19,6 +19,7 @@ import {
   SLScopeResolver,
 } from "../SL-core/SL-scope.js";
 import { slRetrieveArtifacts } from "../SL-core/SL-retrieval.js";
+import { slSynchronizeResourceProjection } from "../SL-core/SL-resource.js";
 import type { SLChange } from "../SL-core/SL-types.js";
 import {
   slCompareOrdinal,
@@ -592,6 +593,11 @@ program
     slRun(async () => {
       const changes: SLChange[] = [];
       await slSynchronizeUsageProjection(
+        slRoot(pathValue),
+        options.dryRun ?? false,
+        changes,
+      );
+      await slSynchronizeResourceProjection(
         slRoot(pathValue),
         options.dryRun ?? false,
         changes,

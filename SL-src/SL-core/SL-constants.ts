@@ -48,6 +48,7 @@ export const SL_PATHS = {
   legacyEvents: ".github/SL-learning/SL-events.jsonl",
   lifecycleEvents: ".github/SL-learning/SL-lifecycle-events",
   usageEvents: ".github/SL-learning/SL-usage-events",
+  resourceReceipts: ".github/SL-learning/SL-resource-receipts",
   lessons: ".github/SL-learning/SL-lessons",
   probation: ".github/SL-learning/SL-probation",
   quarantine: ".github/SL-learning/SL-quarantine",
