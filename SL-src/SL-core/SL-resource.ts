@@ -82,6 +82,16 @@ export interface SLCreateResourceReceiptInput {
   };
 }
 
+export interface SLResourceReceiptImportEnvelope {
+  schemaVersion: 1;
+  receipts: SLCreateResourceReceiptInput[];
+}
+
+export interface SLImportResourceReceiptsResult {
+  receipts: SLResourceReceipt[];
+  changes: SLChange[];
+}
+
 function slHash(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
@@ -133,6 +143,245 @@ function slValidateTokens(tokens: SLResourceTokenUsage): void {
       slAssertNonNegativeInteger(`tokens.${name}`, value);
     }
   }
+}
+
+function slAssertPlainObject(
+  name: string,
+  value: unknown,
+): asserts value is Record<string, unknown> {
+  if (
+    value === null ||
+    typeof value !== "object" ||
+    Array.isArray(value)
+  ) {
+    throw new Error(`${name} must be a JSON object.`);
+  }
+}
+
+function slAssertKnownKeys(
+  name: string,
+  value: Record<string, unknown>,
+  allowed: string[],
+): void {
+  const unexpected = Object.keys(value)
+    .filter((key) => !allowed.includes(key))
+    .sort(slCompareOrdinal);
+  if (unexpected.length > 0) {
+    throw new Error(
+      `${name} contains unsupported fields: ${unexpected.join(", ")}.`,
+    );
+  }
+}
+
+function slAssertStringField(
+  name: string,
+  value: unknown,
+  required = true,
+): asserts value is string | undefined {
+  if (value === undefined && !required) {
+    return;
+  }
+  if (typeof value !== "string") {
+    throw new Error(`${name} must be a string.`);
+  }
+}
+
+function slAssertNumberField(
+  name: string,
+  value: unknown,
+  required = true,
+): asserts value is number | undefined {
+  if (value === undefined && !required) {
+    return;
+  }
+  if (typeof value !== "number") {
+    throw new Error(`${name} must be a number.`);
+  }
+}
+
+function slParseResourceReceiptInput(
+  value: unknown,
+  index: number,
+): SLCreateResourceReceiptInput {
+  const name = `receipts[${index}]`;
+  slAssertPlainObject(name, value);
+  slAssertKnownKeys(name, value, [
+    "idempotencyKey",
+    "phase",
+    "source",
+    "quality",
+    "provider",
+    "modelId",
+    "tokens",
+    "wallClockDurationMs",
+    "modelDurationMs",
+    "toolDurationMs",
+    "attemptCount",
+    "timestamp",
+    "evidenceRef",
+    "scope",
+    "reportedCost",
+    "artifactId",
+    "artifactContentHash",
+    "generationRunId",
+    "taskRunId",
+    "applicationId",
+    "comparison",
+  ]);
+  slAssertPlainObject(`${name}.tokens`, value.tokens);
+  slAssertKnownKeys(`${name}.tokens`, value.tokens, [
+    "input",
+    "output",
+    "cacheRead",
+    "cacheWrite",
+    "reasoning",
+  ]);
+  for (const field of [
+    "idempotencyKey",
+    "phase",
+    "source",
+    "quality",
+    "provider",
+    "modelId",
+    "timestamp",
+  ]) {
+    slAssertStringField(`${name}.${field}`, value[field]);
+  }
+  if (
+    !["generation", "application", "baseline"].includes(
+      value.phase as string,
+    )
+  ) {
+    throw new Error(`${name}.phase is not supported.`);
+  }
+  if (!["host", "ci", "manual"].includes(value.source as string)) {
+    throw new Error(`${name}.source is not supported.`);
+  }
+  if (!["measured", "estimated"].includes(value.quality as string)) {
+    throw new Error(`${name}.quality is not supported.`);
+  }
+  for (const field of [
+    "artifactId",
+    "artifactContentHash",
+    "generationRunId",
+    "taskRunId",
+    "applicationId",
+    "evidenceRef",
+  ]) {
+    slAssertStringField(`${name}.${field}`, value[field], false);
+  }
+  slAssertNumberField(
+    `${name}.wallClockDurationMs`,
+    value.wallClockDurationMs,
+  );
+  for (const field of [
+    "modelDurationMs",
+    "toolDurationMs",
+    "attemptCount",
+  ]) {
+    slAssertNumberField(`${name}.${field}`, value[field], false);
+  }
+  slAssertNumberField(`${name}.tokens.input`, value.tokens.input);
+  slAssertNumberField(`${name}.tokens.output`, value.tokens.output);
+  for (const field of ["cacheRead", "cacheWrite", "reasoning"]) {
+    slAssertNumberField(
+      `${name}.tokens.${field}`,
+      value.tokens[field],
+      false,
+    );
+  }
+  if (value.scope !== undefined) {
+    slAssertPlainObject(`${name}.scope`, value.scope);
+    slAssertKnownKeys(`${name}.scope`, value.scope, ["id", "path"]);
+    slAssertStringField(`${name}.scope.id`, value.scope.id);
+    slAssertStringField(`${name}.scope.path`, value.scope.path);
+  }
+  if (value.reportedCost !== undefined) {
+    slAssertPlainObject(`${name}.reportedCost`, value.reportedCost);
+    slAssertKnownKeys(`${name}.reportedCost`, value.reportedCost, [
+      "amount",
+      "currency",
+      "basis",
+    ]);
+    slAssertStringField(
+      `${name}.reportedCost.amount`,
+      value.reportedCost.amount,
+    );
+    slAssertStringField(
+      `${name}.reportedCost.currency`,
+      value.reportedCost.currency,
+    );
+    slAssertStringField(
+      `${name}.reportedCost.basis`,
+      value.reportedCost.basis,
+    );
+  }
+  if (value.comparison !== undefined) {
+    slAssertPlainObject(`${name}.comparison`, value.comparison);
+    slAssertKnownKeys(`${name}.comparison`, value.comparison, [
+      "comparisonId",
+      "scenarioKey",
+      "role",
+    ]);
+    slAssertStringField(
+      `${name}.comparison.comparisonId`,
+      value.comparison.comparisonId,
+    );
+    slAssertStringField(
+      `${name}.comparison.scenarioKey`,
+      value.comparison.scenarioKey,
+    );
+    slAssertStringField(
+      `${name}.comparison.role`,
+      value.comparison.role,
+    );
+  }
+  if (
+    value.phase === "application" &&
+    value.comparison !== undefined &&
+    value.comparison.role !== "treatment"
+  ) {
+    throw new Error(`${name}.comparison.role must be treatment.`);
+  }
+  if (
+    value.phase === "baseline" &&
+    value.comparison !== undefined &&
+    value.comparison.role !== "baseline"
+  ) {
+    throw new Error(`${name}.comparison.role must be baseline.`);
+  }
+  const input = value as unknown as SLCreateResourceReceiptInput;
+  slCreateResourceReceipt(input);
+  return input;
+}
+
+export function slParseResourceReceiptInputs(
+  value: unknown,
+): SLCreateResourceReceiptInput[] {
+  let entries: unknown[];
+  if (Array.isArray(value)) {
+    entries = value;
+  } else {
+    slAssertPlainObject("resource input", value);
+    if ("receipts" in value || "schemaVersion" in value) {
+      slAssertKnownKeys("resource input", value, [
+        "schemaVersion",
+        "receipts",
+      ]);
+      if (value.schemaVersion !== 1 || !Array.isArray(value.receipts)) {
+        throw new Error(
+          "Resource input envelope requires schemaVersion 1 and a receipts array.",
+        );
+      }
+      entries = value.receipts;
+    } else {
+      entries = [value];
+    }
+  }
+  if (entries.length === 0) {
+    throw new Error("Resource input must contain at least one receipt.");
+  }
+  return entries.map(slParseResourceReceiptInput);
 }
 
 export function slCreateResourceReceipt(
@@ -507,6 +756,16 @@ async function slValidateResourceCorrelation(
   receipt: SLResourceReceipt,
 ): Promise<void> {
   if (receipt.phase === "baseline") {
+    const catalog = await slLoadStateCatalog(root);
+    if (
+      !catalog.scopes.some(
+        (entry) => slScopeKey(entry.scope) === slScopeKey(receipt.scope),
+      )
+    ) {
+      throw new Error(
+        `Baseline resource receipt scope is not registered: ${receipt.scope.id}.`,
+      );
+    }
     return;
   }
   if (receipt.phase === "application") {
@@ -587,11 +846,165 @@ export async function slRecordResourceReceipt(
           `Immutable SL resource receipt collision: ${collision.receiptId}`,
         );
       }
+      if (collision) {
+        return {
+          receipt: collision,
+          change: {
+            action: "skip",
+            path: slResourceReceiptPath(collision),
+            detail: "idempotent receipt already recorded",
+          },
+        };
+      }
       const change = await slWriteResourceReceipt(root, receipt, dryRun);
       return { receipt, change };
     },
     { dryRun },
   );
+}
+
+export async function slImportResourceReceipts(
+  root: string,
+  inputs: SLCreateResourceReceiptInput[],
+  dryRun = false,
+): Promise<SLImportResourceReceiptsResult> {
+  if (inputs.length === 0) {
+    throw new Error("Resource import requires at least one receipt.");
+  }
+  return slWithRepositoryMutationLock(
+    root,
+    async () => {
+      const receipts = inputs.map(slCreateResourceReceipt);
+      for (const receipt of receipts) {
+        await slValidateResourceCorrelation(root, receipt);
+      }
+      const existing = await slLoadResourceReceipts(root);
+      const candidates = [...existing];
+      for (const receipt of receipts) {
+        const collision = candidates.find(
+          (candidate) =>
+            candidate.receiptId === receipt.receiptId ||
+            candidate.idempotencyKey === receipt.idempotencyKey ||
+            (candidate.phase === "application" &&
+              receipt.phase === "application" &&
+              candidate.applicationId === receipt.applicationId),
+        );
+        if (collision && !slResourceReceiptsEquivalent(collision, receipt)) {
+          throw new Error(
+            `Immutable SL resource receipt collision: ${collision.receiptId}`,
+          );
+        }
+        if (!collision) {
+          candidates.push(receipt);
+        }
+      }
+      const changes: SLChange[] = [];
+      const canonicalReceipts: SLResourceReceipt[] = [];
+      for (const receipt of receipts) {
+        const collision = candidates.find(
+          (candidate) =>
+            candidate !== receipt &&
+            (candidate.receiptId === receipt.receiptId ||
+              candidate.idempotencyKey === receipt.idempotencyKey ||
+              (candidate.phase === "application" &&
+                receipt.phase === "application" &&
+                candidate.applicationId === receipt.applicationId)),
+        );
+        if (collision) {
+          canonicalReceipts.push(collision);
+          changes.push({
+            action: "skip",
+            path: slResourceReceiptPath(collision),
+            detail: "idempotent receipt already recorded",
+          });
+          continue;
+        }
+        canonicalReceipts.push(receipt);
+        changes.push(await slWriteResourceReceipt(root, receipt, dryRun));
+      }
+      await slSynchronizeResourceProjectionUnlocked(
+        root,
+        dryRun,
+        changes,
+        candidates,
+      );
+      return { receipts: canonicalReceipts, changes };
+    },
+    { dryRun },
+  );
+}
+
+export async function slResolveGenerationResourceIdentity(
+  root: string,
+  artifactId: string,
+): Promise<{
+  artifactId: string;
+  artifactContentHash: string;
+  scope: SLScopeDescriptor;
+}> {
+  const registry = await slLoadRegistry(root);
+  const artifact = slFindArtifact(registry, artifactId);
+  if (!artifact.path) {
+    throw new Error(
+      `Generation resource receipt artifact has no active path: ${artifactId}.`,
+    );
+  }
+  const content = await slReadContainedText(root, artifact.path);
+  return {
+    artifactId,
+    artifactContentHash: slArtifactUsageContentHash(content),
+    scope: slNormalizeScope(artifact.scope ?? SL_DEFAULT_SCOPE),
+  };
+}
+
+export async function slResolveApplicationResourceIdentity(
+  root: string,
+  artifactId: string,
+  applicationId: string,
+): Promise<{
+  artifactId: string;
+  artifactContentHash: string;
+  taskRunId: string;
+  applicationId: string;
+  scope: SLScopeDescriptor;
+}> {
+  const events = (await slLoadUsageEvents(root)).filter(
+    (event) =>
+      event.eventType === "usage" &&
+      event.applicationId === applicationId,
+  );
+  const first = events[0];
+  if (!first) {
+    throw new Error(
+      `Application resource receipt has no usage lifecycle: ${applicationId}`,
+    );
+  }
+  if (first.artifactId !== artifactId) {
+    throw new Error(
+      `Application ${applicationId} belongs to ${first.artifactId}, not ${artifactId}.`,
+    );
+  }
+  for (const event of events.slice(1)) {
+    if (
+      event.artifactId !== first.artifactId ||
+      event.artifactVersion !== first.artifactVersion ||
+      event.artifactContentHash !== first.artifactContentHash ||
+      event.taskRunId !== first.taskRunId ||
+      slScopeKey(event.scope ?? SL_DEFAULT_SCOPE) !==
+        slScopeKey(first.scope ?? SL_DEFAULT_SCOPE)
+    ) {
+      throw new Error(
+        `Application ${applicationId} has conflicting usage identity data.`,
+      );
+    }
+  }
+  return {
+    artifactId,
+    artifactContentHash: first.artifactContentHash,
+    taskRunId: first.taskRunId,
+    applicationId,
+    scope: slNormalizeScope(first.scope ?? SL_DEFAULT_SCOPE),
+  };
 }
 
 function slDecimalToScaled(value: string): bigint {
@@ -686,9 +1099,10 @@ export async function slSynchronizeResourceProjectionUnlocked(
   root: string,
   dryRun: boolean,
   changes: SLChange[] = [],
+  suppliedReceipts?: SLResourceReceipt[],
 ): Promise<void> {
   const catalog = await slLoadStateCatalog(root);
-  const receipts = await slLoadResourceReceipts(root);
+  const receipts = suppliedReceipts ?? (await slLoadResourceReceipts(root));
   const receiptsByScope = new Map<string, SLResourceReceipt[]>();
   for (const receipt of receipts) {
     const key = slScopeKey(receipt.scope);

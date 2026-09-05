@@ -2,20 +2,29 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import { slCaptureLesson } from "../../SL-src/SL-core/SL-capture.js";
+import { slCalculateEfficiencyReport } from "../../SL-src/SL-core/SL-efficiency.js";
 import { slInstall } from "../../SL-src/SL-core/SL-installer.js";
+import { slRegisterPromotion } from "../../SL-src/SL-core/SL-promotion.js";
 import {
   slCreateResourceReceipt,
+  slImportResourceReceipts,
   slLoadResourceReceipts,
+  slParseResourceReceiptInputs,
   slProjectResourceReceipts,
   slRecordResourceReceipt,
   slResourceReceiptPath,
+  slResolveGenerationResourceIdentity,
   slSynchronizeResourceProjection,
   slValidateResourceReceipt,
 } from "../../SL-src/SL-core/SL-resource.js";
-import { slLoadStateCatalog } from "../../SL-src/SL-core/SL-state.js";
+import {
+  slLoadStateCatalog,
+  slScopeCatalogEntry,
+} from "../../SL-src/SL-core/SL-state.js";
 import type { SLChange } from "../../SL-src/SL-core/SL-types.js";
 import {
   slArtifactUsageContentHash,
+  slFinishUsage,
   slStartUsage,
 } from "../../SL-src/SL-core/SL-usage.js";
 import {
@@ -23,6 +32,12 @@ import {
   slRemoveTestRepository,
 } from "../SL-fixtures/SL-test-repository.js";
 import { slValidateRepository } from "../../SL-src/SL-validation/SL-validation.js";
+import {
+  slCreateTestContract,
+  slTestContractPath,
+  slWriteTestJson,
+  slWriteTestPromotedArtifact,
+} from "../SL-fixtures/SL-validation-contract.js";
 
 const repositories: string[] = [];
 const NOW = new Date("2026-09-05T09:00:00.000Z");
@@ -46,6 +61,29 @@ async function createLesson(root: string) {
     ...lesson,
     contentHash: slArtifactUsageContentHash(content),
   };
+}
+
+async function createVerifiedApplication(
+  root: string,
+  artifactId: string,
+  applicationId: string,
+  minute: number,
+) {
+  const usage = await slStartUsage(root, artifactId, {
+    applicationId,
+    taskRunId: `${applicationId}-task`,
+    idempotencyKey: `${applicationId}-start`,
+    now: new Date(`2026-09-05T10:${String(minute).padStart(2, "0")}:00.000Z`),
+  });
+  await slFinishUsage(root, applicationId, {
+    outcome: "success",
+    verified: true,
+    verifierType: "test-suite",
+    evidenceRef: `ci:${applicationId}`,
+    idempotencyKey: `${applicationId}-finish`,
+    now: new Date(`2026-09-05T11:${String(minute).padStart(2, "0")}:00.000Z`),
+  });
+  return usage;
 }
 
 describe("SL immutable resource receipts", () => {
@@ -193,7 +231,7 @@ describe("SL immutable resource receipts", () => {
       slRecordResourceReceipt(root, input),
       slRecordResourceReceipt(root, {
         ...input,
-        timestamp: "2026-09-05T09:06:00.000Z",
+        timestamp: "2026-10-05T09:06:00.000Z",
       }),
     ]);
     expect([first.change.action, second.change.action].sort()).toEqual([
@@ -349,5 +387,502 @@ describe("SL immutable resource receipts", () => {
       },
     });
     expect(() => slValidateResourceReceipt(receipt)).not.toThrow();
+  });
+
+  test("imports strict provider-neutral receipt envelopes and projects the planned batch", async () => {
+    const root = await slCreateTestRepository();
+    repositories.push(root);
+    const lesson = await createLesson(root);
+    const input = slParseResourceReceiptInputs({
+      schemaVersion: 1,
+      receipts: [
+        {
+          idempotencyKey: "provider-neutral-generation",
+          phase: "generation",
+          source: "ci",
+          quality: "measured",
+          provider: "provider-a",
+          modelId: "model-a",
+          tokens: { input: 200, output: 50 },
+          wallClockDurationMs: 3000,
+          timestamp: NOW.toISOString(),
+          artifactId: lesson.id,
+          artifactContentHash: lesson.contentHash,
+          generationRunId: "provider-neutral-run",
+        },
+      ],
+    });
+
+    const planned = await slImportResourceReceipts(root, input, true);
+    expect(planned.receipts).toHaveLength(1);
+    expect(planned.changes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          action: "create",
+          path: expect.stringContaining("SL-resource-receipts"),
+        }),
+        expect.objectContaining({
+          action: "create",
+          path: expect.stringContaining("SL-resource-projection.json"),
+        }),
+      ]),
+    );
+    expect(await slLoadResourceReceipts(root)).toEqual([]);
+
+    const [first, second] = await Promise.all([
+      slImportResourceReceipts(root, input),
+      slImportResourceReceipts(root, input),
+    ]);
+    expect(
+      [first, second]
+        .flatMap((result) => result.changes)
+        .filter((change) => change.path.includes("SL-resource-receipts"))
+        .map((change) => change.action)
+        .sort(),
+    ).toEqual(["create", "skip"]);
+    expect(await slLoadResourceReceipts(root)).toHaveLength(1);
+
+    expect(() =>
+      slParseResourceReceiptInputs({
+        ...input[0],
+        sourcePayload: "must-not-be-persisted",
+      }),
+    ).toThrow("unsupported fields");
+    await expect(
+      slImportResourceReceipts(root, [
+        {
+          idempotencyKey: "orphan-baseline",
+          phase: "baseline",
+          source: "manual",
+          quality: "estimated",
+          provider: "provider-a",
+          modelId: "model-a",
+          tokens: { input: 10, output: 1 },
+          wallClockDurationMs: 100,
+          timestamp: NOW.toISOString(),
+          scope: { id: "SL-SCOPE-UNKNOWN", path: "unknown" },
+          taskRunId: "orphan-baseline-task",
+          comparison: {
+            comparisonId: "orphan-comparison",
+            scenarioKey: "orphan-scenario",
+            role: "baseline",
+          },
+        },
+      ]),
+    ).rejects.toThrow("scope is not registered");
+  });
+
+  test("calculates segmented verified-success efficiency, strict pairs, negative savings, and break-even", async () => {
+    const root = await slCreateTestRepository();
+    repositories.push(root);
+    const lesson = await createLesson(root);
+    await slRecordResourceReceipt(root, {
+      idempotencyKey: "efficiency-generation",
+      phase: "generation",
+      source: "host",
+      quality: "measured",
+      provider: "provider-a",
+      modelId: "model-a",
+      tokens: { input: 1000, output: 0 },
+      wallClockDurationMs: 10000,
+      timestamp: NOW.toISOString(),
+      artifactId: lesson.id,
+      artifactContentHash: lesson.contentHash,
+      generationRunId: "efficiency-generation-run",
+      reportedCost: {
+        amount: "0.1",
+        currency: "USD",
+        basis: "host-reported",
+      },
+    });
+
+    for (const [index, values] of [
+      {
+        applicationId: "efficiency-positive",
+        modelId: "model-a",
+        input: 100,
+        cost: "0.04",
+      },
+      {
+        applicationId: "efficiency-negative",
+        modelId: "model-a",
+        input: 100,
+        cost: "0.02",
+      },
+      { applicationId: "efficiency-incompatible", modelId: "model-b", input: 90 },
+      {
+        applicationId: "efficiency-unreported",
+        modelId: undefined,
+        input: 0,
+        cost: undefined,
+      },
+    ].entries()) {
+      const usage = await createVerifiedApplication(
+        root,
+        lesson.id,
+        values.applicationId,
+        index,
+      );
+      if (!values.modelId) {
+        continue;
+      }
+      await slRecordResourceReceipt(root, {
+        idempotencyKey: `${values.applicationId}-resource`,
+        phase: "application",
+        source: "host",
+        quality: "measured",
+        provider: "provider-a",
+        modelId: values.modelId,
+        tokens: { input: values.input, output: 0 },
+        wallClockDurationMs: 1000,
+        timestamp: `2026-09-05T12:${String(index).padStart(2, "0")}:00.000Z`,
+        artifactId: lesson.id,
+        artifactContentHash: usage.artifactContentHash,
+        taskRunId: usage.taskRunId,
+        applicationId: usage.applicationId,
+        ...(values.cost
+          ? {
+              reportedCost: {
+                amount: values.cost,
+                currency: "USD",
+                basis: "host-reported" as const,
+              },
+            }
+          : {}),
+        comparison: {
+          comparisonId: `comparison-${index}`,
+          scenarioKey: "same-scenario",
+          role: "treatment",
+        },
+      });
+    }
+
+    for (const [index, input] of [
+      { tokens: 220, quality: "measured" as const, cost: "0.03" },
+      { tokens: 60, quality: "measured" as const, cost: "0.08" },
+      { tokens: 200, quality: "estimated" as const, cost: undefined },
+    ].entries()) {
+      await slRecordResourceReceipt(root, {
+        idempotencyKey: `efficiency-baseline-${index}`,
+        phase: "baseline",
+        source: "manual",
+        quality: input.quality,
+        provider: "provider-b",
+        modelId: "baseline-model",
+        tokens: { input: input.tokens, output: 0 },
+        wallClockDurationMs: 1500,
+        timestamp: `2026-09-05T09:${String(index).padStart(2, "0")}:00.000Z`,
+        taskRunId: `baseline-task-${index}`,
+        ...(input.cost
+          ? {
+              reportedCost: {
+                amount: input.cost,
+                currency: "USD",
+                basis: "host-reported" as const,
+              },
+            }
+          : {}),
+        comparison: {
+          comparisonId: `comparison-${index}`,
+          scenarioKey: "same-scenario",
+          role: "baseline",
+        },
+      });
+    }
+
+    const report = await slCalculateEfficiencyReport(root, {
+      artifactId: lesson.id,
+    });
+    expect(report.segments).toHaveLength(2);
+    const main = report.segments.find(
+      (segment) => segment.key.modelId === "model-a",
+    );
+    expect(main).toBeDefined();
+    expect(main!.verifiedSuccessApplications).toMatchObject({
+      eligibleCount: 4,
+      receiptCount: 2,
+      coverage: 0.5,
+    });
+    expect(main!.verifiedSuccessApplications.average).toMatchObject({
+      sampleCount: 2,
+      inputTokens: 100,
+      totalTokens: 100,
+    });
+    expect(main!.generation.amortizedPerVerifiedSuccess).toMatchObject({
+      sampleCount: 4,
+      inputTokens: 250,
+      totalTokens: 250,
+    });
+    expect(
+      main!.verifiedSuccessApplications.averageWithAmortizedGeneration,
+    ).toMatchObject({
+      inputTokens: 350,
+      totalTokens: 350,
+    });
+    expect(main!.pairedBaseline.pairSavings.map((pair) => pair.savings.inputTokens))
+      .toEqual([120, -40]);
+    expect(
+      main!.pairedBaseline.pairSavings.map(
+        (pair) => pair.savings.reportedCosts.USD,
+      ),
+    ).toEqual(["-0.01", "0.06"]);
+    expect(main!.pairedBaseline.medianSavings).toMatchObject({
+      inputTokens: 40,
+      totalTokens: 40,
+      reportedCosts: { USD: "0.025" },
+    });
+    expect(main!.pairedBaseline.breakEvenApplications).toMatchObject({
+      inputTokens: 25,
+      totalTokens: 25,
+      reportedCosts: { USD: 4 },
+    });
+
+    const incompatible = report.segments.find(
+      (segment) => segment.key.modelId === "model-b",
+    );
+    expect(incompatible!.pairedBaseline).toMatchObject({
+      compatiblePairCount: 0,
+      incompatiblePairCount: 1,
+      breakEvenApplications: null,
+    });
+    expect(incompatible!.pairedBaseline.incompatibilities).toEqual([
+      expect.objectContaining({ reason: "quality-mismatch" }),
+    ]);
+    expect(report.unpairedBaselineCount).toBe(1);
+  });
+
+  test("rejects incomplete or ambiguous comparison, scenario, and scope pairs", async () => {
+    const root = await slCreateTestRepository();
+    repositories.push(root);
+    const lesson = await createLesson(root);
+    const stateCatalog = await slLoadStateCatalog(root);
+    stateCatalog.scopes.push(
+      slScopeCatalogEntry({
+        id: "SL-SCOPE-OTHER",
+        path: "services/other",
+      }),
+    );
+    await writeFile(
+      join(root, ".github", "SL-learning", "SL-state-catalog.json"),
+      `${JSON.stringify(stateCatalog, null, 2)}\n`,
+      "utf8",
+    );
+    const treatments = [
+      { applicationId: "strict-ambiguous-baseline", comparisonId: "strict-a" },
+      { applicationId: "strict-scenario", comparisonId: "strict-b" },
+      { applicationId: "strict-scope", comparisonId: "strict-c" },
+      { applicationId: "strict-missing", comparisonId: "strict-d" },
+      { applicationId: "strict-duplicate-1", comparisonId: "strict-e" },
+      { applicationId: "strict-duplicate-2", comparisonId: "strict-e" },
+    ];
+    for (const [index, treatment] of treatments.entries()) {
+      const usage = await createVerifiedApplication(
+        root,
+        lesson.id,
+        treatment.applicationId,
+        index,
+      );
+      await slRecordResourceReceipt(root, {
+        idempotencyKey: `${treatment.applicationId}-resource`,
+        phase: "application",
+        source: "host",
+        quality: "measured",
+        provider: "provider-a",
+        modelId: "model-a",
+        tokens: { input: 100, output: 10 },
+        wallClockDurationMs: 1000,
+        timestamp: `2026-09-05T12:${String(index).padStart(2, "0")}:00.000Z`,
+        artifactId: lesson.id,
+        artifactContentHash: usage.artifactContentHash,
+        taskRunId: usage.taskRunId,
+        applicationId: usage.applicationId,
+        comparison: {
+          comparisonId: treatment.comparisonId,
+          scenarioKey: "strict-scenario",
+          role: "treatment",
+        },
+      });
+    }
+    const baselines = [
+      {
+        id: "strict-a-1",
+        comparisonId: "strict-a",
+        scenarioKey: "strict-scenario",
+        scope: undefined,
+      },
+      {
+        id: "strict-a-2",
+        comparisonId: "strict-a",
+        scenarioKey: "strict-scenario",
+        scope: undefined,
+      },
+      {
+        id: "strict-b",
+        comparisonId: "strict-b",
+        scenarioKey: "different-scenario",
+        scope: undefined,
+      },
+      {
+        id: "strict-c",
+        comparisonId: "strict-c",
+        scenarioKey: "strict-scenario",
+        scope: { id: "SL-SCOPE-OTHER", path: "services/other" },
+      },
+      {
+        id: "strict-e",
+        comparisonId: "strict-e",
+        scenarioKey: "strict-scenario",
+        scope: undefined,
+      },
+    ];
+    for (const [index, baseline] of baselines.entries()) {
+      await slRecordResourceReceipt(root, {
+        idempotencyKey: `${baseline.id}-baseline-resource`,
+        phase: "baseline",
+        source: "manual",
+        quality: "measured",
+        provider: "provider-b",
+        modelId: "model-b",
+        tokens: { input: 150, output: 20 },
+        wallClockDurationMs: 1500,
+        timestamp: `2026-09-05T09:${String(index).padStart(2, "0")}:00.000Z`,
+        taskRunId: `${baseline.id}-baseline-task`,
+        ...(baseline.scope ? { scope: baseline.scope } : {}),
+        comparison: {
+          comparisonId: baseline.comparisonId,
+          scenarioKey: baseline.scenarioKey,
+          role: "baseline",
+        },
+      });
+    }
+
+    const report = await slCalculateEfficiencyReport(root, {
+      artifactId: lesson.id,
+    });
+    expect(report.segments).toHaveLength(1);
+    expect(report.segments[0]!.pairedBaseline).toMatchObject({
+      compatiblePairCount: 0,
+      incompatiblePairCount: 6,
+      medianSavings: null,
+      breakEvenApplications: null,
+    });
+    expect(
+      report.segments[0]!.pairedBaseline.incompatibilities
+        .map((entry) => entry.reason)
+        .sort(),
+    ).toEqual([
+      "ambiguous-baseline",
+      "ambiguous-treatment",
+      "ambiguous-treatment",
+      "missing-baseline",
+      "scenario-mismatch",
+      "scope-mismatch",
+    ]);
+  });
+
+  test("reports promotion direct, source, and combined resource lineage", async () => {
+    const root = await slCreateTestRepository();
+    repositories.push(root);
+    const source = await createLesson(root);
+    await slRecordResourceReceipt(root, {
+      idempotencyKey: "lineage-source-generation",
+      phase: "generation",
+      source: "host",
+      quality: "measured",
+      provider: "provider-a",
+      modelId: "model-a",
+      tokens: { input: 100, output: 0 },
+      wallClockDurationMs: 1000,
+      timestamp: NOW.toISOString(),
+      artifactId: source.id,
+      artifactContentHash: source.contentHash,
+      generationRunId: "lineage-source-run",
+    });
+
+    const promotedId = "SL-EFFICIENCY-LINEAGE";
+    const artifactPath = `.github/skills/${promotedId}/SKILL.md`;
+    const contractPath = slTestContractPath(promotedId);
+    await slWriteTestPromotedArtifact({
+      root,
+      artifactId: promotedId,
+      artifactType: "skill",
+      artifactPath,
+      contractPath,
+    });
+    await slWriteTestJson(
+      root,
+      contractPath,
+      slCreateTestContract({
+        artifactId: promotedId,
+        artifactType: "skill",
+        artifactPath,
+        sourceIds: [source.id],
+      }),
+    );
+    await slRegisterPromotion(
+      root,
+      source.id,
+      artifactPath,
+      false,
+      NOW,
+    );
+    const promoted = await slResolveGenerationResourceIdentity(
+      root,
+      promotedId,
+    );
+    await slRecordResourceReceipt(root, {
+      idempotencyKey: "lineage-direct-generation",
+      phase: "generation",
+      source: "host",
+      quality: "measured",
+      provider: "provider-a",
+      modelId: "model-a",
+      tokens: { input: 50, output: 0 },
+      wallClockDurationMs: 500,
+      timestamp: "2026-09-05T09:30:00.000Z",
+      ...promoted,
+      generationRunId: "lineage-direct-run",
+    });
+
+    const report = await slCalculateEfficiencyReport(root, {
+      artifactId: promotedId,
+    });
+    expect(report.promotionLineage).toEqual([
+      expect.objectContaining({
+        artifactId: promotedId,
+        directArtifactIds: [promotedId],
+        sourceArtifactIds: [source.id],
+        direct: expect.objectContaining({
+          combined: expect.objectContaining({ inputTokens: 50 }),
+        }),
+        source: expect.objectContaining({
+          combined: expect.objectContaining({ inputTokens: 100 }),
+        }),
+        combined: expect.objectContaining({
+          combined: expect.objectContaining({ inputTokens: 150 }),
+          segments: expect.arrayContaining([
+            expect.objectContaining({
+              key: expect.objectContaining({
+                artifactId: promotedId,
+                artifactVersion: `sha256:${promoted.artifactContentHash}`,
+                provider: "provider-a",
+                modelId: "model-a",
+                quality: "measured",
+                phase: "generation",
+              }),
+            }),
+            expect.objectContaining({
+              key: expect.objectContaining({
+                artifactId: source.id,
+                provider: "provider-a",
+                modelId: "model-a",
+                quality: "measured",
+                phase: "generation",
+              }),
+            }),
+          ]),
+        }),
+      }),
+    ]);
   });
 });

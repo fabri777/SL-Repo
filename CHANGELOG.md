@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Add provider-neutral resource import, artifact resource recording, paired
+  baseline commands, segmented advisory efficiency metrics, and promotion
+  lineage resource reporting.
+
 ## 0.3.0 - 2026-09-04
 
 ### Added

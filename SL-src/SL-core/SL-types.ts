@@ -339,6 +339,133 @@ export interface SLScopeResourceProjection {
   projections: SLResourceProjection[];
 }
 
+export interface SLResourceMetricValues {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  reasoningTokens: number;
+  totalTokens: number;
+  wallClockDurationMs: number;
+  modelDurationMs: number;
+  toolDurationMs: number;
+  attemptCount: number;
+  reportedCosts: Record<string, string>;
+}
+
+export interface SLResourceSummary extends SLResourceMetricValues {
+  receiptCount: number;
+  reportedCostReceiptCounts: Record<string, number>;
+}
+
+export interface SLResourceAverage extends SLResourceMetricValues {
+  sampleCount: number;
+  reportedCostSampleCounts: Record<string, number>;
+}
+
+export interface SLResourceBreakEven {
+  inputTokens: number | null;
+  outputTokens: number | null;
+  cacheReadTokens: number | null;
+  cacheWriteTokens: number | null;
+  reasoningTokens: number | null;
+  totalTokens: number | null;
+  wallClockDurationMs: number | null;
+  modelDurationMs: number | null;
+  toolDurationMs: number | null;
+  attemptCount: number | null;
+  reportedCosts: Record<string, number | null>;
+}
+
+export interface SLEfficiencySegmentKey {
+  scope: SLScopeDescriptor;
+  artifactId: string;
+  artifactVersion: string;
+  provider: string;
+  modelId: string;
+  quality: SLResourceQuality;
+}
+
+export interface SLResourcePairSavings {
+  comparisonId: string;
+  scenarioKey: string;
+  baselineReceiptId: string;
+  treatmentReceiptId: string;
+  savings: SLResourceMetricValues;
+}
+
+export interface SLResourcePairIncompatibility {
+  comparisonId: string;
+  treatmentReceiptId: string;
+  reason:
+    | "missing-baseline"
+    | "ambiguous-baseline"
+    | "ambiguous-treatment"
+    | "scenario-mismatch"
+    | "scope-mismatch"
+    | "quality-mismatch";
+}
+
+export interface SLEfficiencySegment {
+  key: SLEfficiencySegmentKey;
+  generation: {
+    totals: SLResourceSummary;
+    amortizedPerVerifiedSuccess: SLResourceAverage | null;
+  };
+  verifiedSuccessApplications: {
+    eligibleCount: number;
+    receiptCount: number;
+    coverage: number | null;
+    average: SLResourceAverage | null;
+    averageWithAmortizedGeneration: SLResourceMetricValues | null;
+  };
+  pairedBaseline: {
+    compatiblePairCount: number;
+    incompatiblePairCount: number;
+    pairSavings: SLResourcePairSavings[];
+    incompatibilities: SLResourcePairIncompatibility[];
+    medianSavings: SLResourceMetricValues | null;
+    breakEvenApplications: SLResourceBreakEven | null;
+  };
+}
+
+export interface SLResourceLineageCost {
+  generation: SLResourceSummary;
+  application: SLResourceSummary;
+  combined: SLResourceSummary;
+  segments: Array<{
+    key: SLEfficiencySegmentKey & {
+      phase: "generation" | "application";
+    };
+    totals: SLResourceSummary;
+  }>;
+}
+
+export interface SLPromotionLineageResourceReport {
+  artifactId: string;
+  directArtifactIds: string[];
+  sourceArtifactIds: string[];
+  direct: SLResourceLineageCost;
+  source: SLResourceLineageCost;
+  combined: SLResourceLineageCost;
+}
+
+export interface SLEfficiencyReport {
+  schemaVersion: 1;
+  advisory: true;
+  filters: {
+    artifactId?: string;
+    scopeId?: string;
+    provider?: string;
+    modelId?: string;
+    quality?: SLResourceQuality;
+  };
+  baselineReceiptCount: number;
+  unpairedBaselineCount: number;
+  segments: SLEfficiencySegment[];
+  promotionLineage: SLPromotionLineageResourceReport[];
+}
+
 export interface SLEvent {
   schemaVersion: 1;
   timestamp: string;

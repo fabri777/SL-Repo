@@ -35,6 +35,7 @@ command parity is intentionally deferred; see
 | Scope ownership and relationships | Hand-authored `SL-scope-catalog.yml`, `.yaml`, or `.json` | Exactly one catalog; no catalog means the compatibility root scope |
 | Lesson/guidance content | SL-managed Markdown plus validation contracts | Registry metadata cannot replace or silently rewrite content |
 | Usage and lifecycle evidence | Immutable event shards | Mutable counters and legacy JSONL are read-only migration inputs |
+| Resource evidence | Immutable provider-neutral resource receipt shards | Projections and advisory efficiency reports are derived; provider prices are never inferred |
 | Lifecycle ownership | Per-scope registry shards | Root `SL-registry.json` is retained as 0.2 compatibility input |
 | Retrieval discovery | Per-scope indexes | Rebuilt from active registry state; never a metrics authority |
 | Usage metrics | Per-scope projections rebuilt from events | Repository aggregation exposes counts only, not a blended success rate |
@@ -87,6 +88,13 @@ to call `use start` and `use finish`. SL records association and verification;
 it does not claim that the selected artifact caused an observed improvement.
 Rates remain segmented by application scope. Lifecycle freshness uses the
 latest current-version verified success across every consuming scope.
+
+Resource telemetry uses a second immutable receipt stream for tokens,
+durations, attempts, and optional host-reported monetary cost. Advisory
+efficiency calculations preserve scope, artifact version, provider, model, and
+measurement quality. Baseline savings require explicit compatible pair
+identity, and promotion lineage reports direct, source, and combined resource
+consumption without mutating source receipts.
 
 SL Repo defines future `org` and `company` scopes in documentation only. It
 does not copy local lessons to a central service.

@@ -1022,6 +1022,15 @@ export async function slValidateRepository(root: string): Promise<SLValidationIs
       });
       continue;
     }
+    if (!catalogScopeKeys.has(slScopeKey(receipt.scope))) {
+      issues.push({
+        severity: "error",
+        code: "resource-receipt-scope",
+        path: resourceFile,
+        message:
+          "Resource receipt scope is not registered in the generated state catalog.",
+      });
+    }
     if (slResourceReceiptPath(receipt) !== resourceFile) {
       issues.push({
         severity: "error",
