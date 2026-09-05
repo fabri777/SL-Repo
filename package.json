@@ -19,10 +19,14 @@
     "SECURITY.md"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "npm run build:ts && npm run build:runtime",
+    "build:ts": "tsc -p tsconfig.json",
+    "build:runtime": "node dist/SL-src/SL-runtime/SL-runtime-build.js",
     "prepare": "npm run build",
     "check": "tsc -p tsconfig.json --noEmit && tsc -p SL-tsconfig.test.json --noEmit",
     "test": "npm run build && vitest run --config SL-vitest.config.ts",
+    "test:runtime": "npm run build && vitest run --config SL-vitest.config.ts SL-tests/SL-unit/SL-runtime-contract.test.ts SL-tests/SL-integration/SL-runtime.test.ts",
+    "runtime:conformance": "npm run build && node dist/SL-src/SL-runtime/SL-runtime-conformance.js",
     "test:watch": "vitest",
     "validate:self": "npm run build && node dist/SL-src/SL-cli/SL-cli.js validate .",
     "ci": "npm run check && npm test"

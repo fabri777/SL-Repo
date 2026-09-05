@@ -1,0 +1,258 @@
+{
+  "schemaVersion": 1,
+  "conformanceVersion": 1,
+  "vectors": [
+    {
+      "id": "canonical-json-orders-object-keys",
+      "operation": "canonical-json",
+      "input": {
+        "z": 1,
+        "a": {
+          "y": true,
+          "x": [
+            "é",
+            null
+          ]
+        }
+      },
+      "expected": "{\"a\":{\"x\":[\"é\",null],\"y\":true},\"z\":1}"
+    },
+    {
+      "id": "sha256-utf8-text",
+      "operation": "sha256",
+      "input": "SL runtime\n",
+      "expected": "2d8208f859ef6f31845f6910db3cd0fe09ed65b74820e0e1e94bc145e13eb498"
+    },
+    {
+      "id": "normalize-windows-separators-and-dot-segments",
+      "operation": "normalize-path",
+      "input": "src\\.\\feature\\..\\core\\file.ps1",
+      "expected": "src/core/file.ps1"
+    },
+    {
+      "id": "normalize-repository-path",
+      "operation": "normalize-path",
+      "input": ".\\.github\\\\SL-learning\\",
+      "expected": ".github/SL-learning"
+    },
+    {
+      "id": "reject-parent-escape",
+      "operation": "normalize-path",
+      "input": "..\\secret",
+      "error": "path-escape"
+    },
+    {
+      "id": "reject-windows-absolute-path",
+      "operation": "normalize-path",
+      "input": "C:\\repo\\file.txt",
+      "error": "path-absolute"
+    },
+    {
+      "id": "yaml-simple-scalars",
+      "operation": "parse-yaml",
+      "input": "name: runtime\nenabled: true\ncount: 7\nnothing: null\n",
+      "expected": {
+        "name": "runtime",
+        "enabled": true,
+        "count": 7,
+        "nothing": null
+      }
+    },
+    {
+      "id": "yaml-block-and-inline-lists",
+      "operation": "parse-yaml",
+      "input": "trigger:\n  - one\n  - \"two words\"\nrelatedTo: [alpha, beta]\nempty: []\n",
+      "expected": {
+        "trigger": [
+          "one",
+          "two words"
+        ],
+        "relatedTo": [
+          "alpha",
+          "beta"
+        ],
+        "empty": []
+      }
+    },
+    {
+      "id": "yaml-inline-list-quoted-commas-and-single-quote",
+      "operation": "parse-yaml",
+      "input": "values: ['it''s', \"two,parts\"]\n",
+      "expected": {
+        "values": [
+          "it's",
+          "two,parts"
+        ]
+      }
+    },
+    {
+      "id": "yaml-nested-mapping",
+      "operation": "parse-yaml",
+      "input": "retention:\n  staleAfterDays: 90\nflags:\n  enabled: false\n",
+      "expected": {
+        "retention": {
+          "staleAfterDays": 90
+        },
+        "flags": {
+          "enabled": false
+        }
+      }
+    },
+    {
+      "id": "yaml-sequence-of-mappings",
+      "operation": "parse-yaml",
+      "input": "scopes:\n  - id: SL-SCOPE-ROOT\n    includePaths:\n      - \"**\"\n    excludePaths: []\n",
+      "expected": {
+        "scopes": [
+          {
+            "id": "SL-SCOPE-ROOT",
+            "includePaths": [
+              "**"
+            ],
+            "excludePaths": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "yaml-rejects-anchors",
+      "operation": "parse-yaml",
+      "input": "value: &shared item\n",
+      "error": "yaml-syntax"
+    },
+    {
+      "id": "frontmatter-normalizes-newlines",
+      "operation": "parse-frontmatter",
+      "input": "---\r\nid: SL-EXAMPLE\r\ntrigger: [one, two]\r\npinned: false\r\n---\r\n\r\n# Body\r\n",
+      "expected": {
+        "frontmatter": {
+          "id": "SL-EXAMPLE",
+          "trigger": [
+            "one",
+            "two"
+          ],
+          "pinned": false
+        },
+        "body": "\n# Body\n"
+      }
+    },
+    {
+      "id": "typed-validation-accepts-supported-contract",
+      "operation": "validate-value",
+      "input": {
+        "value": {
+          "id": "SL-EXAMPLE",
+          "hits": 2,
+          "trigger": [
+            "one"
+          ]
+        },
+        "contract": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "hits",
+            "trigger"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^SL-[A-Z-]+$"
+            },
+            "hits": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "trigger": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      },
+      "expected": true
+    },
+    {
+      "id": "typed-validation-rejects-additional-property",
+      "operation": "validate-value",
+      "input": {
+        "value": {
+          "id": "SL-EXAMPLE",
+          "unexpected": true
+        },
+        "contract": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id"
+          ],
+          "properties": {
+            "id": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "error": "validation-additional-property"
+    },
+    {
+      "id": "glob-star-does-not-cross-separator",
+      "operation": "glob-match",
+      "input": {
+        "pattern": "src/*.ts",
+        "path": "src/core/file.ts"
+      },
+      "expected": false
+    },
+    {
+      "id": "glob-globstar-matches-root-file",
+      "operation": "glob-match",
+      "input": {
+        "pattern": "**/*.ts",
+        "path": "file.ts"
+      },
+      "expected": true
+    },
+    {
+      "id": "glob-globstar-matches-descendant",
+      "operation": "glob-match",
+      "input": {
+        "pattern": "src/**",
+        "path": "src/core/file.ts"
+      },
+      "expected": true
+    },
+    {
+      "id": "glob-trailing-globstar-matches-directory",
+      "operation": "glob-match",
+      "input": {
+        "pattern": "src/**",
+        "path": "src"
+      },
+      "expected": true
+    },
+    {
+      "id": "glob-question-matches-one-character",
+      "operation": "glob-match",
+      "input": {
+        "pattern": "src/file?.ps1",
+        "path": "src/file1.ps1"
+      },
+      "expected": true
+    },
+    {
+      "id": "glob-rejects-braces",
+      "operation": "glob-match",
+      "input": {
+        "pattern": "src/*.{ts,tsx}",
+        "path": "src/file.ts"
+      },
+      "error": "glob-syntax"
+    }
+  ]
+}

@@ -1,0 +1,152 @@
+# Repository-local PowerShell runtime contract
+
+SL installs a self-contained PowerShell 7 runtime under
+`.github/SL-learning/SL-runtime/`. The runtime foundation never invokes Node,
+npm, npx, or a globally installed `sl-repo` command. Node remains an
+installer/build dependency until a later release provides a non-Node
+bootstrap path.
+
+This contract establishes the runtime, integrity, parser, validation, and
+dispatch foundations. It does **not** claim parity for capture, retrieval,
+projection, promotion, usage, or forgetting commands.
+
+## Managed layout
+
+| Path | Contract |
+|---|---|
+| `SL.ps1` | PowerShell 7 entry point and version gate |
+| `SL.sh` | Thin Bash launcher that only locates `pwsh` and invokes `SL.ps1` |
+| `SL.Runtime.psm1` | Root module and structured command dispatcher |
+| `SL.Runtime.Core.ps1` | Canonical JSON, SHA-256, path containment, and safe file I/O |
+| `SL.Runtime.Syntax.ps1` | YAML/frontmatter parser, typed validator, and glob matcher |
+| `SL.Runtime.Conformance.ps1` | PowerShell golden-vector runner |
+| `SL.Runtime.Doctor.ps1` | Manifest, hash, version, and launcher checks |
+| `SL-conformance-vectors.json` | Shared TypeScript/PowerShell golden vectors |
+| `SL-runtime-manifest.schema.json` | Reviewable manifest JSON Schema |
+| `SL-runtime.manifest.json` | Runtime identity and SHA-256 inventory |
+
+Only files listed in `SL-runtime.manifest.json`, plus the manifest itself, are
+SL-managed runtime files. Unknown files below `SL-runtime/` are preserved.
+
+## Command and exit contract
+
+```text
+SL.ps1 [--json] [--dry-run] [--repo-root <path>] <command>
+```
+
+Implemented foundation commands are `help`, `version`, `doctor`,
+`validate-runtime`, and `conformance`. Options may appear before or after the
+command. Commands resolve the repository root by walking upward for a `.git`
+file or directory unless `--repo-root` supplies the starting path.
+
+`--json` emits one canonical JSON value to standard output. Diagnostics go to
+standard error. `--dry-run` is accepted by every implemented command and
+cannot write. Foundation commands are read-only today.
+
+| Exit | Meaning |
+|---:|---|
+| `0` | Success |
+| `2` | Invalid option, command, or argument |
+| `3` | PowerShell missing or older than 7 |
+| `4` | Repository root not found |
+| `5` | Manifest missing or invalid |
+| `6` | Runtime file missing, hash drift, or launcher integrity failure |
+| `7` | Mixed runtime versions |
+| `8` | Validation or conformance failure |
+| `9` | Reserved for contained file I/O failure |
+| `10` | Unexpected runtime failure |
+
+## Canonical values and hashes
+
+Canonical JSON uses UTF-8, no insignificant whitespace, ordinal object-key
+ordering, JSON string escaping, array order preservation, and only
+`null`/boolean/string/safe-integer/array/object values. SHA-256 is lowercase
+hex over UTF-8 bytes. Runtime file hashes normalize CRLF and CR to LF first,
+so a Git checkout's line-ending policy does not create false drift.
+
+Repository paths normalize `\` to `/`, collapse separators and `.` segments,
+and resolve internal `..` segments. Absolute paths, drive-relative paths,
+NUL, and root escape are rejected. File operations resolve the nearest
+existing ancestor and fail closed if a symlink or junction leaves the
+repository. Writes use a same-directory temporary file followed by an atomic
+replace.
+
+## YAML and frontmatter subset
+
+The runtime parser deliberately implements a small SL subset, not general
+YAML:
+
+- one document whose root is a mapping;
+- two-space indentation with nested mappings and sequences;
+- mapping keys matching `[A-Za-z][A-Za-z0-9_-]*`;
+- plain, single-quoted, and limited JSON-style double-quoted strings;
+- lowercase `true`, `false`, and `null`;
+- base-10 safe integers;
+- block sequences, inline scalar lists, empty `[]`, and empty `{}`;
+- sequence entries that are scalars or mappings;
+- blank lines and whole-line `#` comments.
+
+It rejects tabs, duplicate keys, floats, timestamps, implicit
+`yes`/`no`/`on`/`off`, inline comments, anchors, aliases, merge keys, tags,
+directives, multiple documents, block scalars, flow mappings, and arbitrary
+YAML object construction. Markdown frontmatter must start with `---` on the
+first line and contain an exact closing `---`; the body is returned with LF
+newlines.
+
+## Typed validation subset
+
+The reusable typed-value contract supports:
+
+- `type`: `object`, `array`, `string`, `integer`, `boolean`, or `null`;
+- `required`, `properties`, and boolean `additionalProperties`;
+- `items` and `minItems`;
+- `minLength`, `pattern`, and integer `minimum`;
+- `enum` and `const`.
+
+Unknown validation keywords fail closed. Values and contracts are plain
+JSON-compatible data; this is not a complete JSON Schema implementation.
+`pattern` is limited to the JavaScript/.NET common regular-expression subset:
+lookarounds, named groups, inline options, Unicode categories, and
+backreferences are rejected.
+
+## Glob subset
+
+Globs are case-sensitive on every platform and match normalized
+repository-relative `/` paths. Dot-prefixed names are ordinary characters.
+
+- `*` matches zero or more characters except `/`.
+- `?` matches exactly one character except `/`.
+- `**/` matches zero or more complete path segments.
+- trailing `/**` matches the named directory and every descendant.
+- literals and `/` match themselves.
+
+Negation, comments, character classes, brace expansion, extglobs, grouping,
+triple-star forms, absolute paths, `.`/`..` segments, and trailing `/` are
+rejected.
+
+## Manifest and update rules
+
+The manifest records runtime version, source-release commit placeholder,
+manifest schema version, SL config contract version, conformance version,
+minimum PowerShell version, and the SHA-256 of every payload file. The
+manifest does not hash itself.
+
+`npm run build:runtime` deterministically copies the manifest schema into the
+runtime template, hashes LF-normalized template bytes, sorts paths ordinally,
+and stages the manifest with `__SL_SOURCE_RELEASE_COMMIT__`. Release packaging
+may replace that placeholder with the reviewed 40-character commit while
+recomputing no payload hashes.
+
+On update, SL first validates every file against the installed manifest. It
+rejects missing, modified, invalid, or mixed-version runtime state. Only then
+does it replace files declared by the previous manifest, add new managed
+paths that are unoccupied, remove obsolete previously managed paths, and
+write the new manifest last. Manual or unrelated files are preserved. A
+dry-run performs all preflight checks and reports changes without writing.
+
+## Conformance
+
+The shared vector file covers canonical JSON and hash output, Windows and
+POSIX path forms, YAML/frontmatter scalars and lists, typed validation, and
+glob behavior. TypeScript and PowerShell runners compare exact canonical
+output and exact fail-closed error codes.

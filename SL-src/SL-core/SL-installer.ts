@@ -1,10 +1,13 @@
 import fg from "fast-glob";
 import { createHash } from "node:crypto";
+import { chmod, readFile, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import {
   SL_MANAGED_BLOCK_END,
   SL_MANAGED_BLOCK_START,
   SL_PATHS,
+  SL_RUNTIME_BASH_LAUNCHER,
+  SL_RUNTIME_MANIFEST_FILE,
 } from "./SL-constants.js";
 import { slFindPackageRoot } from "./SL-package.js";
 import { slWithRepositoryMutationLock } from "./SL-mutation-lock.js";
@@ -25,6 +28,171 @@ import {
   slWriteText,
 } from "./SL-utils.js";
 import { slWriteIndex } from "../SL-index/SL-index.js";
+import type { SLRuntimeManifest } from "./SL-types.js";
+import {
+  slLoadRuntimeManifest,
+  slVerifyRuntimeDirectory,
+} from "../SL-runtime/SL-runtime-validation.js";
+
+function slRuntimeTargetPath(relativePath: string): string {
+  return `${SL_PATHS.runtimeRoot}/${relativePath}`;
+}
+
+async function slInstallRuntime(
+  root: string,
+  templateRuntimeRoot: string,
+  mode: "init" | "update",
+  dryRun: boolean,
+  changes: SLChange[],
+): Promise<{
+  managedPaths: Set<string>;
+  changedPaths: Set<string>;
+  removedPaths: Set<string>;
+}> {
+  const sourceManifest = await slLoadRuntimeManifest(
+    resolve(templateRuntimeRoot, SL_RUNTIME_MANIFEST_FILE),
+  );
+  const sourceIssues = await slVerifyRuntimeDirectory(
+    templateRuntimeRoot,
+    sourceManifest.runtimeVersion,
+  );
+  if (sourceIssues.length > 0) {
+    throw new Error(
+      `Bundled SL runtime is inconsistent: ${sourceIssues
+        .map((issue) => `${issue.code} ${issue.path ?? ""}`.trim())
+        .join(", ")}`,
+    );
+  }
+
+  const targetRuntimeRoot = slResolveInside(root, SL_PATHS.runtimeRoot);
+  const targetManifestPath = resolve(
+    targetRuntimeRoot,
+    SL_RUNTIME_MANIFEST_FILE,
+  );
+  let previousManifest: SLRuntimeManifest | undefined;
+  if (await slExists(targetManifestPath)) {
+    previousManifest = await slLoadRuntimeManifest(targetManifestPath);
+    const previousIssues = await slVerifyRuntimeDirectory(
+      targetRuntimeRoot,
+      previousManifest.runtimeVersion,
+    );
+    if (previousIssues.length > 0) {
+      throw new Error(
+        `Refusing to update a locally modified or mixed-version SL runtime: ${previousIssues
+          .map((issue) => `${issue.code} ${issue.path ?? ""}`.trim())
+          .join(", ")}`,
+      );
+    }
+  }
+  if (previousManifest && mode === "init") {
+    return {
+      managedPaths: new Set([
+        ...previousManifest.files.map((file) =>
+          slRuntimeTargetPath(file.path),
+        ),
+        slRuntimeTargetPath(SL_RUNTIME_MANIFEST_FILE),
+      ]),
+      changedPaths: new Set(),
+      removedPaths: new Set(),
+    };
+  }
+
+  const previousPaths = new Set(
+    previousManifest?.files.map((file) => file.path) ?? [],
+  );
+  if (!previousManifest) {
+    for (const file of sourceManifest.files) {
+      if (await slExists(resolve(targetRuntimeRoot, file.path))) {
+        throw new Error(
+          `Refusing to claim runtime file without a previous manifest: ${slRuntimeTargetPath(file.path)}`,
+        );
+      }
+    }
+  } else {
+    for (const file of sourceManifest.files) {
+      if (
+        !previousPaths.has(file.path) &&
+        (await slExists(resolve(targetRuntimeRoot, file.path)))
+      ) {
+        throw new Error(
+          `Refusing to overwrite an unrelated file introduced at a runtime-managed path: ${slRuntimeTargetPath(file.path)}`,
+        );
+      }
+    }
+  }
+
+  const managedPaths = new Set<string>();
+  const changedPaths = new Set<string>();
+  const removedPaths = new Set<string>();
+  for (const file of sourceManifest.files) {
+    const targetPath = slRuntimeTargetPath(file.path);
+    const changeCount = changes.length;
+    await slWriteText(
+      root,
+      targetPath,
+      await slReadText(resolve(templateRuntimeRoot, file.path)),
+      dryRun,
+      changes,
+    );
+    managedPaths.add(targetPath);
+    if (
+      changes
+        .slice(changeCount)
+        .some((change) => change.action === "create" || change.action === "update")
+    ) {
+      changedPaths.add(targetPath);
+    }
+    if (
+      !dryRun &&
+      file.path === SL_RUNTIME_BASH_LAUNCHER &&
+      process.platform !== "win32"
+    ) {
+      await chmod(slResolveInside(root, targetPath), 0o755);
+    }
+  }
+
+  if (previousManifest && mode === "update") {
+    const sourcePaths = new Set(sourceManifest.files.map((file) => file.path));
+    for (const previousFile of previousManifest.files) {
+      if (sourcePaths.has(previousFile.path)) {
+        continue;
+      }
+      const targetPath = slRuntimeTargetPath(previousFile.path);
+      changes.push({
+        action: "delete",
+        path: targetPath,
+        detail: dryRun ? "obsolete managed runtime file planned" : "obsolete managed runtime file removed",
+      });
+      if (!dryRun) {
+        await rm(slResolveInside(root, targetPath));
+      }
+      changedPaths.add(targetPath);
+      removedPaths.add(targetPath);
+    }
+  }
+
+  const manifestTargetPath = slRuntimeTargetPath(SL_RUNTIME_MANIFEST_FILE);
+  const manifestChangeCount = changes.length;
+  await slWriteText(
+    root,
+    manifestTargetPath,
+    await readFile(
+      resolve(templateRuntimeRoot, SL_RUNTIME_MANIFEST_FILE),
+      "utf8",
+    ),
+    dryRun,
+    changes,
+  );
+  managedPaths.add(manifestTargetPath);
+  if (
+    changes
+      .slice(manifestChangeCount)
+      .some((change) => change.action === "create" || change.action === "update")
+  ) {
+    changedPaths.add(manifestTargetPath);
+  }
+  return { managedPaths, changedPaths, removedPaths };
+}
 
 function slSystemId(path: string): string {
   const slug = slSlugify(path).slice(0, 30).toUpperCase();
@@ -85,10 +253,30 @@ async function slInstallUnlocked(
   }
   const managedTemplatePaths = new Set<string>();
   const changedTemplatePaths = new Set<string>();
+  const runtimeTemplateRoot = resolve(
+    templateRoot,
+    ".github/SL-learning/SL-runtime",
+  );
+  const runtime = await slInstallRuntime(
+    root,
+    runtimeTemplateRoot,
+    mode,
+    dryRun,
+    changes,
+  );
+  for (const path of runtime.managedPaths) {
+    managedTemplatePaths.add(path);
+  }
+  for (const path of runtime.changedPaths) {
+    changedTemplatePaths.add(path);
+  }
 
   for (const templatePathValue of templateFiles.sort(slCompareOrdinal)) {
     const templatePath = slNormalizePath(templatePathValue);
-    if (templatePath === "SL-copilot-block.md") {
+    if (
+      templatePath === "SL-copilot-block.md" ||
+      templatePath.startsWith(`${SL_PATHS.runtimeRoot}/`)
+    ) {
       continue;
     }
 
@@ -184,6 +372,15 @@ async function slInstallUnlocked(
   }
 
   const registry = await slLoadRegistry(root);
+  if (runtime.removedPaths.size > 0) {
+    registry.artifacts = registry.artifacts.filter(
+      (artifact) =>
+        artifact.path === null ||
+        !runtime.removedPaths.has(artifact.path) ||
+        artifact.classification !== "system" ||
+        artifact.managedBy !== "SL-Repo",
+    );
+  }
   const timestamp = new Date().toISOString();
   const managedSystemPaths = [
     ...templateFiles.map(slNormalizePath),

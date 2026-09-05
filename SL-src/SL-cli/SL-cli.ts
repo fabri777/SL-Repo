@@ -42,6 +42,7 @@ import {
 } from "../SL-forgetting/SL-forgetting.js";
 import { slEvaluate } from "../SL-validation/SL-validation-contract.js";
 import { slValidateRepository } from "../SL-validation/SL-validation.js";
+import { slValidateInstalledRuntime } from "../SL-runtime/SL-runtime-validation.js";
 
 interface SLDryRunOptions {
   dryRun?: boolean;
@@ -186,7 +187,20 @@ program
     slRun(async () => {
       const root = slRoot(pathValue);
       const registry = await slLoadRegistry(root);
-      const issues = await slValidateRepository(root);
+      const issues = [
+        ...(await slValidateRepository(root)),
+        ...(await slValidateInstalledRuntime(root, {
+          checkPowerShell: true,
+        })),
+      ].filter(
+        (issue, index, all) =>
+          all.findIndex(
+            (candidate) =>
+              candidate.code === issue.code &&
+              candidate.path === issue.path &&
+              candidate.message === issue.message,
+          ) === index,
+      );
       const counts = registry.artifacts.reduce<Record<string, number>>(
         (result, artifact) => {
           result[artifact.status] = (result[artifact.status] ?? 0) + 1;

@@ -3,8 +3,37 @@ import type { SLConfig } from "./SL-types.js";
 export const SL_MANAGED_BLOCK_START = "<!-- SL-REPO:START -->";
 export const SL_MANAGED_BLOCK_END = "<!-- SL-REPO:END -->";
 
+export const SL_RUNTIME_VERSION = "0.1.0";
+export const SL_RUNTIME_SCHEMA_VERSION = 1;
+export const SL_RUNTIME_CONFIG_CONTRACT_VERSION = 1;
+export const SL_RUNTIME_CONFORMANCE_VERSION = 1;
+export const SL_RUNTIME_SOURCE_RELEASE_COMMIT = "__SL_SOURCE_RELEASE_COMMIT__";
+export const SL_RUNTIME_MINIMUM_POWERSHELL_VERSION = "7.0.0";
+export const SL_RUNTIME_MANIFEST_FILE = "SL-runtime.manifest.json";
+export const SL_RUNTIME_MANIFEST_SCHEMA_FILE =
+  "SL-runtime-manifest.schema.json";
+export const SL_RUNTIME_BASH_LAUNCHER = "SL.sh";
+export const SL_RUNTIME_PAYLOAD_FILES = [
+  "SL-conformance-vectors.json",
+  "SL-runtime-manifest.schema.json",
+  "SL.Runtime.Conformance.ps1",
+  "SL.Runtime.Core.ps1",
+  "SL.Runtime.Doctor.ps1",
+  "SL.Runtime.Syntax.ps1",
+  "SL.Runtime.psm1",
+  "SL.ps1",
+  "SL.sh",
+] as const;
+
 export const SL_PATHS = {
   learningRoot: ".github/SL-learning",
+  runtimeRoot: ".github/SL-learning/SL-runtime",
+  runtimeManifest:
+    ".github/SL-learning/SL-runtime/SL-runtime.manifest.json",
+  runtimePowerShellLauncher: ".github/SL-learning/SL-runtime/SL.ps1",
+  runtimeBashLauncher: ".github/SL-learning/SL-runtime/SL.sh",
+  runtimeConformanceVectors:
+    ".github/SL-learning/SL-runtime/SL-conformance-vectors.json",
   config: ".github/SL-learning/SL-config.yml",
   scopeCatalog: ".github/SL-learning/SL-scope-catalog.yml",
   scopeCatalogCandidates: [

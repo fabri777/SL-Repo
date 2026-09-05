@@ -124,6 +124,12 @@ package; installed copies support review, editors, and repository-local
 auditing. `update` replaces only files already registered as SL-managed
 system artifacts and the delimited agent instruction blocks.
 
+It also installs the self-contained PowerShell 7 runtime foundation under
+`.github/SL-learning/SL-runtime/`. Its `doctor`, `validate-runtime`, and
+`conformance` commands need no Node/npm/global SL CLI after initialization.
+Lifecycle command parity is intentionally deferred. See
+[the runtime contract](SL-docs/SL-runtime.md).
+
 Both optional automation adapters use the reviewed immutable SL Repo commit.
 They never intentionally execute mutable `main` as the runtime. See
 `SL-docs/SL-install.md` for the pin-update procedure,

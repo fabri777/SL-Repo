@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/fabri777/SL-Repo/SL-runtime-manifest.schema.json",
+  "title": "SL repository-local PowerShell runtime manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "runtimeVersion",
+    "sourceReleaseCommit",
+    "configContractVersion",
+    "conformanceVersion",
+    "minimumPowerShellVersion",
+    "files"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "runtimeVersion": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "sourceReleaseCommit": {
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{40}|__SL_SOURCE_RELEASE_COMMIT__)$"
+    },
+    "configContractVersion": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "conformanceVersion": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "minimumPowerShellVersion": {
+      "const": "7.0.0"
+    },
+    "files": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "sha256"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\)[A-Za-z0-9._/-]+$"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        }
+      }
+    }
+  }
+}

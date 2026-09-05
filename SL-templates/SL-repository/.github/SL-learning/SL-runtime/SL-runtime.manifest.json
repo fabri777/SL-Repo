@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "runtimeVersion": "0.1.0",
+  "sourceReleaseCommit": "__SL_SOURCE_RELEASE_COMMIT__",
+  "configContractVersion": 1,
+  "conformanceVersion": 1,
+  "minimumPowerShellVersion": "7.0.0",
+  "files": [
+    {
+      "path": "SL-conformance-vectors.json",
+      "sha256": "c065f641e9020973dafc183be2441c58fa9ae74e93a9c4ca85f29fa6e91b7710"
+    },
+    {
+      "path": "SL-runtime-manifest.schema.json",
+      "sha256": "548dc3be566f1ec8aedb8483c3eb27b93e52f1c7d25ea85fe07d3fa5d7a71bbc"
+    },
+    {
+      "path": "SL.Runtime.Conformance.ps1",
+      "sha256": "cdb66c38d7447e7765234b72ebb9601db9558a8008e5ab3843d782c9fd88d274"
+    },
+    {
+      "path": "SL.Runtime.Core.ps1",
+      "sha256": "69d9f9a1d2f14a74e81dd709a767a5229e63064e8f2d6499fb1c31ae85bb0bde"
+    },
+    {
+      "path": "SL.Runtime.Doctor.ps1",
+      "sha256": "039b099ca029e82a3766e9f71b22d52f8453e85b75aca944a0f035f01a45a7bf"
+    },
+    {
+      "path": "SL.Runtime.Syntax.ps1",
+      "sha256": "90820f58b3f167b5e5d3e25bd14b37af8dfe7db9cbfd83193105861d64be93ae"
+    },
+    {
+      "path": "SL.Runtime.psm1",
+      "sha256": "d1ae06a572f79a80fb4ad0d89b53e7fde3b4100d190496c05935921823876a15"
+    },
+    {
+      "path": "SL.ps1",
+      "sha256": "57d645bd0cf1c6171fb0c9d38c48dbdd496ee8eb46654bfe35173f025c1fe125"
+    },
+    {
+      "path": "SL.sh",
+      "sha256": "d8fce354b7aa7960528a6782c1d05e9b6a876cb7720fe316f5566201f5fd6802"
+    }
+  ]
+}

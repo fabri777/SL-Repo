@@ -60,6 +60,44 @@ export interface SLConfig {
   promotion: SLPromotionPolicy;
 }
 
+export interface SLRuntimeManifestFile {
+  path: string;
+  sha256: string;
+}
+
+export interface SLRuntimeManifest {
+  schemaVersion: 1;
+  runtimeVersion: string;
+  sourceReleaseCommit: string;
+  configContractVersion: number;
+  conformanceVersion: number;
+  minimumPowerShellVersion: "7.0.0";
+  files: SLRuntimeManifestFile[];
+}
+
+export type SLRuntimeConformanceOperation =
+  | "canonical-json"
+  | "sha256"
+  | "normalize-path"
+  | "parse-yaml"
+  | "parse-frontmatter"
+  | "validate-value"
+  | "glob-match";
+
+export interface SLRuntimeConformanceVector {
+  id: string;
+  operation: SLRuntimeConformanceOperation;
+  input: unknown;
+  expected?: unknown;
+  error?: string;
+}
+
+export interface SLRuntimeConformanceVectors {
+  schemaVersion: 1;
+  conformanceVersion: 1;
+  vectors: SLRuntimeConformanceVector[];
+}
+
 export type SLScopeKind =
   | "repository"
   | "shared"

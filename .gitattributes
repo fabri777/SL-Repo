@@ -1,3 +1,4 @@
 /.github/SL-learning/SL-lifecycle-events/**/*.json text eol=lf
 /.github/SL-learning/SL-usage-events/**/*.json text eol=lf
 /.github/SL-learning/SL-scopes/*/SL-usage-events/**/*.json text eol=lf
+/SL-templates/SL-repository/.github/SL-learning/SL-runtime/** text eol=lf

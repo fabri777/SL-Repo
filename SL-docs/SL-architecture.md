@@ -5,12 +5,13 @@ SL Repo separates reasoning from deterministic enforcement.
 | Layer | Responsibility |
 |---|---|
 | Copilot skills | Decide whether a verified experience is worth capturing and how to express it |
-| CLI | Install, validate, index, register, quarantine, restore, and delete deterministically |
+| Installer CLI | Bootstrap and update the repository-local runtime and managed templates |
+| Repository-local PowerShell runtime | Dispatch post-install operations without Node/npm/global CLI dependencies |
 | Repository files | Preserve evidence and promoted knowledge in Git |
 | `AGENTS.md` | Provider-neutral entry point that directs agents to repository knowledge |
 | Optional automation adapters | Re-run deterministic checks and scheduled retention |
 
-The first four layers are the operational core. GitHub Actions and Azure
+The first five layers are the operational core. GitHub Actions and Azure
 Pipelines are optional adapters over the same CLI and repository state. SL
 does not call GitHub or Azure DevOps APIs for capture, retrieval, projection,
 validation, promotion, or forgetting, so Azure Repos and other Git hosts use
@@ -19,6 +20,13 @@ the same state layout.
 The installer also maintains a delimited
 `.github/copilot-instructions.md` compatibility block. It improves GitHub
 Copilot discovery but is not required by the SL data model or CLI.
+
+The managed runtime lives at `.github/SL-learning/SL-runtime/`. Its manifest
+defines the complete managed boundary and hashes every payload file. The
+current milestone implements command dispatch, health/integrity validation,
+safe primitives, supported syntax, and cross-language conformance. Lifecycle
+command parity is intentionally deferred; see
+[Repository-local PowerShell runtime contract](SL-runtime.md).
 
 ## Source-of-truth boundaries
 
@@ -32,6 +40,7 @@ Copilot discovery but is not required by the SL data model or CLI.
 | Usage metrics | Per-scope projections rebuilt from events | Repository aggregation exposes counts only, not a blended success rate |
 | Shard routing | Generated `SL-state-catalog.json` | Contains descriptors and deterministic paths, not artifacts or metrics |
 | Enforcement schemas | Schemas bundled with the reviewed runtime | Installed schema copies are review/editor aids and SL-managed templates |
+| Runtime identity and ownership | Installed `SL-runtime.manifest.json` | Hashes are generated deterministically from LF-normalized template bytes |
 
 Per-scope registry shards are the authority for ownership and governed
 lifecycle state. The root state catalog contains only scope descriptors and

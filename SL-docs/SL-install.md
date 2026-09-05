@@ -4,11 +4,13 @@
 
 - Git
 - Node.js 20 or newer
+- PowerShell 7 or newer for the installed repository-local runtime
 - A Git repository to receive the SL layer
 
-No CI provider is required. The Node CLI, repository-native state, Git
-distribution, and `AGENTS.md` entry point are sufficient for local or
-agent-driven operation.
+No CI provider is required. Node is currently required to build, initialize,
+or update SL. After initialization, the implemented runtime foundation
+commands run through repository-local PowerShell without Node, npm, npx, or a
+global SL CLI. Lifecycle parity commands are not part of this contract yet.
 
 SL Repo 0.3.0 supports both single repositories and hierarchical monorepos.
 Existing 0.2 root state is migrated additively into deterministic scope shards.
@@ -25,6 +27,24 @@ sl-repo init C:\path\to\target
 sl-repo validate C:\path\to\target
 ```
 
+Initialization installs the runtime at
+`.github/SL-learning/SL-runtime/`. Run its implemented foundation commands
+directly:
+
+```powershell
+pwsh -NoLogo -NoProfile -File `
+  C:\path\to\target\.github\SL-learning\SL-runtime\SL.ps1 doctor --json
+```
+
+From Bash:
+
+```bash
+./.github/SL-learning/SL-runtime/SL.sh conformance --json
+```
+
+The Bash file is a thin `pwsh` launcher and contains no Node or package-manager
+fallback.
+
 ## Update
 
 ```powershell
@@ -38,6 +58,13 @@ instruction blocks in `AGENTS.md` and
 under `.github/SL-learning/SL-schemas/`. Produced lessons, instructions,
 skills, manual catalogs, unknown files, and unregistered same-path files are
 retained.
+
+Runtime updates use a stricter manifest guard. Before changing any runtime
+file, update verifies the installed manifest, version, and every declared
+SHA-256. Local runtime modifications, missing files, mixed-version files, or
+an occupied newly managed path reject the whole update. Obsolete files are
+removed only when the previous manifest proves SL ownership. Unrelated files
+below `SL-runtime/` are preserved, and `--dry-run` performs no writes.
 
 ## Uninstall
 
@@ -144,6 +171,13 @@ Packed artifact contents include `dist/`, `SL-schemas/`, `SL-templates/`,
 `SECURITY.md`. This keeps the runtime, validation schemas, reusable
 fixtures/tests, secured consumer templates, plugin skills, release history,
 and linked documentation together.
+
+`npm run build:runtime` stages the deterministic template manifest. It uses
+the source release placeholder `__SL_SOURCE_RELEASE_COMMIT__`, copies the
+manifest schema into the template, and records LF-normalized hashes for every
+runtime payload. See
+[Repository-local PowerShell runtime contract](SL-runtime.md) for the exact
+layout, supported YAML/frontmatter/validation/glob subsets, and exit codes.
 
 After installation or update, run:
 

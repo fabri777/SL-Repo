@@ -69,6 +69,7 @@ import {
   slEvaluateScopedGuidanceConflicts,
   type SLScopedGuidance,
 } from "../SL-core/SL-promotion-governance.js";
+import { slValidateInstalledRuntime } from "../SL-runtime/SL-runtime-validation.js";
 import {
   slEvaluateValidationContract,
   slFindValidationContractConflicts,
@@ -155,6 +156,13 @@ export async function slValidateRepository(root: string): Promise<SLValidationIs
   const validateUsageProjection =
     ajv.compile<SLScopeUsageProjection>(usageProjectionSchema);
   const issues: SLValidationIssue[] = [];
+  if (await slExists(slResolveInside(root, SL_PATHS.runtimeRoot))) {
+    issues.push(
+      ...(await slValidateInstalledRuntime(root, {
+        checkPowerShell: false,
+      })),
+    );
+  }
 
   const config = await slLoadConfig(root);
   if (!validateConfig(config)) {
