@@ -137,7 +137,7 @@ class SLInstallTransaction {
     }
   }
 
-  async rollback(): Promise<void> {
+  async rollback(cleanupDirectories = true): Promise<void> {
     const rollbackErrors: unknown[] = [];
     for (const [relativePath, snapshot] of [
       ...this.snapshots.entries(),
@@ -157,25 +157,23 @@ class SLInstallTransaction {
         rollbackErrors.push(error);
       }
     }
-    for (const directory of [...this.absentDirectories].sort(
-      (left, right) => right.length - left.length,
-    )) {
-      try {
-        await rmdir(directory);
-      } catch (error) {
-        if (
-          !["ENOENT", "ENOTEMPTY", "EEXIST"].includes(
-            (error as NodeJS.ErrnoException).code ?? "",
-          )
-        ) {
-          rollbackErrors.push(error);
-        }
-      }
+    if (cleanupDirectories) {
+      rollbackErrors.push(...(await this.cleanupAbsentDirectories()));
     }
     if (rollbackErrors.length > 0) {
       throw new AggregateError(
         rollbackErrors,
         "SL installation rollback could not restore every affected path.",
+      );
+    }
+  }
+
+  async cleanupAfterRollback(): Promise<void> {
+    const rollbackErrors = await this.cleanupAbsentDirectories();
+    if (rollbackErrors.length > 0) {
+      throw new AggregateError(
+        rollbackErrors,
+        "SL installation rollback could not remove empty created directories.",
       );
     }
   }
@@ -213,6 +211,26 @@ class SLInstallTransaction {
       this.absentDirectories.add(directory);
       directory = dirname(directory);
     }
+  }
+
+  private async cleanupAbsentDirectories(): Promise<unknown[]> {
+    const rollbackErrors: unknown[] = [];
+    for (const directory of [...this.absentDirectories].sort(
+      (left, right) => right.length - left.length,
+    )) {
+      try {
+        await rmdir(directory);
+      } catch (error) {
+        if (
+          !["ENOENT", "ENOTEMPTY", "EEXIST"].includes(
+            (error as NodeJS.ErrnoException).code ?? "",
+          )
+        ) {
+          rollbackErrors.push(error);
+        }
+      }
+    }
+    return rollbackErrors;
   }
 
   private async restoreFile(
@@ -440,28 +458,34 @@ export async function slInstall(
     ...fileOperations,
   });
   await transaction.prepare();
-  let operationStarted = false;
+  let cleanupAfterRollback = false;
   try {
     return await slWithRepositoryMutationLock(
       root,
-      () => {
-        operationStarted = true;
-        return slInstallUnlocked(root, mode, dryRun, transaction);
+      async () => {
+        try {
+          return await slInstallUnlocked(root, mode, dryRun, transaction);
+        } catch (error) {
+          if (!dryRun) {
+            try {
+              await transaction.rollback(false);
+              cleanupAfterRollback = true;
+            } catch (rollbackError) {
+              throw new AggregateError(
+                [error, rollbackError],
+                "SL installation failed and rollback was incomplete.",
+              );
+            }
+          }
+          throw error;
+        }
       },
       { dryRun },
     );
-  } catch (error) {
-    if (operationStarted && !dryRun) {
-      try {
-        await transaction.rollback();
-      } catch (rollbackError) {
-        throw new AggregateError(
-          [error, rollbackError],
-          "SL installation failed and rollback was incomplete.",
-        );
-      }
+  } finally {
+    if (cleanupAfterRollback) {
+      await transaction.cleanupAfterRollback();
     }
-    throw error;
   }
 }
 

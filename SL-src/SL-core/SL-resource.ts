@@ -15,6 +15,7 @@ import {
 } from "./SL-state.js";
 import type {
   SLChange,
+  SLResourceComparison,
   SLResourceProjection,
   SLResourceReceipt,
   SLResourceTokenUsage,
@@ -199,6 +200,37 @@ function slAssertNumberField(
   }
 }
 
+function slAssertCreateResourceReceiptPhase(
+  input: SLCreateResourceReceiptInput,
+  name = "resource input",
+): void {
+  const rejectPresent = (field: keyof SLCreateResourceReceiptInput): void => {
+    if (input[field] !== undefined) {
+      throw new Error(`${name}.${field} is not allowed for ${input.phase}.`);
+    }
+  };
+  if (input.phase === "generation") {
+    rejectPresent("taskRunId");
+    rejectPresent("applicationId");
+    rejectPresent("comparison");
+    return;
+  }
+  if (input.phase === "application") {
+    rejectPresent("generationRunId");
+    if (input.comparison && input.comparison.role !== "treatment") {
+      throw new Error(`${name}.comparison.role must be treatment.`);
+    }
+    return;
+  }
+  rejectPresent("artifactId");
+  rejectPresent("artifactContentHash");
+  rejectPresent("generationRunId");
+  rejectPresent("applicationId");
+  if (input.comparison && input.comparison.role !== "baseline") {
+    throw new Error(`${name}.comparison.role must be baseline.`);
+  }
+}
+
 function slParseResourceReceiptInput(
   value: unknown,
   index: number,
@@ -336,21 +368,8 @@ function slParseResourceReceiptInput(
       value.comparison.role,
     );
   }
-  if (
-    value.phase === "application" &&
-    value.comparison !== undefined &&
-    value.comparison.role !== "treatment"
-  ) {
-    throw new Error(`${name}.comparison.role must be treatment.`);
-  }
-  if (
-    value.phase === "baseline" &&
-    value.comparison !== undefined &&
-    value.comparison.role !== "baseline"
-  ) {
-    throw new Error(`${name}.comparison.role must be baseline.`);
-  }
   const input = value as unknown as SLCreateResourceReceiptInput;
+  slAssertCreateResourceReceiptPhase(input, name);
   slCreateResourceReceipt(input);
   return input;
 }
@@ -387,6 +406,7 @@ export function slParseResourceReceiptInputs(
 export function slCreateResourceReceipt(
   input: SLCreateResourceReceiptInput,
 ): SLResourceReceipt {
+  slAssertCreateResourceReceiptPhase(input);
   const rawIdempotencyKey = input.idempotencyKey.trim();
   if (!rawIdempotencyKey) {
     throw new Error("idempotencyKey is required.");
@@ -456,9 +476,8 @@ export function slCreateResourceReceipt(
       applicationId: input.applicationId,
       ...(input.comparison
         ? {
-            comparison: {
-              ...input.comparison,
-              role: "treatment" as const,
+            comparison: input.comparison as SLResourceComparison & {
+              role: "treatment";
             },
           }
         : {}),
@@ -473,9 +492,8 @@ export function slCreateResourceReceipt(
       ...common,
       phase: "baseline",
       taskRunId: input.taskRunId,
-      comparison: {
-        ...input.comparison,
-        role: "baseline",
+      comparison: input.comparison as SLResourceComparison & {
+        role: "baseline";
       },
     };
   }

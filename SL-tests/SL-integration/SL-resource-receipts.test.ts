@@ -382,6 +382,31 @@ describe("SL immutable resource receipts", () => {
         },
       }),
     ).toThrow("reportedCost.amount");
+    expect(() =>
+      slParseResourceReceiptInputs({
+        ...base,
+        taskRunId: "forbidden-generation-task",
+      }),
+    ).toThrow("taskRunId is not allowed for generation");
+    expect(() =>
+      slCreateResourceReceipt({
+        idempotencyKey: "invalid-baseline-role",
+        phase: "baseline",
+        source: "host",
+        quality: "measured",
+        provider: "openai",
+        modelId: "gpt-5.6-sol",
+        tokens: { input: 1, output: 1 },
+        wallClockDurationMs: 10,
+        timestamp: NOW.toISOString(),
+        taskRunId: "baseline-task",
+        comparison: {
+          comparisonId: "comparison",
+          scenarioKey: "scenario",
+          role: "treatment",
+        },
+      }),
+    ).toThrow("comparison.role must be baseline");
   });
 
   test("keeps dry-run side effect free", async () => {

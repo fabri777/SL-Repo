@@ -33,6 +33,7 @@ jobs:
             displayName: Apply sweep in pipeline workspace
           - pwsh: |
               git -C "$(Build.SourcesDirectory)" add -A
+              if ($LASTEXITCODE -ne 0) { throw "SL retention staging failed." }
               $patchPath = Join-Path "$(Agent.TempDirectory)" "SL-retention.patch"
               git -C "$(Build.SourcesDirectory)" diff --cached --binary --full-index | Set-Content -LiteralPath $patchPath
               if ($LASTEXITCODE -ne 0) { throw "SL retention patch creation failed." }
