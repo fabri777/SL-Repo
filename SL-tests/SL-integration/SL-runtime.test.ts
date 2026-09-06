@@ -4,6 +4,7 @@ import {
   access,
   mkdir,
   readFile,
+  realpath,
   rm,
   writeFile,
 } from "node:fs/promises";
@@ -59,6 +60,7 @@ describe("repository-local PowerShell runtime", () => {
   test("installs a self-contained runtime and runs exact conformance", async () => {
     const root = await slCreateTestRepository();
     repositories.push(root);
+    const canonicalRoot = await realpath(root);
 
     await slInstall(root, "init", false);
     const runtimeRoot = join(root, ".github", "SL-learning", "SL-runtime");
@@ -100,7 +102,7 @@ describe("repository-local PowerShell runtime", () => {
     expect(conformance.status, conformance.stderr).toBe(0);
     expect(JSON.parse(conformance.stdout)).toMatchObject({
       command: "conformance",
-      repositoryRoot: root,
+      repositoryRoot: canonicalRoot,
       result: { conformanceVersion: 1, passed: 33, failed: 0 },
     });
 
@@ -112,7 +114,7 @@ describe("repository-local PowerShell runtime", () => {
     expect(doctor.status, doctor.stderr).toBe(0);
     expect(JSON.parse(doctor.stdout)).toMatchObject({
       command: "doctor",
-      repositoryRoot: root,
+      repositoryRoot: canonicalRoot,
       dryRun: true,
       healthy: true,
     });
@@ -121,6 +123,7 @@ describe("repository-local PowerShell runtime", () => {
   test("smokes an empty repository through the committed PowerShell runtime", async () => {
     const root = await slCreateTestRepository();
     repositories.push(root);
+    const canonicalRoot = await realpath(root);
     await slInstall(root, "init", false);
     const scriptPath = join(
       root,
@@ -188,7 +191,7 @@ describe("repository-local PowerShell runtime", () => {
       doctorStatus: 0,
       doctorError: "",
       doctorCommand: "doctor",
-      doctorRepositoryRoot: root,
+      doctorRepositoryRoot: canonicalRoot,
       doctorHealthy: true,
       doctorIssueCount: 0,
       doctorIssues: [],
