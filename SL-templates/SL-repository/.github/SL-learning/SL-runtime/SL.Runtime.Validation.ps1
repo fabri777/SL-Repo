@@ -199,7 +199,26 @@ function Test-SLRepository {
                         $Issues.Add((New-SLValidationIssue error 'sensitive-content' 'Potential secret, credential, or absolute user-profile path detected.' $Normalized))
                     }
                     if ($Normalized.EndsWith('.md') -and $Artifact.classification -cne 'system') {
-                        try { [void] (Read-SLOwnedMarkdown -Root $Root -Artifact $Artifact) } catch {
+                        try {
+                            $OwnedMarkdown = Read-SLOwnedMarkdown -Root $Root -Artifact $Artifact
+                            if ($Artifact.classification -ceq 'promoted' -and $Artifact.artifactType -ceq 'skill') {
+                                $SkillPath = if (Test-SLProperty $Artifact 'promotionTargetPath') {
+                                    [string] $Artifact.promotionTargetPath
+                                } else {
+                                    $Normalized
+                                }
+                                $FolderName = $SkillPath.Split('/')[-2]
+                                $ExpectedName = Get-SLSkillNameForArtifactId ([string] $Artifact.id)
+                                if (
+                                    -not (Test-SLSkillName $FolderName) -or
+                                    $FolderName -cne $ExpectedName -or
+                                    $SkillPath -cne ".github/skills/$FolderName/SKILL.md" -or
+                                    (Get-SLProperty $OwnedMarkdown.frontmatter 'name') -cne $FolderName
+                                ) {
+                                    $Issues.Add((New-SLValidationIssue error 'skill-name' "Promoted skill path and frontmatter name must both use the deterministic lowercase kebab-case name $ExpectedName." $Normalized))
+                                }
+                            }
+                        } catch {
                             $Issues.Add((New-SLValidationIssue error 'artifact-ownership-mismatch' $_.Exception.Message $Normalized))
                         }
                     }

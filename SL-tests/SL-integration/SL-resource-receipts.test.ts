@@ -932,7 +932,7 @@ describe("SL immutable resource receipts", () => {
     });
 
     const promotedId = "SL-EFFICIENCY-LINEAGE";
-    const artifactPath = `.github/skills/${promotedId}/SKILL.md`;
+    const artifactPath = `.github/skills/${promotedId.toLowerCase()}/SKILL.md`;
     const contractPath = slTestContractPath(promotedId);
     await slWriteTestPromotedArtifact({
       root,

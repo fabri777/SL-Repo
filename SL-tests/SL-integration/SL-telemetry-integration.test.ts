@@ -589,7 +589,7 @@ describe("SL telemetry integration", () => {
     ).toEqual(beforeFinishEvents);
 
     const artifactId = "SL-DRY-RUN-PROMOTION";
-    const artifactPath = `.github/skills/${artifactId}/SKILL.md`;
+    const artifactPath = `.github/skills/${artifactId.toLowerCase()}/SKILL.md`;
     const contractPath = slTestContractPath(artifactId);
     const scriptPath = "SL-contract-checks/SL-dry-run-marker.mjs";
     const markerPath = join(root, "SL-dry-run-marker.txt");

@@ -85,6 +85,11 @@ import {
   slPromotedContractTarget,
   type SLActiveValidationContract,
 } from "./SL-validation-contract.js";
+import {
+  slIsValidSkillName,
+  slSkillFolderName,
+  slSkillNameForArtifactId,
+} from "../SL-core/SL-skill-name.js";
 
 const require = createRequire(import.meta.url);
 const addFormats = require("ajv-formats") as FormatsPlugin;
@@ -512,6 +517,29 @@ export async function slValidateRepository(root: string): Promise<SLValidationIs
                   "Artifact frontmatter ownership, lifecycle status, or pin state does not match the registry.",
               });
             }
+            if (
+              artifact.classification === "promoted" &&
+              artifact.artifactType === "skill"
+            ) {
+              const skillPath =
+                artifact.promotionTargetPath ?? normalizedPath;
+              const folderName = slSkillFolderName(skillPath);
+              const expectedName = slSkillNameForArtifactId(artifact.id);
+              if (
+                !slIsValidSkillName(folderName) ||
+                folderName !== expectedName ||
+                skillPath !== `.github/skills/${folderName}/SKILL.md` ||
+                parsed.frontmatter.name !== folderName
+              ) {
+                issues.push({
+                  severity: "error",
+                  code: "skill-name",
+                  path: normalizedPath,
+                  message:
+                    `Promoted skill path and frontmatter name must both use the deterministic lowercase kebab-case name ${expectedName}.`,
+                });
+              }
+            }
             const promotedTarget = slPromotedContractTarget(
               artifact,
               parsed.frontmatter,
@@ -640,22 +668,6 @@ export async function slValidateRepository(root: string): Promise<SLValidationIs
           code: "instruction-prefix",
           path: normalizedPath,
           message: "SL-produced instruction filenames must start with SL-.",
-        });
-      }
-      if (
-        artifact.artifactType === "skill" &&
-        !basename(dirname(normalizedPath)).startsWith(
-          artifact.classification === "system" ? "sl-" : "SL-",
-        )
-      ) {
-        issues.push({
-          severity: "error",
-          code: "skill-prefix",
-          path: normalizedPath,
-          message:
-            artifact.classification === "system"
-              ? "Bundled skill directories must start with sl-."
-              : "Promoted skill directories must start with SL-.",
         });
       }
     }

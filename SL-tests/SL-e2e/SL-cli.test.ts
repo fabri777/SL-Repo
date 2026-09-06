@@ -69,7 +69,7 @@ async function preparePromotedArtifact(
     dryRun: false,
     now: FIXED_NOW,
   });
-  const artifactPath = `.github/skills/${artifactId}/SKILL.md`;
+  const artifactPath = `.github/skills/${artifactId.toLowerCase()}/SKILL.md`;
   const contractPath = slTestContractPath(artifactId);
   await slWriteTestPromotedArtifact({
     root,

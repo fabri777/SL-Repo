@@ -36,7 +36,7 @@
     },
     {
       "path": "SL.Runtime.Promotion.ps1",
-      "sha256": "e43a03eabdfe63bca31ba02cd7faf7aac9fa4740a5f7b871078c53df51641032"
+      "sha256": "4a242a2bfda102752a072ba7644a1c65b33c5ad9846f3c6ef4c70928bd4b2ed2"
     },
     {
       "path": "SL.Runtime.Resource.ps1",
@@ -52,7 +52,7 @@
     },
     {
       "path": "SL.Runtime.Validation.ps1",
-      "sha256": "79d19c711069eaf5d9728697c856f1e51d83b8f87b2117a2dfd7dc60cd4f6ce6"
+      "sha256": "f7db183f4eba35dd8ed19a25ebe24763bb2dccee1ba518956ec4a76f6c234cdc"
     },
     {
       "path": "SL.Runtime.psm1",

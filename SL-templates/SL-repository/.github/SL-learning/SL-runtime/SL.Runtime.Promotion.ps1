@@ -39,7 +39,19 @@ function Get-SLPromotionType {
     if ($Path.StartsWith('.github/skills/') -and $Path.EndsWith('/SKILL.md')) {
         return 'skill'
     }
-    Throw-SLContractError -Code 'promotion-path' -Message 'Promoted path must be .github/instructions/SL-*.instructions.md or .github/skills/SL-*/SKILL.md.'
+    Throw-SLContractError -Code 'promotion-path' -Message 'Promoted path must be .github/instructions/SL-*.instructions.md or .github/skills/<skill-name>/SKILL.md.'
+}
+
+function Test-SLSkillName {
+    param([AllowNull()][object] $Value)
+
+    return $Value -is [string] -and [string] $Value -cmatch '^[a-z0-9]+(?:-[a-z0-9]+)*$'
+}
+
+function Get-SLSkillNameForArtifactId {
+    param([Parameter(Mandatory)][string] $ArtifactId)
+
+    return $ArtifactId.ToLowerInvariant()
 }
 
 function Get-SLProbationPath {
@@ -279,8 +291,14 @@ function Test-SLPromotedFrontmatter {
     if ($ArtifactType -ceq 'instruction') {
         return (Get-SLProperty $Frontmatter 'applyTo') -is [string]
     }
-    $ExpectedName = ([string] $ArtifactPath).Split('/')[-2]
-    return (Get-SLProperty $Frontmatter 'name') -ceq $ExpectedName
+    $FolderName = ([string] $ArtifactPath).Split('/')[-2]
+    $ExpectedName = Get-SLSkillNameForArtifactId $ArtifactId
+    return (
+        (Test-SLSkillName $FolderName) -and
+        $FolderName -ceq $ExpectedName -and
+        $ArtifactPath -ceq ".github/skills/$FolderName/SKILL.md" -and
+        (Get-SLProperty $Frontmatter 'name') -ceq $FolderName
+    )
 }
 
 function Invoke-SLValidationContract {
@@ -454,11 +472,8 @@ function Register-SLPromotion {
         if (-not [IO.File]::Exists($Path)) {
             Throw-SLContractError -Code 'promotion-missing' -Message "Promoted artifact does not exist: $TargetPath"
         }
-        if (
-            ($ArtifactType -ceq 'instruction' -and -not ([IO.Path]::GetFileName($TargetPath)).StartsWith('SL-')) -or
-            ($ArtifactType -ceq 'skill' -and -not $TargetPath.Split('/')[-2].StartsWith('SL-'))
-        ) {
-            Throw-SLContractError -Code 'promotion-prefix' -Message 'Promoted artifact path must use an SL- prefix.'
+        if ($ArtifactType -ceq 'instruction' -and -not ([IO.Path]::GetFileName($TargetPath)).StartsWith('SL-')) {
+            Throw-SLContractError -Code 'promotion-prefix' -Message 'Promoted instruction path must use an SL- prefix.'
         }
         $Registry = Get-SLRegistry $Root
         $Source = Find-SLArtifact $Registry $SourceId
@@ -471,6 +486,22 @@ function Register-SLPromotion {
         $PromotedId = [string] (Get-SLProperty $Markdown.frontmatter 'id' "SL-PROMOTED-$($SourceId.Substring(3))")
         if ($PromotedId -ceq $SourceId -or $PromotedId -cnotmatch '^SL-[A-Z0-9][A-Z0-9-]*$') {
             Throw-SLContractError -Code 'promotion-id' -Message 'Promoted artifact ID must be a distinct valid SL ID.'
+        }
+        if ($ArtifactType -ceq 'skill') {
+            $FolderName = $TargetPath.Split('/')[-2]
+            $ExpectedName = Get-SLSkillNameForArtifactId $PromotedId
+            if (-not (Test-SLSkillName $FolderName)) {
+                Throw-SLContractError -Code 'promotion-skill-name' -Message 'Promoted skill directory must be a lowercase kebab-case skill name.'
+            }
+            if ($FolderName -cne $ExpectedName) {
+                Throw-SLContractError -Code 'promotion-skill-name' -Message "Promoted skill directory must be the deterministic skill name $ExpectedName."
+            }
+            if ($TargetPath -cne ".github/skills/$FolderName/SKILL.md") {
+                Throw-SLContractError -Code 'promotion-skill-name' -Message "Promoted skill path must be .github/skills/$FolderName/SKILL.md."
+            }
+            if ((Get-SLProperty $Markdown.frontmatter 'name') -cne $FolderName) {
+                Throw-SLContractError -Code 'promotion-skill-name' -Message "Promoted skill frontmatter name must match its directory $FolderName."
+            }
         }
         $ProbationPath = Get-SLProbationPath $PromotedId $ArtifactType $TargetPath
         if ([IO.File]::Exists((Resolve-SLContainedPath -Root $Root -RelativePath $ProbationPath))) {

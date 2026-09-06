@@ -112,6 +112,169 @@ async function createPowerShellRepository(): Promise<string> {
 }
 
 describe("repository-local PowerShell lifecycle", () => {
+  test(
+    "enforces deterministic lowercase skill names during PowerShell promotion",
+    async () => {
+      const root = await createPowerShellRepository();
+      const captureSource = (title: string, now: string) =>
+        jsonOutput(
+          runRuntime(root, [
+            "capture",
+            "--title",
+            title,
+            "--kind",
+            "win",
+            "--trigger",
+            "skill-name",
+            "--now",
+            now,
+          ]),
+        ) as { id: string };
+      const writeSkill = async (
+        sourceId: string,
+        artifactId: string,
+        skillName: string,
+        frontmatterName = skillName,
+      ) => {
+        const artifactPath = `.github/skills/${skillName}/SKILL.md`;
+        const contractPath = slTestContractPath(artifactId);
+        await slWriteTestPromotedArtifact({
+          root,
+          artifactId,
+          artifactType: "skill",
+          artifactPath,
+          contractPath,
+        });
+        if (frontmatterName !== skillName) {
+          const absolutePath = join(root, ...artifactPath.split("/"));
+          await writeFile(
+            absolutePath,
+            (await readFile(absolutePath, "utf8")).replace(
+              `name: ${skillName}`,
+              `name: ${frontmatterName}`,
+            ),
+            "utf8",
+          );
+        }
+        await slWriteTestJson(
+          root,
+          contractPath,
+          slCreateTestContract({
+            artifactId,
+            artifactType: "skill",
+            artifactPath,
+            sourceIds: [sourceId],
+          }),
+        );
+        return artifactPath;
+      };
+
+      const validSource = captureSource(
+        "PowerShell valid skill name",
+        "2026-09-05T10:00:00.000Z",
+      );
+      const validId = "SL-POWERSHELL-SKILL-NAME";
+      const validPath = await writeSkill(
+        validSource.id,
+        validId,
+        "sl-powershell-skill-name",
+      );
+      jsonOutput(
+        runRuntime(root, [
+          "promotion",
+          "register",
+          validSource.id,
+          validPath,
+          "--now",
+          "2026-09-05T10:01:00.000Z",
+        ]),
+      );
+
+      const uppercaseSource = captureSource(
+        "PowerShell uppercase skill name",
+        "2026-09-05T10:02:00.000Z",
+      );
+      const uppercasePath = await writeSkill(
+        uppercaseSource.id,
+        "SL-POWERSHELL-UPPERCASE",
+        "SL-POWERSHELL-UPPERCASE",
+      );
+      const uppercaseResult = runRuntime(root, [
+        "promotion",
+        "register",
+        uppercaseSource.id,
+        uppercasePath,
+        "--now",
+        "2026-09-05T10:03:00.000Z",
+      ]);
+      expect(uppercaseResult.status).not.toBe(0);
+      expect(`${uppercaseResult.stdout}${uppercaseResult.stderr}`).toContain(
+        "lowercase kebab-case",
+      );
+
+      const mismatchSource = captureSource(
+        "PowerShell mismatched skill name",
+        "2026-09-05T10:04:00.000Z",
+      );
+      const mismatchPath = await writeSkill(
+        mismatchSource.id,
+        "SL-POWERSHELL-MISMATCH",
+        "sl-powershell-mismatch",
+        "different-skill",
+      );
+      const mismatchResult = runRuntime(root, [
+        "promotion",
+        "register",
+        mismatchSource.id,
+        mismatchPath,
+        "--now",
+        "2026-09-05T10:05:00.000Z",
+      ]);
+      expect(mismatchResult.status).not.toBe(0);
+      expect(`${mismatchResult.stdout}${mismatchResult.stderr}`).toContain(
+        "frontmatter name must match its directory",
+      );
+
+      const stateCatalog = JSON.parse(
+        await readFile(
+          join(root, ".github", "SL-learning", "SL-state-catalog.json"),
+          "utf8",
+        ),
+      ) as { scopes: Array<{ registryPath: string }> };
+      const registry = JSON.parse(
+        await readFile(
+          join(root, ...stateCatalog.scopes[0]!.registryPath.split("/")),
+          "utf8",
+        ),
+      ) as { artifacts: Array<{ id: string; path: string }> };
+      const validArtifact = registry.artifacts.find(
+        (artifact) => artifact.id === validId,
+      );
+      expect(validArtifact).toBeDefined();
+      const validArtifactPath = join(
+        root,
+        ...validArtifact!.path.split("/"),
+      );
+      await writeFile(
+        validArtifactPath,
+        (await readFile(validArtifactPath, "utf8")).replace(
+          /name: "?sl-powershell-skill-name"?/,
+          'name: "different-skill"',
+        ),
+        "utf8",
+      );
+      const validationResult = runRuntime(root, ["validate"]);
+      expect(validationResult.status).not.toBe(0);
+      const validation = JSON.parse(String(validationResult.stdout)) as {
+        issues: Array<{ code: string }>;
+      };
+      expect(validation.issues).toContainEqual(
+        expect.objectContaining({ code: "skill-name" }),
+      );
+    },
+    SUITE_TEST_TIMEOUT_MS,
+  );
+
   test("keeps empty usage projections as JSON arrays", async () => {
     const root = await createPowerShellRepository();
     jsonOutput(runRuntime(root, ["project"]));
