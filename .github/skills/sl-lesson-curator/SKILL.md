@@ -16,7 +16,7 @@ learned.
 4. Remove credentials, personal data, customer data, and absolute user paths.
 5. Promote declarative guidance to
    `.github/instructions/SL-*.instructions.md`.
-6. Promote reusable procedures to `.github/skills/SL-*/SKILL.md`.
+6. Promote reusable procedures to `.github/skills/<lowercase-skill-name>/SKILL.md`.
 7. Run `sl-repo project` and `sl-repo validate`.
 
 Retrieval is not successful reuse. Three immutable verified-success events for
