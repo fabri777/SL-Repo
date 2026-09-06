@@ -456,7 +456,7 @@ describe("repository-local PowerShell runtime", () => {
       "SL-runtime",
       "SL.sh",
     );
-    const result = spawnSync("bash", [launcher, "version"], {
+    const result = spawnSync("/bin/bash", [launcher, "version"], {
       cwd: dirname(launcher),
       encoding: "utf8",
       env: { ...process.env, PATH: resolve(root, "empty-bin") + delimiter },
