@@ -1998,7 +1998,7 @@ describe("SL promotion", () => {
 
     await expect(
       slRegisterPromotion(root, source.id, systemSkill.path, false),
-    ).rejects.toThrow("non-promoted");
+    ).rejects.toThrow("Promoted skill directory must be the deterministic skill name");
 
     const unchangedRegistry = await slLoadRegistry(root);
     expect(
