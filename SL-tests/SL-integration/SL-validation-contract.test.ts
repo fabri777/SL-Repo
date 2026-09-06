@@ -72,7 +72,7 @@ async function slPreparePromotion(options: {
   const artifactPath =
     options.artifactType === "instruction"
       ? `.github/instructions/${options.artifactId}.instructions.md`
-      : `.github/skills/${options.artifactId}/SKILL.md`;
+      : `.github/skills/${options.artifactId.toLowerCase()}/SKILL.md`;
   const contractPath = slTestContractPath(options.artifactId);
   await slWriteTestPromotedArtifact({
     root: options.root,
@@ -274,7 +274,7 @@ describe("SL promoted validation contracts", () => {
     await slInstall(root, "init", false);
     const source = await slCreateSource(root, "Skill contract source");
     const artifactId = "SL-SKILL-CONTRACT";
-    const artifactPath = `.github/skills/${artifactId}/SKILL.md`;
+    const artifactPath = `.github/skills/${artifactId.toLowerCase()}/SKILL.md`;
     const markerPath = join(root, "SL-command-ran.txt");
     const scriptPath = "SL-contract-checks/SL-write-marker.mjs";
     await mkdir(dirname(join(root, scriptPath)), { recursive: true });
@@ -504,7 +504,7 @@ describe("SL promoted validation contracts", () => {
       checksRoot,
       process.platform === "win32" ? "junction" : "dir",
     );
-    const artifactPath = `.github/skills/${artifactId}/SKILL.md`;
+    const artifactPath = `.github/skills/${artifactId.toLowerCase()}/SKILL.md`;
     const prepared = await slPreparePromotion({
       root,
       sourceId: source.id,
@@ -661,7 +661,7 @@ describe("SL promoted validation contracts", () => {
     await slInstall(root, "init", false);
     const source = await slCreateSource(root, `Malicious ${executableCheck.id}`);
     const artifactId = `SL-${executableCheck.id.toUpperCase()}`;
-    const artifactPath = `.github/skills/${artifactId}/SKILL.md`;
+    const artifactPath = `.github/skills/${artifactId.toLowerCase()}/SKILL.md`;
     const prepared = await slPreparePromotion({
       root,
       sourceId: source.id,
@@ -693,7 +693,7 @@ describe("SL promoted validation contracts", () => {
     await slInstall(root, "init", false);
     const source = await slCreateSource(root, "Executable outcomes source");
     const artifactId = "SL-EXECUTABLE-OUTCOMES";
-    const artifactPath = `.github/skills/${artifactId}/SKILL.md`;
+    const artifactPath = `.github/skills/${artifactId.toLowerCase()}/SKILL.md`;
     const timeoutScript = "SL-contract-checks/SL-timeout.mjs";
     const failureScript = "SL-contract-checks/SL-failure.mjs";
     await mkdir(join(root, "SL-contract-checks"), { recursive: true });
@@ -826,7 +826,7 @@ describe("SL promoted validation contracts", () => {
       repositories.push(root);
       await slInstall(root, "init", false);
       const source = await slCreateSource(root, `Process tree ${mode} source`);
-      const artifactPath = `.github/skills/${artifactId}/SKILL.md`;
+      const artifactPath = `.github/skills/${artifactId.toLowerCase()}/SKILL.md`;
       const fixturePath = "SL-contract-checks/SL-process-tree.mjs";
       const pidPath = join(root, "SL-process-tree-pids.json");
       const readyPath = join(root, "SL-process-tree-ready.json");

@@ -60,6 +60,54 @@ export interface SLConfig {
   promotion: SLPromotionPolicy;
 }
 
+export interface SLRuntimeManifestFile {
+  path: string;
+  sha256: string;
+}
+
+export interface SLRuntimeManifest {
+  schemaVersion: 1;
+  runtimeVersion: string;
+  sourceReleaseCommit: string;
+  configContractVersion: number;
+  conformanceVersion: number;
+  minimumPowerShellVersion: "7.0.0";
+  files: SLRuntimeManifestFile[];
+}
+
+export type SLRuntimeConformanceOperation =
+  | "canonical-json"
+  | "sha256"
+  | "normalize-path"
+  | "parse-yaml"
+  | "parse-frontmatter"
+  | "validate-value"
+  | "glob-match"
+  | "slugify"
+  | "scope-shard"
+  | "usage-event-id"
+  | "lifecycle-event-id"
+  | "retention-deadline"
+  | "promotion-owner-set"
+  | "safe-reference"
+  | "resource-receipt-id"
+  | "resource-total-tokens"
+  | "resource-cost-add";
+
+export interface SLRuntimeConformanceVector {
+  id: string;
+  operation: SLRuntimeConformanceOperation;
+  input: unknown;
+  expected?: unknown;
+  error?: string;
+}
+
+export interface SLRuntimeConformanceVectors {
+  schemaVersion: 1;
+  conformanceVersion: 1;
+  vectors: SLRuntimeConformanceVector[];
+}
+
 export type SLScopeKind =
   | "repository"
   | "shared"
@@ -176,6 +224,8 @@ export interface SLScopeCatalogEntry {
   indexPath: string;
   projectionPath: string;
   usageEventsPath: string;
+  resourceReceiptsPath?: string;
+  resourceProjectionPath?: string;
 }
 
 export interface SLStateCatalog {
@@ -194,6 +244,236 @@ export interface SLScopeUsageProjection {
   scope: SLScopeDescriptor;
   currentArtifactVersions: Record<string, string>;
   projections: SLUsageProjection[];
+}
+
+export type SLResourcePhase = "generation" | "application" | "baseline";
+export type SLResourceSource = "host" | "ci" | "manual";
+export type SLResourceQuality = "measured" | "estimated";
+
+export interface SLResourceTokenUsage {
+  input: number;
+  output: number;
+  cacheRead?: number;
+  cacheWrite?: number;
+  reasoning?: number;
+}
+
+export interface SLReportedCost {
+  amount: string;
+  currency: string;
+  basis: "host-reported";
+}
+
+export interface SLResourceComparison {
+  comparisonId: string;
+  scenarioKey: string;
+  role: "baseline" | "treatment";
+}
+
+export interface SLResourceReceiptBase {
+  schemaVersion: 1;
+  receiptId: string;
+  idempotencyKey: string;
+  phase: SLResourcePhase;
+  source: SLResourceSource;
+  quality: SLResourceQuality;
+  provider: string;
+  modelId: string;
+  tokens: SLResourceTokenUsage;
+  wallClockDurationMs: number;
+  modelDurationMs?: number;
+  toolDurationMs?: number;
+  attemptCount?: number;
+  timestamp: string;
+  evidenceRef?: string;
+  scope: SLScopeDescriptor;
+  reportedCost?: SLReportedCost;
+}
+
+export interface SLGenerationResourceReceipt extends SLResourceReceiptBase {
+  phase: "generation";
+  artifactId: string;
+  artifactVersion: string;
+  artifactContentHash: string;
+  generationRunId: string;
+}
+
+export interface SLApplicationResourceReceipt extends SLResourceReceiptBase {
+  phase: "application";
+  artifactId: string;
+  artifactVersion: string;
+  artifactContentHash: string;
+  taskRunId: string;
+  applicationId: string;
+  comparison?: SLResourceComparison & { role: "treatment" };
+}
+
+export interface SLBaselineResourceReceipt extends SLResourceReceiptBase {
+  phase: "baseline";
+  taskRunId: string;
+  comparison: SLResourceComparison & { role: "baseline" };
+}
+
+export type SLResourceReceipt =
+  | SLGenerationResourceReceipt
+  | SLApplicationResourceReceipt
+  | SLBaselineResourceReceipt;
+
+export interface SLResourceProjection {
+  scope: SLScopeDescriptor;
+  artifactId?: string;
+  artifactVersion?: string;
+  artifactContentHash?: string;
+  phase: SLResourcePhase;
+  source: SLResourceSource;
+  quality: SLResourceQuality;
+  provider: string;
+  modelId: string;
+  receiptCount: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  reasoningTokens: number;
+  totalTokens: number;
+  wallClockDurationMs: number;
+  modelDurationMs: number;
+  toolDurationMs: number;
+  attemptCount: number;
+  reportedCosts: Record<string, string>;
+}
+
+export interface SLScopeResourceProjection {
+  schemaVersion: 1;
+  scope: SLScopeDescriptor;
+  projections: SLResourceProjection[];
+}
+
+export interface SLResourceMetricValues {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  reasoningTokens: number;
+  totalTokens: number;
+  wallClockDurationMs: number;
+  modelDurationMs: number;
+  toolDurationMs: number;
+  attemptCount: number;
+  reportedCosts: Record<string, string>;
+}
+
+export interface SLResourceSummary extends SLResourceMetricValues {
+  receiptCount: number;
+  reportedCostReceiptCounts: Record<string, number>;
+}
+
+export interface SLResourceAverage extends SLResourceMetricValues {
+  sampleCount: number;
+  reportedCostSampleCounts: Record<string, number>;
+}
+
+export interface SLResourceBreakEven {
+  inputTokens: number | null;
+  outputTokens: number | null;
+  cacheReadTokens: number | null;
+  cacheWriteTokens: number | null;
+  reasoningTokens: number | null;
+  totalTokens: number | null;
+  wallClockDurationMs: number | null;
+  modelDurationMs: number | null;
+  toolDurationMs: number | null;
+  attemptCount: number | null;
+  reportedCosts: Record<string, number | null>;
+}
+
+export interface SLEfficiencySegmentKey {
+  scope: SLScopeDescriptor;
+  artifactId: string;
+  artifactVersion: string;
+  provider: string;
+  modelId: string;
+  quality: SLResourceQuality;
+}
+
+export interface SLResourcePairSavings {
+  comparisonId: string;
+  scenarioKey: string;
+  baselineReceiptId: string;
+  treatmentReceiptId: string;
+  savings: SLResourceMetricValues;
+}
+
+export interface SLResourcePairIncompatibility {
+  comparisonId: string;
+  treatmentReceiptId: string;
+  reason:
+    | "missing-baseline"
+    | "ambiguous-baseline"
+    | "ambiguous-treatment"
+    | "scenario-mismatch"
+    | "scope-mismatch"
+    | "quality-mismatch";
+}
+
+export interface SLEfficiencySegment {
+  key: SLEfficiencySegmentKey;
+  generation: {
+    totals: SLResourceSummary;
+    amortizedPerVerifiedSuccess: SLResourceAverage | null;
+  };
+  verifiedSuccessApplications: {
+    eligibleCount: number;
+    receiptCount: number;
+    coverage: number | null;
+    average: SLResourceAverage | null;
+    averageWithAmortizedGeneration: SLResourceMetricValues | null;
+  };
+  pairedBaseline: {
+    compatiblePairCount: number;
+    incompatiblePairCount: number;
+    pairSavings: SLResourcePairSavings[];
+    incompatibilities: SLResourcePairIncompatibility[];
+    medianSavings: SLResourceMetricValues | null;
+    breakEvenApplications: SLResourceBreakEven | null;
+  };
+}
+
+export interface SLResourceLineageCost {
+  generation: SLResourceSummary;
+  application: SLResourceSummary;
+  combined: SLResourceSummary;
+  segments: Array<{
+    key: SLEfficiencySegmentKey & {
+      phase: "generation" | "application";
+    };
+    totals: SLResourceSummary;
+  }>;
+}
+
+export interface SLPromotionLineageResourceReport {
+  artifactId: string;
+  directArtifactIds: string[];
+  sourceArtifactIds: string[];
+  direct: SLResourceLineageCost;
+  source: SLResourceLineageCost;
+  combined: SLResourceLineageCost;
+}
+
+export interface SLEfficiencyReport {
+  schemaVersion: 1;
+  advisory: true;
+  filters: {
+    artifactId?: string;
+    scopeId?: string;
+    provider?: string;
+    modelId?: string;
+    quality?: SLResourceQuality;
+  };
+  baselineReceiptCount: number;
+  unpairedBaselineCount: number;
+  segments: SLEfficiencySegment[];
+  promotionLineage: SLPromotionLineageResourceReport[];
 }
 
 export interface SLEvent {

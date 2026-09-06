@@ -98,6 +98,11 @@ Paths in persisted events and projections always use repository-relative `/`
 separators. Equivalent Windows-style CLI input is normalized before lookup, so
 Windows and POSIX callers produce the same JSON evaluation output.
 
+Resource receipts can be attached to application IDs after `use start`.
+Verified-success resource averages, coverage, paired baselines, generation
+amortization, and promotion lineage are documented in
+[SL resource receipts and advisory efficiency](SL-resource-efficiency.md).
+
 ## Existing counters
 
 On the first post-upgrade usage projection, existing `hits`, `retrievals`, and

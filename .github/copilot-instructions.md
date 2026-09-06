@@ -16,7 +16,7 @@ This repository develops the SL Repo learning lifecycle.
 At task start, inspect `.github/SL-learning/SL-index.json` when the request
 matches a recorded trigger. Open only the relevant artifacts.
 
-At task end, invoke the `SL-lesson-curator` skill when the work produced a
+At task end, invoke the `sl-lesson-curator` skill when the work produced a
 verified reusable win or pitfall. Run `sl-repo project` and
 `sl-repo validate` after changes.
 

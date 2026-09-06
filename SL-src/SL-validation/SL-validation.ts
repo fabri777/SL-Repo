@@ -35,6 +35,8 @@ import type {
   SLUsageEvent,
   SLScopeRegistry,
   SLScopeUsageProjection,
+  SLResourceReceipt,
+  SLScopeResourceProjection,
   SLStateCatalog,
   SLValidationIssue,
 } from "../SL-core/SL-types.js";
@@ -44,6 +46,12 @@ import {
   slUsageEventPath,
   slValidateUsageEvent,
 } from "../SL-core/SL-usage.js";
+import {
+  slLoadResourceReceipts,
+  slProjectResourceReceipts,
+  slResourceReceiptPath,
+  slValidateResourceReceipt,
+} from "../SL-core/SL-resource.js";
 import {
   slExists,
   slAssertRealPathInside,
@@ -55,6 +63,7 @@ import {
 } from "../SL-core/SL-utils.js";
 import { slBuildScopeIndexes } from "../SL-index/SL-index.js";
 import {
+  SL_DEFAULT_SCOPE,
   slAssertCatalogEntryPaths,
   slBuildStateCatalog,
   slLoadStateCatalog,
@@ -69,12 +78,18 @@ import {
   slEvaluateScopedGuidanceConflicts,
   type SLScopedGuidance,
 } from "../SL-core/SL-promotion-governance.js";
+import { slValidateInstalledRuntime } from "../SL-runtime/SL-runtime-validation.js";
 import {
   slEvaluateValidationContract,
   slFindValidationContractConflicts,
   slPromotedContractTarget,
   type SLActiveValidationContract,
 } from "./SL-validation-contract.js";
+import {
+  slIsValidSkillName,
+  slSkillFolderName,
+  slSkillNameForArtifactId,
+} from "../SL-core/SL-skill-name.js";
 
 const require = createRequire(import.meta.url);
 const addFormats = require("ajv-formats") as FormatsPlugin;
@@ -129,6 +144,8 @@ export async function slValidateRepository(root: string): Promise<SLValidationIs
     stateCatalogSchema,
     scopeRegistrySchema,
     usageProjectionSchema,
+    resourceReceiptSchema,
+    resourceProjectionSchema,
   ] = await Promise.all([
     slReadJson<object>(resolve(packageRoot, "SL-schemas/SL-config.schema.json")),
     slReadJson<object>(resolve(packageRoot, "SL-schemas/SL-lesson.schema.json")),
@@ -139,6 +156,8 @@ export async function slValidateRepository(root: string): Promise<SLValidationIs
     slReadJson<object>(resolve(packageRoot, "SL-schemas/SL-state-catalog.schema.json")),
     slReadJson<object>(resolve(packageRoot, "SL-schemas/SL-scope-registry.schema.json")),
     slReadJson<object>(resolve(packageRoot, "SL-schemas/SL-usage-projection.schema.json")),
+    slReadJson<object>(resolve(packageRoot, "SL-schemas/SL-resource-receipt.schema.json")),
+    slReadJson<object>(resolve(packageRoot, "SL-schemas/SL-resource-projection.schema.json")),
   ]);
   ajv.addSchema(stateCatalogSchema);
   ajv.addSchema(registrySchema);
@@ -154,7 +173,18 @@ export async function slValidateRepository(root: string): Promise<SLValidationIs
     ajv.compile<SLScopeRegistry>(scopeRegistrySchema);
   const validateUsageProjection =
     ajv.compile<SLScopeUsageProjection>(usageProjectionSchema);
+  const validateResourceReceipt =
+    ajv.compile<SLResourceReceipt>(resourceReceiptSchema);
+  const validateResourceProjection =
+    ajv.compile<SLScopeResourceProjection>(resourceProjectionSchema);
   const issues: SLValidationIssue[] = [];
+  if (await slExists(slResolveInside(root, SL_PATHS.runtimeRoot))) {
+    issues.push(
+      ...(await slValidateInstalledRuntime(root, {
+        checkPowerShell: false,
+      })),
+    );
+  }
 
   const config = await slLoadConfig(root);
   if (!validateConfig(config)) {
@@ -487,6 +517,29 @@ export async function slValidateRepository(root: string): Promise<SLValidationIs
                   "Artifact frontmatter ownership, lifecycle status, or pin state does not match the registry.",
               });
             }
+            if (
+              artifact.classification === "promoted" &&
+              artifact.artifactType === "skill"
+            ) {
+              const skillPath =
+                artifact.promotionTargetPath ?? normalizedPath;
+              const folderName = slSkillFolderName(skillPath);
+              const expectedName = slSkillNameForArtifactId(artifact.id);
+              if (
+                !slIsValidSkillName(folderName) ||
+                folderName !== expectedName ||
+                skillPath !== `.github/skills/${folderName}/SKILL.md` ||
+                parsed.frontmatter.name !== folderName
+              ) {
+                issues.push({
+                  severity: "error",
+                  code: "skill-name",
+                  path: normalizedPath,
+                  message:
+                    `Promoted skill path and frontmatter name must both use the deterministic lowercase kebab-case name ${expectedName}.`,
+                });
+              }
+            }
             const promotedTarget = slPromotedContractTarget(
               artifact,
               parsed.frontmatter,
@@ -615,17 +668,6 @@ export async function slValidateRepository(root: string): Promise<SLValidationIs
           code: "instruction-prefix",
           path: normalizedPath,
           message: "SL-produced instruction filenames must start with SL-.",
-        });
-      }
-      if (
-        artifact.artifactType === "skill" &&
-        !basename(dirname(normalizedPath)).startsWith("SL-")
-      ) {
-        issues.push({
-          severity: "error",
-          code: "skill-prefix",
-          path: normalizedPath,
-          message: "SL-produced skill directories must start with SL-.",
         });
       }
     }
@@ -919,6 +961,199 @@ export async function slValidateRepository(root: string): Promise<SLValidationIs
         severity: "error",
         code: "usage-application-outcome",
         message: `Application ${applicationId} has conflicting terminal outcomes.`,
+      });
+    }
+  }
+
+  let resourceFiles: string[] = [];
+  try {
+    await slAssertRealPathInside(root, SL_PATHS.learningRoot);
+    resourceFiles = await fg(
+      [
+        `${SL_PATHS.resourceReceipts}/**/*`,
+        `${SL_PATHS.scopeRoot}/*/SL-resource-receipts/**/*`,
+      ],
+      {
+        cwd: root,
+        onlyFiles: true,
+        followSymbolicLinks: false,
+      },
+    );
+  } catch (error) {
+    issues.push({
+      severity: "error",
+      code: "resource-receipt-containment",
+      path: SL_PATHS.learningRoot,
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+  for (const resourceFileValue of resourceFiles.sort(slCompareOrdinal)) {
+    const resourceFile = slNormalizePath(resourceFileValue);
+    if (!resourceFile.endsWith(".json")) {
+      issues.push({
+        severity: "error",
+        code: "resource-receipt-extension",
+        path: resourceFile,
+        message:
+          "Resource receipt directories may contain only immutable JSON files.",
+      });
+      continue;
+    }
+    let receipt: SLResourceReceipt;
+    try {
+      await slAssertRealPathInside(root, resourceFile);
+      const content = await slReadText(slResolveInside(root, resourceFile));
+      issues.push(...slCheckContent(resourceFile, content));
+      receipt = JSON.parse(content) as SLResourceReceipt;
+    } catch (error) {
+      issues.push({
+        severity: "error",
+        code: "resource-receipt-json",
+        path: resourceFile,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      continue;
+    }
+    if (!validateResourceReceipt(receipt)) {
+      issues.push(
+        ...slAjvIssues(
+          "resource-receipt-schema",
+          resourceFile,
+          validateResourceReceipt.errors,
+        ),
+      );
+      continue;
+    }
+    try {
+      slValidateResourceReceipt(receipt);
+    } catch (error) {
+      issues.push({
+        severity: "error",
+        code: "resource-receipt-integrity",
+        path: resourceFile,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      continue;
+    }
+    if (!catalogScopeKeys.has(slScopeKey(receipt.scope))) {
+      issues.push({
+        severity: "error",
+        code: "resource-receipt-scope",
+        path: resourceFile,
+        message:
+          "Resource receipt scope is not registered in the generated state catalog.",
+      });
+    }
+    if (slResourceReceiptPath(receipt) !== resourceFile) {
+      issues.push({
+        severity: "error",
+        code: "resource-receipt-path",
+        path: resourceFile,
+        message:
+          "Resource receipt path does not match its timestamp and identity.",
+      });
+    }
+    if (receipt.phase === "application") {
+      const usageApplication = applications.get(receipt.applicationId);
+      if (
+        !usageApplication ||
+        !usageApplication.every(
+          (event) =>
+            event.artifactId === receipt.artifactId &&
+            event.artifactVersion === receipt.artifactVersion &&
+            event.artifactContentHash === receipt.artifactContentHash &&
+            event.taskRunId === receipt.taskRunId &&
+            slScopeKey(event.scope ?? SL_DEFAULT_SCOPE) ===
+              slScopeKey(receipt.scope),
+        )
+      ) {
+        issues.push({
+          severity: "error",
+          code: "resource-receipt-usage-correlation",
+          path: resourceFile,
+          message:
+            "Application resource receipt does not match an immutable usage lifecycle.",
+        });
+      }
+    } else if (
+      receipt.phase === "generation" &&
+      !registry.artifacts.some(
+        (artifact) =>
+          artifact.id === receipt.artifactId &&
+          slScopeKey(artifact.scope ?? SL_DEFAULT_SCOPE) ===
+            slScopeKey(receipt.scope),
+      )
+    ) {
+      issues.push({
+        severity: "error",
+        code: "resource-receipt-artifact",
+        path: resourceFile,
+        message:
+          "Generation resource receipt references an unknown artifact or owning scope.",
+      });
+    }
+  }
+
+  let canonicalResourceReceipts: SLResourceReceipt[] | undefined;
+  try {
+    canonicalResourceReceipts = await slLoadResourceReceipts(root);
+  } catch (error) {
+    issues.push({
+      severity: "error",
+      code: "resource-receipt-load",
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  const resourceProjectionsByScope = new Map<string, SLResourceReceipt[]>();
+  for (const receipt of canonicalResourceReceipts ?? []) {
+    const key = slScopeKey(receipt.scope);
+    const scoped = resourceProjectionsByScope.get(key) ?? [];
+    scoped.push(receipt);
+    resourceProjectionsByScope.set(key, scoped);
+  }
+  for (const entry of catalog.scopes) {
+    if (!entry.resourceProjectionPath) {
+      continue;
+    }
+    const projectionPath = slResolveInside(root, entry.resourceProjectionPath);
+    if (!(await slExists(projectionPath))) {
+      issues.push({
+        severity: "error",
+        code: "missing-resource-projection",
+        path: entry.resourceProjectionPath,
+        message: "Generated scope resource projection is missing.",
+      });
+      continue;
+    }
+    const actual = await slReadJson<SLScopeResourceProjection>(projectionPath);
+    if (!validateResourceProjection(actual)) {
+      issues.push(
+        ...slAjvIssues(
+          "resource-projection-schema",
+          entry.resourceProjectionPath,
+          validateResourceProjection.errors,
+        ),
+      );
+      continue;
+    }
+    if (!canonicalResourceReceipts) {
+      continue;
+    }
+    const expected: SLScopeResourceProjection = {
+      schemaVersion: 1,
+      scope: entry.scope,
+      projections: slProjectResourceReceipts(
+        resourceProjectionsByScope.get(slScopeKey(entry.scope)) ?? [],
+      ),
+    };
+    if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+      issues.push({
+        severity: "error",
+        code: "resource-projection-drift",
+        path: entry.resourceProjectionPath,
+        message:
+          "Generated scope resource projection is stale; run sl-repo project.",
       });
     }
   }

@@ -4,14 +4,21 @@
 
 - Git
 - Node.js 20 or newer
+- PowerShell 7 or newer for the installed repository-local runtime
 - A Git repository to receive the SL layer
 
-No CI provider is required. The Node CLI, repository-native state, Git
-distribution, and `AGENTS.md` entry point are sufficient for local or
-agent-driven operation.
+No CI provider is required. Node is currently required to build, initialize,
+or update SL. After initialization, the complete operational lifecycle runs
+through repository-local PowerShell without Node, npm, npx, a global SL CLI,
+network access, or external PowerShell modules.
 
-SL Repo 0.3.0 supports both single repositories and hierarchical monorepos.
-Existing 0.2 root state is migrated additively into deterministic scope shards.
+SL Repo 0.4.0 supports both single repositories and hierarchical monorepos.
+It installs a complete repository-local PowerShell 7 runtime, including
+resource receipt and advisory efficiency operations. Existing 0.2 root state
+is migrated additively into deterministic scope shards, and 0.3 runtime
+installations can be updated through the guarded manifest transaction.
+Bundled and promoted skill directory and frontmatter names are lowercase for
+Agent Skills compatibility.
 
 ## From a local development clone
 
@@ -24,6 +31,35 @@ sl-repo init C:\path\to\target --dry-run
 sl-repo init C:\path\to\target
 sl-repo validate C:\path\to\target
 ```
+
+Initialization installs the runtime at
+`.github/SL-learning/SL-runtime/`. Run it directly:
+
+```powershell
+pwsh -NoLogo -NoProfile -File `
+  C:\path\to\target\.github\SL-learning\SL-runtime\SL.ps1 doctor --json
+```
+
+All lifecycle commands use the same entry point:
+
+```powershell
+$sl = "C:\path\to\target\.github\SL-learning\SL-runtime\SL.ps1"
+pwsh -NoLogo -NoProfile -File $sl capture `
+  --title "Verified local lesson" --trigger "local cue" --json
+pwsh -NoLogo -NoProfile -File $sl retrieve --path src/example.ts --json
+pwsh -NoLogo -NoProfile -File $sl use start SL-LESSON-ID --json
+pwsh -NoLogo -NoProfile -File $sl project --json
+pwsh -NoLogo -NoProfile -File $sl validate --json
+```
+
+From Bash:
+
+```bash
+./.github/SL-learning/SL-runtime/SL.sh conformance --json
+```
+
+The Bash file is a thin `pwsh` launcher and contains no Node or package-manager
+fallback.
 
 ## Update
 
@@ -39,6 +75,13 @@ under `.github/SL-learning/SL-schemas/`. Produced lessons, instructions,
 skills, manual catalogs, unknown files, and unregistered same-path files are
 retained.
 
+Runtime updates use a stricter manifest guard. Before changing any runtime
+file, update verifies the installed manifest, version, and every declared
+SHA-256. Local runtime modifications, missing files, mixed-version files, or
+an occupied newly managed path reject the whole update. Obsolete files are
+removed only when the previous manifest proves SL ownership. Unrelated files
+below `SL-runtime/` are preserved, and `--dry-run` performs no writes.
+
 ## Uninstall
 
 The first milestone intentionally does not provide destructive uninstall.
@@ -51,7 +94,7 @@ Configure normal Git authentication for the authorized source, then run an
 immutable package reference. The current GitHub source example is:
 
 ```powershell
-npm exec --yes --package=github:fabri777/SL-Repo#3c6bb31d1f717595791e9a575d698b5593cbcf10 -c "sl-repo init C:\path\to\target"
+npm exec --yes --package=github:fabri777/SL-Repo#51ab00795f8109bb3fad7c717bf9f427fec63772 -c "sl-repo init C:\path\to\target"
 ```
 
 An Azure Repos mirror can be cloned and checked out at the same full commit
@@ -60,7 +103,7 @@ also be used when the local Git credential configuration already authorizes
 it:
 
 ```powershell
-npm exec --yes --package="git+https://dev.azure.com/<organization>/<project>/_git/<runtime-repository>#3c6bb31d1f717595791e9a575d698b5593cbcf10" -c "sl-repo --help"
+npm exec --yes --package="git+https://dev.azure.com/<organization>/<project>/_git/<runtime-repository>#51ab00795f8109bb3fad7c717bf9f427fec63772" -c "sl-repo --help"
 ```
 
 Do not place credentials in the URL, repository files, or SL state. The Git
@@ -92,7 +135,7 @@ Installation includes two adapters:
   `.azure-pipelines/SL-learning/`.
 
 The adapters acquire reviewed source snapshot
-`3c6bb31d1f717595791e9a575d698b5593cbcf10`, build it, and invoke the CLI. The
+`51ab00795f8109bb3fad7c717bf9f427fec63772`, build it, and invoke the CLI. The
 full commit SHA is immutable; adapters must never use `main`, another branch,
 or a moving tag for runtime acquisition.
 
@@ -144,6 +187,23 @@ Packed artifact contents include `dist/`, `SL-schemas/`, `SL-templates/`,
 `SECURITY.md`. This keeps the runtime, validation schemas, reusable
 fixtures/tests, secured consumer templates, plugin skills, release history,
 and linked documentation together.
+
+`npm run build:runtime` stages the deterministic template manifest. It uses
+the source release value from `SL_RUNTIME_SOURCE_RELEASE_COMMIT`, copies the
+manifest schema into the template, and records LF-normalized hashes for every
+runtime payload. The version commit uses
+`__SL_SOURCE_RELEASE_COMMIT__`; the dedicated immutable-pin commit replaces
+it with the reviewed version commit SHA. See
+[Repository-local PowerShell runtime contract](SL-runtime.md) for the exact
+layout, supported YAML/frontmatter/validation/glob subsets, and exit codes.
+
+Version releases use two reviewed commits. The first commit updates versions,
+release notes, tests, generated runtime payloads, and the manifest hashes while
+leaving `sourceReleaseCommit` as `__SL_SOURCE_RELEASE_COMMIT__` and retaining
+the previous reviewed adapter pin. After that commit is reviewed, the
+follow-up immutable-pin commit replaces the placeholder and every documented,
+template, and test pin with the first commit's full 40-character SHA, rebuilds
+the runtime manifest, and reruns the complete release validation.
 
 After installation or update, run:
 

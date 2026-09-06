@@ -1,7 +1,9 @@
 #!/usr/bin/env node
+import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Command, Option } from "commander";
 import { slCaptureLesson } from "../SL-core/SL-capture.js";
+import { slCalculateEfficiencyReport } from "../SL-core/SL-efficiency.js";
 import { slInstall } from "../SL-core/SL-installer.js";
 import { slLoadConfig } from "../SL-core/SL-config.js";
 import { slBuildPromotionGovernanceContext } from "../SL-core/SL-promotion-context.js";
@@ -19,7 +21,20 @@ import {
   SLScopeResolver,
 } from "../SL-core/SL-scope.js";
 import { slRetrieveArtifacts } from "../SL-core/SL-retrieval.js";
-import type { SLChange } from "../SL-core/SL-types.js";
+import {
+  type SLCreateResourceReceiptInput,
+  slImportResourceReceipts,
+  slParseResourceReceiptInputs,
+  slResolveApplicationResourceIdentity,
+  slResolveGenerationResourceIdentity,
+  slSynchronizeResourceProjection,
+} from "../SL-core/SL-resource.js";
+import type {
+  SLChange,
+  SLResourceQuality,
+  SLResourceSource,
+  SLScopeDescriptor,
+} from "../SL-core/SL-types.js";
 import {
   slCompareOrdinal,
   slNormalizePath,
@@ -42,6 +57,7 @@ import {
 } from "../SL-forgetting/SL-forgetting.js";
 import { slEvaluate } from "../SL-validation/SL-validation-contract.js";
 import { slValidateRepository } from "../SL-validation/SL-validation.js";
+import { slValidateInstalledRuntime } from "../SL-runtime/SL-runtime-validation.js";
 
 interface SLDryRunOptions {
   dryRun?: boolean;
@@ -51,12 +67,206 @@ interface SLJsonOptions {
   json?: boolean;
 }
 
+interface SLResourceCliOptions extends SLDryRunOptions, SLJsonOptions {
+  idempotencyKey: string;
+  source: SLResourceSource;
+  quality: SLResourceQuality;
+  provider: string;
+  model: string;
+  inputTokens: string;
+  outputTokens: string;
+  cacheReadTokens?: string;
+  cacheWriteTokens?: string;
+  reasoningTokens?: string;
+  wallClockMs: string;
+  modelMs?: string;
+  toolMs?: string;
+  attempts?: string;
+  timestamp?: string;
+  evidenceRef?: string;
+  costAmount?: string;
+  costCurrency?: string;
+}
+
 function slRoot(pathValue: string): string {
   return resolve(pathValue);
 }
 
 function slCollect(value: string, previous: string[]): string[] {
   return [...previous, value];
+}
+
+function slIntegerOption(
+  name: string,
+  value: string | undefined,
+  required: boolean,
+): number | undefined {
+  if (value === undefined) {
+    if (required) {
+      throw new Error(`${name} is required.`);
+    }
+    return undefined;
+  }
+  if (!/^(0|[1-9][0-9]*)$/.test(value)) {
+    throw new Error(`${name} must be a non-negative integer.`);
+  }
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed)) {
+    throw new Error(`${name} must be a safe integer.`);
+  }
+  return parsed;
+}
+
+function slResourceCliInput(
+  options: SLResourceCliOptions,
+  scope: SLScopeDescriptor,
+) {
+  const inputTokens = slIntegerOption(
+    "--input-tokens",
+    options.inputTokens,
+    true,
+  )!;
+  const outputTokens = slIntegerOption(
+    "--output-tokens",
+    options.outputTokens,
+    true,
+  )!;
+  const wallClockDurationMs = slIntegerOption(
+    "--wall-clock-ms",
+    options.wallClockMs,
+    true,
+  )!;
+  const modelDurationMs = slIntegerOption(
+    "--model-ms",
+    options.modelMs,
+    false,
+  );
+  const toolDurationMs = slIntegerOption(
+    "--tool-ms",
+    options.toolMs,
+    false,
+  );
+  const attemptCount = slIntegerOption(
+    "--attempts",
+    options.attempts,
+    false,
+  );
+  if ((options.costAmount === undefined) !== (options.costCurrency === undefined)) {
+    throw new Error(
+      "--cost-amount and --cost-currency must be supplied together.",
+    );
+  }
+  return {
+    idempotencyKey: options.idempotencyKey,
+    source: options.source,
+    quality: options.quality,
+    provider: options.provider,
+    modelId: options.model,
+    tokens: {
+      input: inputTokens,
+      output: outputTokens,
+      ...(options.cacheReadTokens !== undefined
+        ? {
+            cacheRead: slIntegerOption(
+              "--cache-read-tokens",
+              options.cacheReadTokens,
+              false,
+            )!,
+          }
+        : {}),
+      ...(options.cacheWriteTokens !== undefined
+        ? {
+            cacheWrite: slIntegerOption(
+              "--cache-write-tokens",
+              options.cacheWriteTokens,
+              false,
+            )!,
+          }
+        : {}),
+      ...(options.reasoningTokens !== undefined
+        ? {
+            reasoning: slIntegerOption(
+              "--reasoning-tokens",
+              options.reasoningTokens,
+              false,
+            )!,
+          }
+        : {}),
+    },
+    wallClockDurationMs,
+    ...(modelDurationMs !== undefined ? { modelDurationMs } : {}),
+    ...(toolDurationMs !== undefined ? { toolDurationMs } : {}),
+    ...(attemptCount !== undefined ? { attemptCount } : {}),
+    timestamp: options.timestamp ?? new Date().toISOString(),
+    ...(options.evidenceRef ? { evidenceRef: options.evidenceRef } : {}),
+    scope,
+    ...(options.costAmount && options.costCurrency
+      ? {
+          reportedCost: {
+            amount: options.costAmount,
+            currency: options.costCurrency.toUpperCase(),
+            basis: "host-reported" as const,
+          },
+        }
+      : {}),
+  };
+}
+
+function slAddResourceMetricOptions(command: Command): Command {
+  return command
+    .requiredOption("--idempotency-key <key>", "Stable receipt idempotency key")
+    .addOption(
+      new Option("--source <source>", "Measurement source")
+        .choices(["host", "ci", "manual"])
+        .default("manual"),
+    )
+    .addOption(
+      new Option("--quality <quality>", "Measurement quality")
+        .choices(["measured", "estimated"])
+        .default("measured"),
+    )
+    .requiredOption("--provider <provider>", "Provider identifier")
+    .requiredOption("--model <model>", "Model identifier")
+    .requiredOption("--input-tokens <count>", "Input token count")
+    .requiredOption("--output-tokens <count>", "Output token count")
+    .option("--cache-read-tokens <count>", "Cache read token count")
+    .option("--cache-write-tokens <count>", "Cache write token count")
+    .option("--reasoning-tokens <count>", "Reasoning token count")
+    .requiredOption("--wall-clock-ms <ms>", "Wall-clock duration")
+    .option("--model-ms <ms>", "Model duration")
+    .option("--tool-ms <ms>", "Tool duration")
+    .option("--attempts <count>", "Attempt count")
+    .option("--timestamp <timestamp>", "Canonical UTC receipt timestamp")
+    .option("--evidence-ref <ref>", "Opaque non-PII evidence reference")
+    .option("--cost-amount <amount>", "Host-reported decimal cost")
+    .option("--cost-currency <currency>", "Host-reported cost currency")
+    .option("--dry-run", "Show receipt and projection changes without writing")
+    .option("--json", "Print deterministic JSON output");
+}
+
+async function slReadResourceInput(pathValue: string): Promise<unknown> {
+  let content: string;
+  if (pathValue === "-") {
+    process.stdin.setEncoding("utf8");
+    const chunks: string[] = [];
+    for await (const chunk of process.stdin) {
+      chunks.push(chunk);
+      if (chunks.reduce((length, value) => length + value.length, 0) > 1_048_576) {
+        throw new Error("Resource input must not exceed 1 MiB.");
+      }
+    }
+    content = chunks.join("");
+  } else {
+    content = await readFile(resolve(pathValue), "utf8");
+  }
+  if (content.length > 1_048_576) {
+    throw new Error("Resource input must not exceed 1 MiB.");
+  }
+  try {
+    return JSON.parse(content) as unknown;
+  } catch {
+    throw new Error("Resource input must be valid JSON.");
+  }
 }
 
 async function slOptionalScope(
@@ -120,7 +330,7 @@ async function slEvaluationArtifactId(
 const program = new Command()
   .name("sl-repo")
   .description("Repository-local self-learning lifecycle")
-  .version("0.3.0");
+  .version("0.4.0");
 
 for (const mode of ["init", "update"] as const) {
   program
@@ -186,7 +396,20 @@ program
     slRun(async () => {
       const root = slRoot(pathValue);
       const registry = await slLoadRegistry(root);
-      const issues = await slValidateRepository(root);
+      const issues = [
+        ...(await slValidateRepository(root)),
+        ...(await slValidateInstalledRuntime(root, {
+          checkPowerShell: true,
+        })),
+      ].filter(
+        (issue, index, all) =>
+          all.findIndex(
+            (candidate) =>
+              candidate.code === issue.code &&
+              candidate.path === issue.path &&
+              candidate.message === issue.message,
+          ) === index,
+      );
       const counts = registry.artifacts.reduce<Record<string, number>>(
         (result, artifact) => {
           result[artifact.status] = (result[artifact.status] ?? 0) + 1;
@@ -570,6 +793,298 @@ useCommand
       }),
   );
 
+const resourceCommand = program
+  .command("resource")
+  .description("Record and analyze immutable provider-neutral resource receipts");
+
+resourceCommand
+  .command("import <input> [path]")
+  .description("Import one or more provider-neutral receipt inputs from JSON or stdin")
+  .option("--dry-run", "Show receipt and projection changes without writing")
+  .option("--json", "Print deterministic JSON output")
+  .action(
+    (
+      inputPath: string,
+      pathValue = ".",
+      options: SLDryRunOptions & SLJsonOptions,
+    ) =>
+      slRun(async () => {
+        const inputs = slParseResourceReceiptInputs(
+          await slReadResourceInput(inputPath),
+        );
+        const result = await slImportResourceReceipts(
+          slRoot(pathValue),
+          inputs,
+          options.dryRun ?? false,
+        );
+        if (options.json || options.dryRun) {
+          console.log(JSON.stringify(result, null, 2));
+          return;
+        }
+        for (const receipt of result.receipts) {
+          console.log(
+            `receiptId=${receipt.receiptId} phase=${receipt.phase} scope=${receipt.scope.id}`,
+          );
+        }
+        slPrintChanges(result.changes);
+      }),
+  );
+
+slAddResourceMetricOptions(
+  resourceCommand
+    .command("record <artifact-id> [path]")
+    .description("Record generation or application resources for an SL artifact")
+    .addOption(
+      new Option("--phase <phase>", "Artifact resource phase")
+        .choices(["generation", "application"])
+        .makeOptionMandatory(),
+    )
+    .option("--generation-run-id <id>", "Generation run correlation ID")
+    .option("--application-id <id>", "Existing usage application ID")
+    .option("--comparison-id <id>", "Paired comparison ID")
+    .option("--scenario-key <key>", "Paired comparison scenario key"),
+).action(
+  (
+    artifactId: string,
+    pathValue = ".",
+    options: SLResourceCliOptions & {
+      phase: "generation" | "application";
+      generationRunId?: string;
+      applicationId?: string;
+      comparisonId?: string;
+      scenarioKey?: string;
+    },
+  ) =>
+    slRun(async () => {
+      const root = slRoot(pathValue);
+      if (
+        (options.comparisonId === undefined) !==
+        (options.scenarioKey === undefined)
+      ) {
+        throw new Error(
+          "--comparison-id and --scenario-key must be supplied together.",
+        );
+      }
+      let receiptInput: SLCreateResourceReceiptInput;
+      if (options.phase === "generation") {
+        if (
+          options.applicationId ||
+          options.comparisonId ||
+          options.scenarioKey
+        ) {
+          throw new Error(
+            "Generation receipts do not accept application or comparison options.",
+          );
+        }
+        if (!options.generationRunId) {
+          throw new Error(
+            "--generation-run-id is required for generation receipts.",
+          );
+        }
+        const identity = await slResolveGenerationResourceIdentity(
+          root,
+          artifactId,
+        );
+        receiptInput = {
+          ...slResourceCliInput(options, identity.scope),
+          phase: "generation",
+          ...identity,
+          generationRunId: options.generationRunId,
+        };
+      } else {
+        if (options.generationRunId) {
+          throw new Error(
+            "Application receipts do not accept --generation-run-id.",
+          );
+        }
+        if (!options.applicationId) {
+          throw new Error(
+            "--application-id is required for application receipts.",
+          );
+        }
+        const applicationId = options.applicationId;
+        const identity = await slResolveApplicationResourceIdentity(
+          root,
+          artifactId,
+          applicationId,
+        );
+        receiptInput = {
+          ...slResourceCliInput(options, identity.scope),
+          phase: "application" as const,
+          ...identity,
+          ...(options.comparisonId && options.scenarioKey
+            ? {
+                comparison: {
+                  comparisonId: options.comparisonId,
+                  scenarioKey: options.scenarioKey,
+                  role: "treatment" as const,
+                },
+              }
+            : {}),
+        };
+      }
+      const result = await slImportResourceReceipts(
+        root,
+        [receiptInput],
+        options.dryRun ?? false,
+      );
+      slPrintObject(
+        result,
+        (options.json ?? false) || (options.dryRun ?? false),
+        `receiptId=${result.receipts[0]!.receiptId} phase=${result.receipts[0]!.phase}`,
+      );
+      if (!options.json && !options.dryRun) {
+        slPrintChanges(result.changes);
+      }
+    }),
+);
+
+slAddResourceMetricOptions(
+  resourceCommand
+    .command("baseline [path]")
+    .description("Record a paired baseline resource receipt")
+    .requiredOption("--task-run-id <id>", "Baseline task or run ID")
+    .requiredOption("--comparison-id <id>", "Paired comparison ID")
+    .requiredOption("--scenario-key <key>", "Paired comparison scenario key")
+    .option("--scope <scope-id>", "Baseline source scope")
+    .option("--target-path <path>", "Infer the baseline source scope"),
+).action(
+  (
+    pathValue = ".",
+    options: SLResourceCliOptions & {
+      taskRunId: string;
+      comparisonId: string;
+      scenarioKey: string;
+      scope?: string;
+      targetPath?: string;
+    },
+  ) =>
+    slRun(async () => {
+      const root = slRoot(pathValue);
+      const scope =
+        (await slOptionalScope(root, options.scope, options.targetPath)) ??
+        (
+          await slResolveScopeDescriptor(root, {
+            targetPath: ".",
+          })
+        ).scope;
+      const result = await slImportResourceReceipts(
+        root,
+        [
+          {
+            ...slResourceCliInput(options, scope),
+            phase: "baseline",
+            taskRunId: options.taskRunId,
+            comparison: {
+              comparisonId: options.comparisonId,
+              scenarioKey: options.scenarioKey,
+              role: "baseline",
+            },
+          },
+        ],
+        options.dryRun ?? false,
+      );
+      slPrintObject(
+        result,
+        (options.json ?? false) || (options.dryRun ?? false),
+        `receiptId=${result.receipts[0]!.receiptId} phase=baseline`,
+      );
+      if (!options.json && !options.dryRun) {
+        slPrintChanges(result.changes);
+      }
+    }),
+);
+
+resourceCommand
+  .command("stats [artifact-id] [path]")
+  .description("Show advisory efficiency metrics and promotion lineage costs")
+  .option("--scope <scope-id>", "Filter by application scope")
+  .option("--provider <provider>", "Filter by provider")
+  .option("--model <model>", "Filter by model")
+  .addOption(
+    new Option("--quality <quality>", "Filter by measurement quality").choices([
+      "measured",
+      "estimated",
+    ]),
+  )
+  .option("--json", "Print deterministic JSON output")
+  .action(
+    (
+      artifactIdValue: string | undefined,
+      pathValue: string | undefined,
+      options: SLJsonOptions & {
+        scope?: string;
+        provider?: string;
+        model?: string;
+        quality?: SLResourceQuality;
+      },
+    ) =>
+      slRun(async () => {
+        const artifactId =
+          artifactIdValue?.startsWith("SL-") ? artifactIdValue : undefined;
+        const rootPath =
+          artifactId === artifactIdValue
+            ? pathValue ?? "."
+            : artifactIdValue ?? pathValue ?? ".";
+        const report = await slCalculateEfficiencyReport(slRoot(rootPath), {
+          ...(artifactId ? { artifactId } : {}),
+          ...(options.scope ? { scopeId: options.scope } : {}),
+          ...(options.provider ? { provider: options.provider } : {}),
+          ...(options.model ? { modelId: options.model } : {}),
+          ...(options.quality ? { quality: options.quality } : {}),
+        });
+        if (options.json) {
+          console.log(JSON.stringify(report, null, 2));
+          return;
+        }
+        if (report.segments.length === 0) {
+          console.log("No resource receipts found.");
+        }
+        for (const segment of report.segments) {
+          const medianSavings =
+            segment.pairedBaseline.medianSavings?.totalTokens;
+          const breakEven =
+            segment.pairedBaseline.breakEvenApplications?.totalTokens;
+          console.log(
+            [
+              `artifactId=${segment.key.artifactId}`,
+              `scope=${segment.key.scope.id}:${segment.key.scope.path}`,
+              `artifactVersion=${segment.key.artifactVersion}`,
+              `provider=${segment.key.provider}`,
+              `model=${segment.key.modelId}`,
+              `quality=${segment.key.quality}`,
+              `verifiedSuccess=${segment.verifiedSuccessApplications.eligibleCount}`,
+              `resourceReceipts=${segment.verifiedSuccessApplications.receiptCount}`,
+              `coverage=${
+                segment.verifiedSuccessApplications.coverage === null
+                  ? "n/a"
+                  : segment.verifiedSuccessApplications.coverage.toFixed(6)
+              }`,
+              `medianTokenSavings=${
+                medianSavings === undefined ? "n/a" : medianSavings
+              }`,
+              `breakEvenApplications=${
+                breakEven === undefined || breakEven === null
+                  ? "n/a"
+                  : breakEven
+              }`,
+            ].join(" "),
+          );
+        }
+        for (const lineage of report.promotionLineage) {
+          console.log(
+            [
+              `promotion=${lineage.artifactId}`,
+              `sources=${lineage.sourceArtifactIds.join(",") || "none"}`,
+              `directTokens=${lineage.direct.combined.totalTokens}`,
+              `sourceTokens=${lineage.source.combined.totalTokens}`,
+              `combinedTokens=${lineage.combined.combined.totalTokens}`,
+            ].join(" "),
+          );
+        }
+      }),
+  );
+
 program
   .command("project [path]")
   .description("Rebuild registry usage projections and the discovery index")
@@ -578,6 +1093,11 @@ program
     slRun(async () => {
       const changes: SLChange[] = [];
       await slSynchronizeUsageProjection(
+        slRoot(pathValue),
+        options.dryRun ?? false,
+        changes,
+      );
+      await slSynchronizeResourceProjection(
         slRoot(pathValue),
         options.dryRun ?? false,
         changes,

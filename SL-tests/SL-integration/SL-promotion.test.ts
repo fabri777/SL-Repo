@@ -110,7 +110,7 @@ async function slPreparePromotion(options: {
   const artifactPath =
     artifactType === "instruction"
       ? `.github/instructions/${options.artifactId}.instructions.md`
-      : `.github/skills/${options.artifactId}/SKILL.md`;
+      : `.github/skills/${options.artifactId.toLowerCase()}/SKILL.md`;
   const contractPath = slTestContractPath(options.artifactId);
   await slWriteTestPromotedArtifact({
     root: options.root,
@@ -187,6 +187,156 @@ async function slPrepareConflictingPromotions(root: string) {
 }
 
 describe("SL promotion", () => {
+  test("keeps the uppercase artifact ID separate from the external skill name", async () => {
+    const root = await slCreateTestRepository();
+    repositories.push(root);
+    await slInstall(root, "init", false);
+    const source = await slCreateSource(root, "Separate skill identity");
+    const artifactId = "SL-SEPARATE-SKILL-IDENTITY";
+    const prepared = await slPreparePromotion({
+      root,
+      sourceId: source.id,
+      artifactId,
+      artifactType: "skill",
+    });
+
+    await slRegisterPromotion(
+      root,
+      source.id,
+      prepared.artifactPath,
+      false,
+      FIXED_NOW,
+    );
+
+    const artifact = await slArtifact(root, artifactId);
+    const promoted = slParseMarkdown<Record<string, unknown>>(
+      await readFile(join(root, ...artifact.path!.split("/")), "utf8"),
+    );
+    expect(artifact.id).toBe("SL-SEPARATE-SKILL-IDENTITY");
+    expect(artifact.promotionTargetPath).toBe(
+      ".github/skills/sl-separate-skill-identity/SKILL.md",
+    );
+    expect(promoted.frontmatter).toMatchObject({
+      id: "SL-SEPARATE-SKILL-IDENTITY",
+      name: "sl-separate-skill-identity",
+    });
+  });
+
+  test.each([
+    "SL-UPPERCASE",
+    "skill_name",
+    "skill name",
+    "",
+    "-leading",
+    "trailing-",
+    "repeated--hyphen",
+  ])("rejects invalid external skill directory %j", async (skillName) => {
+    const root = await slCreateTestRepository();
+    repositories.push(root);
+    await slInstall(root, "init", false);
+    const source = await slCreateSource(root, `Invalid skill ${skillName || "empty"}`);
+    const artifactId = "SL-INVALID-SKILL-NAME";
+    const artifactPath = `.github/skills/${skillName}/SKILL.md`;
+    const contractPath = slTestContractPath(artifactId);
+    await slWriteTestPromotedArtifact({
+      root,
+      artifactId,
+      artifactType: "skill",
+      artifactPath,
+      contractPath,
+    });
+    await slWriteTestJson(
+      root,
+      contractPath,
+      slCreateTestContract({
+        artifactId,
+        artifactType: "skill",
+        artifactPath,
+        sourceIds: [source.id],
+      }),
+    );
+
+    await expect(
+      slRegisterPromotion(root, source.id, artifactPath, false, FIXED_NOW),
+    ).rejects.toThrow(/lowercase kebab-case|deterministic skill name/);
+  });
+
+  test("rejects a skill frontmatter name that differs from its folder", async () => {
+    const root = await slCreateTestRepository();
+    repositories.push(root);
+    await slInstall(root, "init", false);
+    const source = await slCreateSource(root, "Mismatched skill frontmatter");
+    const artifactId = "SL-MISMATCHED-SKILL";
+    const prepared = await slPreparePromotion({
+      root,
+      sourceId: source.id,
+      artifactId,
+      artifactType: "skill",
+    });
+    const absolutePath = join(root, ...prepared.artifactPath.split("/"));
+    await writeFile(
+      absolutePath,
+      (await readFile(absolutePath, "utf8")).replace(
+        "name: sl-mismatched-skill",
+        "name: different-skill",
+      ),
+      "utf8",
+    );
+
+    await expect(
+      slRegisterPromotion(
+        root,
+        source.id,
+        prepared.artifactPath,
+        false,
+        FIXED_NOW,
+      ),
+    ).rejects.toThrow(
+      "Promoted skill frontmatter name must match its directory sl-mismatched-skill.",
+    );
+  });
+
+  test("repository validation rejects promoted skill name drift", async () => {
+    const root = await slCreateTestRepository();
+    repositories.push(root);
+    await slInstall(root, "init", false);
+    const source = await slCreateSource(root, "Skill name validation drift");
+    const artifactId = "SL-SKILL-NAME-DRIFT";
+    const prepared = await slPreparePromotion({
+      root,
+      sourceId: source.id,
+      artifactId,
+      artifactType: "skill",
+    });
+    await slRegisterPromotion(
+      root,
+      source.id,
+      prepared.artifactPath,
+      false,
+      FIXED_NOW,
+    );
+    const artifact = await slArtifact(root, artifactId);
+    const absolutePath = join(root, ...artifact.path!.split("/"));
+    await writeFile(
+      absolutePath,
+      (await readFile(absolutePath, "utf8")).replace(
+        /name: "?sl-skill-name-drift"?/,
+        'name: "different-skill"',
+      ),
+      "utf8",
+    );
+
+    const issues = await slValidateRepository(root);
+
+    expect(issues).toContainEqual(
+      expect.objectContaining({
+        severity: "error",
+        code: "skill-name",
+        path: artifact.path,
+      }),
+    );
+  });
+
   test("registers validated generated guidance into non-active probation", async () => {
     const root = await slCreateTestRepository();
     repositories.push(root);
@@ -1842,13 +1992,13 @@ describe("SL promotion", () => {
     }
     await writeFile(
       join(root, ...systemSkill.path.split("/")),
-      `---\nid: ${systemSkill.id}\nname: SL-bootstrap\n---\n\n# Protected\n`,
+      `---\nid: ${systemSkill.id}\nname: sl-bootstrap\n---\n\n# Protected\n`,
       "utf8",
     );
 
     await expect(
       slRegisterPromotion(root, source.id, systemSkill.path, false),
-    ).rejects.toThrow("non-promoted");
+    ).rejects.toThrow("Promoted skill directory must be the deterministic skill name");
 
     const unchangedRegistry = await slLoadRegistry(root);
     expect(

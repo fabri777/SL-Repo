@@ -56,6 +56,11 @@ import {
 } from "./SL-utils.js";
 import { slWriteIndex } from "../SL-index/SL-index.js";
 import {
+  slIsValidSkillName,
+  slSkillFolderName,
+  slSkillNameForArtifactId,
+} from "./SL-skill-name.js";
+import {
   slEvaluateValidationContract,
   slFindValidationContractConflicts,
   slPromotedContractTarget,
@@ -108,7 +113,7 @@ function slPromotionType(path: string): SLPromotedArtifactType {
     return "skill";
   }
   throw new Error(
-    "Promoted path must be .github/instructions/SL-*.instructions.md or .github/skills/SL-*/SKILL.md.",
+    "Promoted path must be .github/instructions/SL-*.instructions.md or .github/skills/<skill-name>/SKILL.md.",
   );
 }
 
@@ -530,13 +535,6 @@ async function slRegisterPromotionUnlocked(
   ) {
     throw new Error("Promoted instruction filename must start with SL-.");
   }
-  if (
-    artifactType === "skill" &&
-    !promotedPath.split("/").at(-2)?.startsWith("SL-")
-  ) {
-    throw new Error("Promoted skill directory must start with SL-.");
-  }
-
   const source = slFindArtifact(registry, sourceId);
   if (source.classification !== "evidence") {
     throw new Error("Only lesson evidence can be promoted.");
@@ -557,6 +555,30 @@ async function slRegisterPromotionUnlocked(
       : `SL-PROMOTED-${sourceId.replace(/^SL-/, "")}`;
   if (promotedId === sourceId) {
     throw new Error("Promoted artifact ID must differ from its source lesson ID.");
+  }
+  if (artifactType === "skill") {
+    const folderName = slSkillFolderName(promotedPath);
+    const expectedName = slSkillNameForArtifactId(promotedId);
+    if (!slIsValidSkillName(folderName)) {
+      throw new Error(
+        "Promoted skill directory must be a lowercase kebab-case skill name.",
+      );
+    }
+    if (folderName !== expectedName) {
+      throw new Error(
+        `Promoted skill directory must be the deterministic skill name ${expectedName}.`,
+      );
+    }
+    if (promotedPath !== `.github/skills/${folderName}/SKILL.md`) {
+      throw new Error(
+        `Promoted skill path must be .github/skills/${folderName}/SKILL.md.`,
+      );
+    }
+    if (markdown.frontmatter.name !== folderName) {
+      throw new Error(
+        `Promoted skill frontmatter name must match its directory ${folderName}.`,
+      );
+    }
   }
   const probationPath = slProbationPath(
     promotedId,

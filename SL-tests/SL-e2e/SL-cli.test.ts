@@ -7,6 +7,7 @@ import { slCaptureLesson } from "../../SL-src/SL-core/SL-capture.js";
 import { slInstall } from "../../SL-src/SL-core/SL-installer.js";
 import { slRegisterPromotion } from "../../SL-src/SL-core/SL-promotion.js";
 import { slLoadRegistry } from "../../SL-src/SL-core/SL-registry.js";
+import { slArtifactUsageContentHash } from "../../SL-src/SL-core/SL-usage.js";
 import {
   slCreateTestRepository,
   slRemoveTestRepository,
@@ -29,7 +30,7 @@ afterEach(async () => {
 function runCli(argumentsList: string[]): string {
   return execFileSync(process.execPath, [cliPath, ...argumentsList], {
     encoding: "utf8",
-    timeout: 30_000,
+    timeout: 60_000,
   });
 }
 
@@ -68,7 +69,7 @@ async function preparePromotedArtifact(
     dryRun: false,
     now: FIXED_NOW,
   });
-  const artifactPath = `.github/skills/${artifactId}/SKILL.md`;
+  const artifactPath = `.github/skills/${artifactId.toLowerCase()}/SKILL.md`;
   const contractPath = slTestContractPath(artifactId);
   await slWriteTestPromotedArtifact({
     root,
@@ -108,23 +109,37 @@ async function pathExists(path: string): Promise<boolean> {
 }
 
 describe("sl-repo CLI", () => {
-  test("exposes commands required by consumer workflows", () => {
-    const help = runCli(["--help"]);
-
-    expect(help).toContain("validate");
-    expect(help).toContain("scope");
-    expect(help).toContain("sweep");
-    expect(runCli(["validate", "--help"])).toContain(
-      "Validate SL schemas, ownership, links, safety, and index state",
-    );
-    expect(runCli(["sweep", "--help"])).toContain(
-      "Apply stale, quarantine, and deletion policy",
-    );
-    expect(runCli(["scope", "--help"])).toContain(
-      "Resolve hierarchical SL scopes",
-    );
-    expect(help).toContain("retrieve");
+  test("reports the 0.4.0 release version", () => {
+    expect(runCli(["--version"]).trim()).toBe("0.4.0");
   });
+
+  test(
+    "exposes commands required by consumer workflows",
+    () => {
+      const help = runCli(["--help"]);
+
+      expect(help).toContain("validate");
+      expect(help).toContain("scope");
+      expect(help).toContain("sweep");
+      expect(runCli(["validate", "--help"])).toContain(
+        "Validate SL schemas, ownership, links, safety, and index state",
+      );
+      expect(runCli(["sweep", "--help"])).toContain(
+        "Apply stale, quarantine, and deletion policy",
+      );
+      expect(runCli(["scope", "--help"])).toContain(
+        "Resolve hierarchical SL scopes",
+      );
+      expect(help).toContain("retrieve");
+      expect(help).toContain("resource");
+      const resourceHelp = runCli(["resource", "--help"]);
+      expect(resourceHelp).toContain("import");
+      expect(resourceHelp).toContain("record");
+      expect(resourceHelp).toContain("baseline");
+      expect(resourceHelp).toContain("stats");
+    },
+    60_000,
+  );
 
   test(
     "runs scoped capture, dependency retrieval, usage, and projection through the CLI",
@@ -600,6 +615,186 @@ describe("sl-repo CLI", () => {
       ]);
     },
     30_000,
+  );
+
+  test(
+    "imports, records, baselines, and reports resource efficiency through the CLI",
+    async () => {
+      const root = await slCreateTestRepository();
+      repositories.push(root);
+      const lessonId = await prepareLesson(root, "CLI resource efficiency");
+      const registry = await slLoadRegistry(root);
+      const lesson = registry.artifacts.find(
+        (artifact) => artifact.id === lessonId,
+      );
+      if (!lesson?.path) {
+        throw new Error("CLI resource lesson was not registered.");
+      }
+      const lessonContent = await readFile(
+        join(root, ...lesson.path.split("/")),
+        "utf8",
+      );
+      const resourceInputPath = join(root, "SL-resource-input.json");
+      await writeFile(
+        resourceInputPath,
+        `${JSON.stringify({
+          schemaVersion: 1,
+          receipts: [
+            {
+              idempotencyKey: "cli-resource-generation",
+              phase: "generation",
+              source: "ci",
+              quality: "measured",
+              provider: "provider-a",
+              modelId: "model-a",
+              tokens: { input: 300, output: 0 },
+              wallClockDurationMs: 3000,
+              timestamp: "2026-09-05T08:00:00.000Z",
+              artifactId: lessonId,
+              artifactContentHash:
+                slArtifactUsageContentHash(lessonContent),
+              generationRunId: "cli-resource-generation-run",
+            },
+          ],
+        }, null, 2)}\n`,
+        "utf8",
+      );
+      const imported = JSON.parse(
+        runCli([
+          "resource",
+          "import",
+          resourceInputPath,
+          root,
+          "--json",
+        ]),
+      ) as { receipts: Array<{ phase: string }> };
+      expect(imported.receipts).toEqual([
+        expect.objectContaining({ phase: "generation" }),
+      ]);
+
+      const started = JSON.parse(
+        runCli([
+          "use",
+          "start",
+          lessonId,
+          root,
+          "--application-id",
+          "cli-resource-application",
+          "--task-run-id",
+          "cli-resource-task",
+          "--idempotency-key",
+          "cli-resource-start",
+          "--json",
+        ]),
+      ) as { applicationId: string };
+      runCli([
+        "use",
+        "finish",
+        started.applicationId,
+        root,
+        "--outcome",
+        "success",
+        "--verified",
+        "--verifier-type",
+        "test-suite",
+        "--evidence-ref",
+        "ci:cli-resource",
+        "--idempotency-key",
+        "cli-resource-finish",
+      ]);
+      runCli([
+        "resource",
+        "record",
+        lessonId,
+        root,
+        "--phase",
+        "application",
+        "--application-id",
+        started.applicationId,
+        "--idempotency-key",
+        "cli-resource-application-receipt",
+        "--provider",
+        "provider-a",
+        "--model",
+        "model-a",
+        "--input-tokens",
+        "100",
+        "--output-tokens",
+        "0",
+        "--wall-clock-ms",
+        "1000",
+        "--timestamp",
+        "2026-09-05T09:00:00.000Z",
+        "--comparison-id",
+        "cli-resource-comparison",
+        "--scenario-key",
+        "cli-resource-scenario",
+      ]);
+      runCli([
+        "resource",
+        "baseline",
+        root,
+        "--task-run-id",
+        "cli-resource-baseline-task",
+        "--comparison-id",
+        "cli-resource-comparison",
+        "--scenario-key",
+        "cli-resource-scenario",
+        "--idempotency-key",
+        "cli-resource-baseline",
+        "--provider",
+        "provider-b",
+        "--model",
+        "model-b",
+        "--input-tokens",
+        "180",
+        "--output-tokens",
+        "0",
+        "--wall-clock-ms",
+        "1800",
+        "--timestamp",
+        "2026-09-05T07:00:00.000Z",
+      ]);
+
+      const report = JSON.parse(
+        runCli([
+          "resource",
+          "stats",
+          lessonId,
+          root,
+          "--json",
+        ]),
+      ) as {
+        advisory: boolean;
+        segments: Array<{
+          verifiedSuccessApplications: {
+            coverage: number;
+          };
+          pairedBaseline: {
+            medianSavings: { totalTokens: number };
+            breakEvenApplications: { totalTokens: number };
+          };
+        }>;
+      };
+      expect(report.advisory).toBe(true);
+      expect(report.segments).toEqual([
+        expect.objectContaining({
+          verifiedSuccessApplications: expect.objectContaining({
+            coverage: 1,
+          }),
+          pairedBaseline: expect.objectContaining({
+            medianSavings: expect.objectContaining({
+              totalTokens: 80,
+            }),
+            breakEvenApplications: expect.objectContaining({
+              totalTokens: 4,
+            }),
+          }),
+        }),
+      ]);
+      expect(runCli(["validate", root])).toContain("SL validation passed.");
+    },
+    60_000,
   );
 
   test("returns nonzero exit codes for invalid usage transitions", async () => {

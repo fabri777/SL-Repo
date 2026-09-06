@@ -233,6 +233,7 @@ export async function slSaveRegistry(
   registry: SLRegistry,
   dryRun: boolean,
   changes: SLChange[],
+  writeJson: typeof slWriteJson = slWriteJson,
 ): Promise<void> {
   registry.artifacts.sort((left, right) =>
     slCompareOrdinal(left.id, right.id),
@@ -261,6 +262,7 @@ export async function slSaveRegistry(
     scopes.values(),
     dryRun,
     changes,
+    writeJson,
   );
   for (const entry of nextCatalog.scopes) {
     const artifacts = artifactsByScope.get(slScopeKey(entry.scope)) ?? [];
@@ -270,7 +272,7 @@ export async function slSaveRegistry(
       scope: entry.scope,
       artifacts,
     };
-    await slWriteJson(
+    await writeJson(
       root,
       entry.registryPath,
       shard,

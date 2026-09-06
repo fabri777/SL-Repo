@@ -13,6 +13,7 @@ import type {
   SLChange,
   SLIndex,
   SLRegistry,
+  SLScopeResourceProjection,
   SLScopeUsageProjection,
   SLUsageProjection,
 } from "../SL-core/SL-types.js";
@@ -99,6 +100,7 @@ export async function slWriteIndex(
   dryRun: boolean,
   changes: SLChange[],
   projections?: SLUsageProjection[],
+  writeJson: typeof slWriteJson = slWriteJson,
 ): Promise<Map<string, SLIndex>> {
   const catalog = await slLoadStateCatalog(root);
   const indexes = await slBuildScopeIndexes(root, registry);
@@ -107,7 +109,7 @@ export async function slWriteIndex(
     const index =
       indexes.get(key) ??
       ({ schemaVersion: 2, scope: entry.scope, artifacts: [] } satisfies SLIndex);
-    await slWriteJson(root, entry.indexPath, index, dryRun, changes);
+    await writeJson(root, entry.indexPath, index, dryRun, changes);
   }
   if (projections) {
     const completeProjections = new Map(
@@ -158,7 +160,7 @@ export async function slWriteIndex(
               ),
           ),
       };
-      await slWriteJson(
+      await writeJson(
         root,
         entry.projectionPath,
         shard,
@@ -177,7 +179,7 @@ export async function slWriteIndex(
         currentArtifactVersions: {},
         projections: [],
       };
-      await slWriteJson(
+      await writeJson(
         root,
         entry.projectionPath,
         shard,
@@ -185,6 +187,26 @@ export async function slWriteIndex(
         changes,
       );
     }
+  }
+  for (const entry of catalog.scopes) {
+    if (
+      !entry.resourceProjectionPath ||
+      (await slExists(slResolveInside(root, entry.resourceProjectionPath)))
+    ) {
+      continue;
+    }
+    const shard: SLScopeResourceProjection = {
+      schemaVersion: 1,
+      scope: entry.scope,
+      projections: [],
+    };
+    await writeJson(
+      root,
+      entry.resourceProjectionPath,
+      shard,
+      dryRun,
+      changes,
+    );
   }
   return indexes;
 }

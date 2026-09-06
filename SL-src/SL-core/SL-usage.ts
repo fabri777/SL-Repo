@@ -206,7 +206,7 @@ function slAssertTimestamp(name: string, value: string): void {
   }
 }
 
-function slAssertEvidenceRef(value: string): void {
+export function slAssertEvidenceRef(value: string): void {
   if (
     !SL_EVIDENCE_REF_PATTERN.test(value) ||
     SL_EMAIL_ADDRESS_PATTERN.test(value) ||

@@ -5,12 +5,13 @@ SL Repo separates reasoning from deterministic enforcement.
 | Layer | Responsibility |
 |---|---|
 | Copilot skills | Decide whether a verified experience is worth capturing and how to express it |
-| CLI | Install, validate, index, register, quarantine, restore, and delete deterministically |
+| Installer CLI | Bootstrap and update the repository-local runtime and managed templates |
+| Repository-local PowerShell runtime | Dispatch post-install operations without Node/npm/global CLI dependencies |
 | Repository files | Preserve evidence and promoted knowledge in Git |
 | `AGENTS.md` | Provider-neutral entry point that directs agents to repository knowledge |
 | Optional automation adapters | Re-run deterministic checks and scheduled retention |
 
-The first four layers are the operational core. GitHub Actions and Azure
+The first five layers are the operational core. GitHub Actions and Azure
 Pipelines are optional adapters over the same CLI and repository state. SL
 does not call GitHub or Azure DevOps APIs for capture, retrieval, projection,
 validation, promotion, or forgetting, so Azure Repos and other Git hosts use
@@ -20,6 +21,13 @@ The installer also maintains a delimited
 `.github/copilot-instructions.md` compatibility block. It improves GitHub
 Copilot discovery but is not required by the SL data model or CLI.
 
+The managed runtime lives at `.github/SL-learning/SL-runtime/`. Its manifest
+defines the complete managed boundary and hashes every payload file. The
+runtime implements command dispatch, health/integrity validation, safe
+primitives, supported syntax, cross-language conformance, and the complete
+post-initialization lifecycle without Node/npm/global CLI dependencies. See
+[Repository-local PowerShell runtime contract](SL-runtime.md).
+
 ## Source-of-truth boundaries
 
 | Data | Authority | Derived or compatibility behavior |
@@ -27,11 +35,13 @@ Copilot discovery but is not required by the SL data model or CLI.
 | Scope ownership and relationships | Hand-authored `SL-scope-catalog.yml`, `.yaml`, or `.json` | Exactly one catalog; no catalog means the compatibility root scope |
 | Lesson/guidance content | SL-managed Markdown plus validation contracts | Registry metadata cannot replace or silently rewrite content |
 | Usage and lifecycle evidence | Immutable event shards | Mutable counters and legacy JSONL are read-only migration inputs |
+| Resource evidence | Immutable provider-neutral resource receipt shards | Projections and advisory efficiency reports are derived; provider prices are never inferred |
 | Lifecycle ownership | Per-scope registry shards | Root `SL-registry.json` is retained as 0.2 compatibility input |
 | Retrieval discovery | Per-scope indexes | Rebuilt from active registry state; never a metrics authority |
 | Usage metrics | Per-scope projections rebuilt from events | Repository aggregation exposes counts only, not a blended success rate |
 | Shard routing | Generated `SL-state-catalog.json` | Contains descriptors and deterministic paths, not artifacts or metrics |
 | Enforcement schemas | Schemas bundled with the reviewed runtime | Installed schema copies are review/editor aids and SL-managed templates |
+| Runtime identity and ownership | Installed `SL-runtime.manifest.json` | Hashes are generated deterministically from LF-normalized template bytes |
 
 Per-scope registry shards are the authority for ownership and governed
 lifecycle state. The root state catalog contains only scope descriptors and
@@ -78,6 +88,13 @@ to call `use start` and `use finish`. SL records association and verification;
 it does not claim that the selected artifact caused an observed improvement.
 Rates remain segmented by application scope. Lifecycle freshness uses the
 latest current-version verified success across every consuming scope.
+
+Resource telemetry uses a second immutable receipt stream for tokens,
+durations, attempts, and optional host-reported monetary cost. Advisory
+efficiency calculations preserve scope, artifact version, provider, model, and
+measurement quality. Baseline savings require explicit compatible pair
+identity, and promotion lineage reports direct, source, and combined resource
+consumption without mutating source receipts.
 
 SL Repo defines future `org` and `company` scopes in documentation only. It
 does not copy local lessons to a central service.

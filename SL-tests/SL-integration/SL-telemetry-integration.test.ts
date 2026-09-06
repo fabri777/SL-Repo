@@ -50,11 +50,8 @@ function slDefaultIndexPath(root: string): string {
 
 const repositories: string[] = [];
 const CAPTURED_AT = new Date("2026-01-01T00:00:00.000Z");
-const SL_RUNTIME_COMMIT = "3c6bb31d1f717595791e9a575d698b5593cbcf10";
 const CHECKOUT_ACTION =
   "actions/checkout@11d5960a326750d5838078e36cf38b85af677262";
-const SETUP_NODE_ACTION =
-  "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020";
 const UPLOAD_ARTIFACT_ACTION =
   "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02";
 const DOWNLOAD_ARTIFACT_ACTION =
@@ -592,7 +589,7 @@ describe("SL telemetry integration", () => {
     ).toEqual(beforeFinishEvents);
 
     const artifactId = "SL-DRY-RUN-PROMOTION";
-    const artifactPath = `.github/skills/${artifactId}/SKILL.md`;
+    const artifactPath = `.github/skills/${artifactId.toLowerCase()}/SKILL.md`;
     const contractPath = slTestContractPath(artifactId);
     const scriptPath = "SL-contract-checks/SL-dry-run-marker.mjs";
     const markerPath = join(root, "SL-dry-run-marker.txt");
@@ -742,8 +739,8 @@ describe("SL telemetry integration", () => {
       contents: "write",
       "pull-requests": "write",
     });
-    expect(validationCheckouts).toHaveLength(2);
-    expect(planningCheckouts).toHaveLength(2);
+    expect(validationCheckouts).toHaveLength(1);
+    expect(planningCheckouts).toHaveLength(1);
     expect(proposalCheckouts).toHaveLength(1);
     for (const checkout of [
       ...validationCheckouts,
@@ -752,17 +749,6 @@ describe("SL telemetry integration", () => {
     ]) {
       expect(checkout.with?.["persist-credentials"]).toBe(false);
     }
-    expect(validationSteps.get("Check out SL Repo runtime")).toEqual({
-      name: "Check out SL Repo runtime",
-      uses: CHECKOUT_ACTION,
-      with: {
-        repository: "fabri777/SL-Repo",
-        ref: SL_RUNTIME_COMMIT,
-        token: "${{ secrets.SL_REPO_TOKEN }}",
-        path: ".SL-tool",
-        "persist-credentials": false,
-      },
-    });
     expect(
       [
         ...forgetting.jobs.plan.steps,
@@ -770,17 +756,11 @@ describe("SL telemetry integration", () => {
       ].flatMap((step) => (step.uses === undefined ? [] : [step.uses])),
     ).toEqual([
       CHECKOUT_ACTION,
-      SETUP_NODE_ACTION,
-      CHECKOUT_ACTION,
       UPLOAD_ARTIFACT_ACTION,
       CHECKOUT_ACTION,
       DOWNLOAD_ARTIFACT_ACTION,
       CREATE_PULL_REQUEST_ACTION,
     ]);
-    expect(planningSteps.get("Check out SL Repo runtime")?.with?.ref).toBe(
-      SL_RUNTIME_COMMIT,
-    );
-    expect(SL_RUNTIME_COMMIT).toMatch(/^[0-9a-f]{40}$/);
     expect(`${validationWorkflow}\n${forgettingWorkflow}`).not.toMatch(
       /\bref:\s*(?:main|master|refs\/heads\/\S+)\b/i,
     );
@@ -790,23 +770,31 @@ describe("SL telemetry integration", () => {
       ),
     ).toEqual({
       name: "Validate contracts, events, projections, and index",
-      run: "node .SL-tool/dist/SL-src/SL-cli/SL-cli.js validate .",
+      shell: "pwsh",
+      run: "pwsh .github/SL-learning/SL-runtime/SL.ps1 validate .",
     });
     expect(planningSteps.get("Preview")).toEqual({
       name: "Preview",
-      run: "node .SL-tool/dist/SL-src/SL-cli/SL-cli.js sweep . --dry-run",
+      shell: "pwsh",
+      run:
+        '$ErrorActionPreference = "Stop"\n' +
+        '$runtime = Join-Path $env:GITHUB_WORKSPACE ".github/SL-learning/SL-runtime/SL.ps1"\n' +
+        "& pwsh -NoLogo -NoProfile -File $runtime --repo-root $env:GITHUB_WORKSPACE sweep $env:GITHUB_WORKSPACE --dry-run\n" +
+        "if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }\n",
     });
     expect(planningSteps.get("Apply")).toEqual({
       name: "Apply",
       if: "${{ github.event_name == 'workflow_dispatch' && inputs.apply }}",
+      shell: "pwsh",
       run:
-        "node .SL-tool/dist/SL-src/SL-cli/SL-cli.js sweep .\n" +
-        "node .SL-tool/dist/SL-src/SL-cli/SL-cli.js validate .\n",
-    });
-    expect(planningSteps.get("Remove SL Repo runtime checkout")).toEqual({
-      name: "Remove SL Repo runtime checkout",
-      if: "always()",
-      run: "rm -rf .SL-tool",
+        '$ErrorActionPreference = "Stop"\n' +
+        '$runtime = Join-Path $env:GITHUB_WORKSPACE ".github/SL-learning/SL-runtime/SL.ps1"\n' +
+        "& pwsh -NoLogo -NoProfile -File $runtime --repo-root $env:GITHUB_WORKSPACE sweep $env:GITHUB_WORKSPACE\n" +
+        "if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }\n" +
+        "& pwsh -NoLogo -NoProfile -File $runtime --repo-root $env:GITHUB_WORKSPACE project $env:GITHUB_WORKSPACE\n" +
+        "if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }\n" +
+        "& pwsh -NoLogo -NoProfile -File $runtime --repo-root $env:GITHUB_WORKSPACE validate $env:GITHUB_WORKSPACE\n" +
+        "if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }\n",
     });
     expect(planningSteps.get("Capture retention patch")?.run).toContain(
       "git diff --cached --binary --full-index",
@@ -855,14 +843,23 @@ describe("SL telemetry integration", () => {
     ]);
     const registry = await slLoadRegistry(root);
 
-    expect(azureValidation).toContain(SL_RUNTIME_COMMIT);
-    expect(azureValidation).toContain("project \"$(Build.SourcesDirectory)\"");
+    expect(azureValidation).toContain(
+      ".github/SL-learning/SL-runtime/SL.ps1",
+    );
+    expect(azureValidation).toContain(
+      "pwsh $runtime project \"$(Build.SourcesDirectory)\"",
+    );
     expect(azureValidation).toContain("Validate SL repository state");
-    expect(azureRetention).toContain(SL_RUNTIME_COMMIT);
+    expect(azureRetention).toContain(
+      ".github/SL-learning/SL-runtime/SL.ps1",
+    );
     expect(azureRetention).toContain("default: false");
     expect(azureRetention).toContain("Publish retention patch for review");
     expect(azureRetention).not.toMatch(/\bgit\s+push\b/i);
     expect(azureRetention).not.toMatch(/\b(?:az\s+repos|gh\s+pr)\b/i);
+    expect(`${azureValidation}\n${azureRetention}`).not.toMatch(
+      /\b(?:UseNode|npm|node\s+\$runtime|runtimeRepository|SL-tool)\b/,
+    );
     expect(
       registry.artifacts.filter((artifact) =>
         artifact.path?.startsWith(".azure-pipelines/SL-learning/"),

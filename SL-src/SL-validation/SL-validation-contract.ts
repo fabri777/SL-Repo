@@ -2,13 +2,18 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import { stat } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { basename, dirname, extname, isAbsolute, join, resolve } from "node:path";
+import { basename, extname, isAbsolute, join, resolve } from "node:path";
 import { Ajv2020, type ErrorObject } from "ajv/dist/2020.js";
 import type { FormatsPlugin } from "ajv-formats";
 import { SL_SECRET_PATTERNS, SL_USER_PATH_PATTERN } from "../SL-core/SL-constants.js";
 import { slParseMarkdown } from "../SL-core/SL-frontmatter.js";
 import { slFindPackageRoot } from "../SL-core/SL-package.js";
 import { slFindArtifact, slLoadRegistry } from "../SL-core/SL-registry.js";
+import {
+  slIsValidSkillName,
+  slSkillFolderName,
+  slSkillNameForArtifactId,
+} from "../SL-core/SL-skill-name.js";
 import type {
   SLArtifactType,
   SLAuditableOverrideMetadata,
@@ -1295,9 +1300,19 @@ function slFrontmatterTypeIssue(
   ) {
     return "Promoted skill path must be under .github/skills/ and end with /SKILL.md.";
   }
-  const expectedName = basename(dirname(target.artifactPath));
-  if (frontmatter.name !== expectedName) {
-    return `Promoted skill frontmatter name must be ${expectedName}.`;
+  const folderName = slSkillFolderName(target.artifactPath);
+  if (!slIsValidSkillName(folderName)) {
+    return "Promoted skill directory must be a lowercase kebab-case skill name.";
+  }
+  const expectedName = slSkillNameForArtifactId(target.artifactId);
+  if (folderName !== expectedName) {
+    return `Promoted skill directory must be the deterministic skill name ${expectedName}.`;
+  }
+  if (target.artifactPath !== `.github/skills/${folderName}/SKILL.md`) {
+    return `Promoted skill path must be .github/skills/${folderName}/SKILL.md.`;
+  }
+  if (frontmatter.name !== folderName) {
+    return `Promoted skill frontmatter name must match its directory ${folderName}.`;
   }
   return undefined;
 }

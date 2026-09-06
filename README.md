@@ -8,6 +8,16 @@ experience -> lesson -> verified reuse -> instruction or skill
                    \-> stale -> quarantine -> deletion
 ```
 
+## Release 0.4.0
+
+Version 0.4.0 adds a complete repository-local PowerShell 7 runtime for the
+SL lifecycle, including deterministic TypeScript/PowerShell conformance,
+integrity-checked immutable payloads, transactional installation and updates,
+provider-neutral resource receipt and efficiency reporting, monorepo scope
+support, and lowercase Agent Skills-compatible names. After initialization,
+repositories can operate SL without Node, npm, network access, or external
+PowerShell modules.
+
 ## Release 0.3.0
 
 Version 0.3.0 adds production monorepo support: hierarchical scope catalogs,
@@ -96,7 +106,7 @@ npm link
 An authenticated Git installation can also invoke the package directly:
 
 ```powershell
-npm exec --yes --package=github:fabri777/SL-Repo#3c6bb31d1f717595791e9a575d698b5593cbcf10 -c "sl-repo --help"
+npm exec --yes --package=github:fabri777/SL-Repo#51ab00795f8109bb3fad7c717bf9f427fec63772 -c "sl-repo --help"
 ```
 
 ## Install into a repository
@@ -124,6 +134,21 @@ package; installed copies support review, editors, and repository-local
 auditing. `update` replaces only files already registered as SL-managed
 system artifacts and the delimited agent instruction blocks.
 
+It also installs the self-contained PowerShell 7 runtime under
+`.github/SL-learning/SL-runtime/`. After initialization, agents can invoke
+scope resolution, capture, retrieval, usage, projection, promotion,
+resource receipts, advisory efficiency, validation, retention, doctor, and conformance commands without
+Node/npm/global SL CLI. See [the runtime contract](SL-docs/SL-runtime.md).
+
+```powershell
+$sl = ".github/SL-learning/SL-runtime/SL.ps1"
+pwsh -NoLogo -NoProfile -File $sl scope resolve --file src/example.ts --json
+pwsh -NoLogo -NoProfile -File $sl retrieve --path src/example.ts --json
+pwsh -NoLogo -NoProfile -File $sl resource stats --json
+pwsh -NoLogo -NoProfile -File $sl project --json
+pwsh -NoLogo -NoProfile -File $sl validate --json
+```
+
 Both optional automation adapters use the reviewed immutable SL Repo commit.
 They never intentionally execute mutable `main` as the runtime. See
 `SL-docs/SL-install.md` for the pin-update procedure,
@@ -146,6 +171,8 @@ sl-repo use finish APPLY-123 C:\path\to\repository `
   --evidence-ref ci:run-123
 sl-repo stats SL-LESSON-ID C:\path\to\repository --scope SL-SCOPE-ORDERS
 sl-repo stats C:\path\to\repository --aggregate repository
+sl-repo resource import .\SL-resource-input.json C:\path\to\repository
+sl-repo resource stats SL-LESSON-ID C:\path\to\repository --json
 sl-repo project C:\path\to\repository
 ```
 
@@ -166,6 +193,11 @@ Verified outcomes require both `--verified` and an explicit trustworthy
 agent or host that applied it must create and finish the receipt. A success
 associated with an artifact is evidence of a useful application, not proof
 that the artifact causally improved the result.
+
+Resource receipts are immutable and provider-neutral. They can record
+generation or application resources, explicit paired baselines, and optional
+host-reported monetary cost. Efficiency reporting is advisory and remains
+segmented by scope, artifact version, provider, model, and measurement quality.
 
 `use start --dry-run` and `use finish --dry-run` print complete planned events
 and projection file changes as JSON while remaining side-effect free.
@@ -246,6 +278,7 @@ See the complete operational references:
 
 - [Architecture and source-of-truth boundaries](SL-docs/SL-architecture.md)
 - [Optional Azure Pipelines adapter](SL-docs/SL-azure-pipelines.md)
+- [Resource receipts and advisory efficiency](SL-docs/SL-resource-efficiency.md)
 - [Release history](CHANGELOG.md)
 - [Scope catalog and precedence](SL-docs/SL-scopes.md)
 - [Sharded state and merge workflow](SL-docs/SL-state-layout.md)

@@ -16,20 +16,6 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # actions/checkout v4.4.0
         with:
           persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # actions/setup-node v4.4.0
-        with:
-          node-version: 20
-      - name: Check out SL Repo runtime
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # actions/checkout v4.4.0
-        with:
-          repository: fabri777/SL-Repo
-          ref: 3c6bb31d1f717595791e9a575d698b5593cbcf10
-          token: ${{ secrets.SL_REPO_TOKEN }}
-          path: .SL-tool
-          persist-credentials: false
-      - name: Build SL Repo runtime
-        run: |
-          npm ci --prefix .SL-tool
-          npm run build --prefix .SL-tool
       - name: Validate contracts, events, projections, and index
-        run: node .SL-tool/dist/SL-src/SL-cli/SL-cli.js validate .
+        shell: pwsh
+        run: pwsh .github/SL-learning/SL-runtime/SL.ps1 validate .
