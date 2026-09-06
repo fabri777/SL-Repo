@@ -1,5 +1,5 @@
 ---
-name: SL-learning-audit
+name: sl-learning-audit
 description: Audit Self Learning artifacts for invalid metadata, stale knowledge, contradictions, broken links, unsafe content, and forgetting eligibility.
 ---
 

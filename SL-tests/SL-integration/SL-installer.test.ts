@@ -174,6 +174,30 @@ describe("SL installer", () => {
     ).rejects.toThrow();
   });
 
+  test("installs bundled skills with lowercase names", async () => {
+    const root = await slCreateTestRepository();
+    repositories.push(root);
+    const skills = [
+      "sl-bootstrap",
+      "sl-learning-audit",
+      "sl-lesson-curator",
+    ];
+
+    await slInstall(root, "init", false);
+
+    expect(
+      (await readdir(join(root, ".github", "skills"))).sort(),
+    ).toEqual(skills);
+    for (const skill of skills) {
+      await expect(
+        readFile(
+          join(root, ".github", "skills", skill, "SKILL.md"),
+          "utf8",
+        ),
+      ).resolves.toContain(`name: ${skill}`);
+    }
+  });
+
   test("creates empty usage and resource projection shards", async () => {
     const root = await slCreateTestRepository();
     repositories.push(root);
@@ -235,10 +259,10 @@ describe("SL installer", () => {
       root,
       ".github",
       "skills",
-      "SL-bootstrap",
+      "sl-bootstrap",
       "SKILL.md",
     );
-    await mkdir(join(root, ".github", "skills", "SL-bootstrap"), {
+    await mkdir(join(root, ".github", "skills", "sl-bootstrap"), {
       recursive: true,
     });
 
@@ -250,7 +274,7 @@ describe("SL installer", () => {
     expect(await readFile(skillPath, "utf8")).toContain("name: custom");
     expect(
       registry.artifacts.some(
-        (artifact) => artifact.path === ".github/skills/SL-bootstrap/SKILL.md",
+        (artifact) => artifact.path === ".github/skills/sl-bootstrap/SKILL.md",
       ),
     ).toBe(false);
   });

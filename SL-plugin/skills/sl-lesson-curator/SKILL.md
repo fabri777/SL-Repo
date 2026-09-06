@@ -1,5 +1,5 @@
 ---
-name: SL-lesson-curator
+name: sl-lesson-curator
 description: Capture verified repository lessons and promote mature knowledge into instructions or skills.
 ---
 

@@ -1,5 +1,5 @@
 ---
-name: SL-bootstrap
+name: sl-bootstrap
 description: Bootstrap, update, diagnose, or install the Self Learning repository layer in a Git repository.
 ---
 

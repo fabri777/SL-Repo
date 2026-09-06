@@ -1,5 +1,5 @@
 ---
-name: SL-lesson-curator
+name: sl-lesson-curator
 description: Capture verified wins and pitfalls, deduplicate lessons, record successful reuse, and promote mature knowledge.
 ---
 

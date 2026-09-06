@@ -644,13 +644,18 @@ export async function slValidateRepository(root: string): Promise<SLValidationIs
       }
       if (
         artifact.artifactType === "skill" &&
-        !basename(dirname(normalizedPath)).startsWith("SL-")
+        !basename(dirname(normalizedPath)).startsWith(
+          artifact.classification === "system" ? "sl-" : "SL-",
+        )
       ) {
         issues.push({
           severity: "error",
           code: "skill-prefix",
           path: normalizedPath,
-          message: "SL-produced skill directories must start with SL-.",
+          message:
+            artifact.classification === "system"
+              ? "Bundled skill directories must start with sl-."
+              : "Promoted skill directories must start with SL-.",
         });
       }
     }

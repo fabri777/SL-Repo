@@ -2,7 +2,9 @@
 
 SL Repo is a TypeScript project for repository-local agent learning.
 
-- Prefix SL-controlled files and directories with `SL-`.
+- Prefix SL-controlled files and directories with `SL-`, except bundled skill
+  directory names and frontmatter names, which use lowercase `sl-` for Agent
+  Skills compatibility.
 - Preserve mandatory ecosystem names such as `package.json`, `SKILL.md`,
   `.github/skills`, and `.github/instructions`.
 - Keep repository-specific evidence local. Do not introduce SL Org or

@@ -109,11 +109,15 @@ describe("SL plugin package", () => {
         name: "Fabrizio Fishkel",
       },
     });
-    for (const skill of [
-      "SL-bootstrap",
-      "SL-lesson-curator",
-      "SL-learning-audit",
-    ]) {
+    const skills = [
+      "sl-bootstrap",
+      "sl-learning-audit",
+      "sl-lesson-curator",
+    ];
+    expect(
+      (await readdir(resolve("SL-plugin", "skills"))).sort(),
+    ).toEqual(skills);
+    for (const skill of skills) {
       const content = await readFile(
         resolve("SL-plugin", "skills", skill, "SKILL.md"),
         "utf8",
@@ -157,8 +161,14 @@ describe("SL plugin package", () => {
       "SL-schemas/SL-state-catalog.schema.json",
       "SL-schemas/SL-usage-projection.schema.json",
       "SL-schemas/SL-validation-contract.schema.json",
+      "SL-plugin/skills/sl-bootstrap/SKILL.md",
+      "SL-plugin/skills/sl-learning-audit/SKILL.md",
+      "SL-plugin/skills/sl-lesson-curator/SKILL.md",
       "SL-tests/SL-fixtures/SL-monorepo-fixture.ts",
       "SL-templates/SL-repository/.github/SL-learning/.gitattributes",
+      "SL-templates/SL-repository/.github/skills/sl-bootstrap/SKILL.md",
+      "SL-templates/SL-repository/.github/skills/sl-learning-audit/SKILL.md",
+      "SL-templates/SL-repository/.github/skills/sl-lesson-curator/SKILL.md",
       "SL-templates/SL-repository/.github/workflows/SL-learning-validation.yml",
       "SL-templates/SL-repository/.github/workflows/SL-learning-forget.yml",
       "SL-templates/SL-repository/.azure-pipelines/SL-learning/SL-validation.yml",

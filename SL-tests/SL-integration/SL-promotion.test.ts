@@ -1842,7 +1842,7 @@ describe("SL promotion", () => {
     }
     await writeFile(
       join(root, ...systemSkill.path.split("/")),
-      `---\nid: ${systemSkill.id}\nname: SL-bootstrap\n---\n\n# Protected\n`,
+      `---\nid: ${systemSkill.id}\nname: sl-bootstrap\n---\n\n# Protected\n`,
       "utf8",
     );
 

@@ -1,5 +1,5 @@
 ---
-name: SL-bootstrap
+name: sl-bootstrap
 description: Install, update, or diagnose the repository-local Self Learning layer.
 ---
 

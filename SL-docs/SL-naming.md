@@ -18,5 +18,7 @@ so tools can discover them.
 | `README.md`, `CONTRIBUTING.md`, `SECURITY.md` | Repository, contribution, and security discovery |
 
 Everything below those fixed roots that SL controls should use an `SL-`
-prefix, such as `.github/skills/SL-lesson-curator` and
+prefix, except Agent Skills directory names and frontmatter names, which use
+the lowercase `sl-` prefix required by the ecosystem. Examples include
+`.github/skills/sl-lesson-curator` and
 `.azure-pipelines/SL-learning/SL-validation.yml`.

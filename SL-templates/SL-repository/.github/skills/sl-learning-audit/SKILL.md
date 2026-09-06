@@ -1,5 +1,5 @@
 ---
-name: SL-learning-audit
+name: sl-learning-audit
 description: Validate and review stale, contradictory, unsafe, or deletion-eligible SL knowledge.
 ---
 

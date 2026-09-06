@@ -1,5 +1,5 @@
 ---
-name: SL-learning-audit
+name: sl-learning-audit
 description: Audit SL artifacts for stale, contradictory, malformed, unsafe, or deletion-eligible knowledge.
 ---
 
