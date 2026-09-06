@@ -113,7 +113,9 @@ describe("SL PowerShell runtime contract", () => {
     expect(second).toEqual(first);
     expect(secondBytes).toBe(firstBytes);
     expect(first.runtimeVersion).toBe(SL_RUNTIME_VERSION);
-    expect(first.sourceReleaseCommit).toBe("__SL_SOURCE_RELEASE_COMMIT__");
+    expect(first.sourceReleaseCommit).toBe(
+      "51ab00795f8109bb3fad7c717bf9f427fec63772",
+    );
     expect(first.files.map((file) => file.path)).toEqual(
       SL_RUNTIME_PAYLOAD_FILES,
     );

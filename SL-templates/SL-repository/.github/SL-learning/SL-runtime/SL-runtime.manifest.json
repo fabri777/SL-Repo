@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "runtimeVersion": "0.4.0",
-  "sourceReleaseCommit": "__SL_SOURCE_RELEASE_COMMIT__",
+  "sourceReleaseCommit": "51ab00795f8109bb3fad7c717bf9f427fec63772",
   "configContractVersion": 1,
   "conformanceVersion": 1,
   "minimumPowerShellVersion": "7.0.0",

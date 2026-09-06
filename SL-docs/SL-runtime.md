@@ -171,16 +171,17 @@ rejected.
 
 ## Manifest and update rules
 
-The manifest records runtime version, source-release commit placeholder,
-manifest schema version, SL config contract version, conformance version,
-minimum PowerShell version, and the SHA-256 of every payload file. The
-manifest does not hash itself.
+The manifest records runtime version, source-release commit, manifest schema
+version, SL config contract version, conformance version, minimum PowerShell
+version, and the SHA-256 of every payload file. The manifest does not hash
+itself.
 
 `npm run build:runtime` deterministically copies the manifest schema into the
 runtime template, hashes LF-normalized template bytes, sorts paths ordinally,
-and stages the manifest with `__SL_SOURCE_RELEASE_COMMIT__`. Release packaging
-may replace that placeholder with the reviewed 40-character commit while
-recomputing no payload hashes.
+and stages the manifest with `SL_RUNTIME_SOURCE_RELEASE_COMMIT`. The version
+commit uses `__SL_SOURCE_RELEASE_COMMIT__`; the dedicated immutable-pin commit
+replaces it with the reviewed 40-character version commit while recomputing no
+payload hashes.
 
 On update, SL first validates every file against the installed manifest. It
 rejects missing, modified, invalid, or mixed-version runtime state. Only then

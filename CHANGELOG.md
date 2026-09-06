@@ -40,9 +40,8 @@
 
 - 0.3 monorepo state, installed runtime manifests, and optional automation
   adapters remain supported update inputs.
-- The source release commit remains the staging placeholder and automation
-  adapters retain their reviewed 0.3 pin in this version commit; both must be
-  updated in a later dedicated immutable-pin commit.
+- The runtime manifest and immutable source examples are pinned to reviewed
+  0.4.0 version commit `51ab00795f8109bb3fad7c717bf9f427fec63772`.
 
 ## 0.3.0 - 2026-09-04
 

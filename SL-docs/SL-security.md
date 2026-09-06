@@ -37,7 +37,7 @@ repository.
 - Store opaque receipt and approval references, never reviewer identity,
   command output, or source evidence in telemetry.
 - Acquire an optional automation-adapter runtime only from reviewed immutable
-  commit `3c6bb31d1f717595791e9a575d698b5593cbcf10` until a signed versioned
+  commit `51ab00795f8109bb3fad7c717bf9f427fec63772` until a signed versioned
   package or release is available.
 - Set `persist-credentials: false` on consumer and runtime checkouts.
   Authentication comes from normal Git-host repository permissions, secrets,

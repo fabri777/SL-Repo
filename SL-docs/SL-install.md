@@ -94,7 +94,7 @@ Configure normal Git authentication for the authorized source, then run an
 immutable package reference. The current GitHub source example is:
 
 ```powershell
-npm exec --yes --package=github:fabri777/SL-Repo#3c6bb31d1f717595791e9a575d698b5593cbcf10 -c "sl-repo init C:\path\to\target"
+npm exec --yes --package=github:fabri777/SL-Repo#51ab00795f8109bb3fad7c717bf9f427fec63772 -c "sl-repo init C:\path\to\target"
 ```
 
 An Azure Repos mirror can be cloned and checked out at the same full commit
@@ -103,7 +103,7 @@ also be used when the local Git credential configuration already authorizes
 it:
 
 ```powershell
-npm exec --yes --package="git+https://dev.azure.com/<organization>/<project>/_git/<runtime-repository>#3c6bb31d1f717595791e9a575d698b5593cbcf10" -c "sl-repo --help"
+npm exec --yes --package="git+https://dev.azure.com/<organization>/<project>/_git/<runtime-repository>#51ab00795f8109bb3fad7c717bf9f427fec63772" -c "sl-repo --help"
 ```
 
 Do not place credentials in the URL, repository files, or SL state. The Git
@@ -135,7 +135,7 @@ Installation includes two adapters:
   `.azure-pipelines/SL-learning/`.
 
 The adapters acquire reviewed source snapshot
-`3c6bb31d1f717595791e9a575d698b5593cbcf10`, build it, and invoke the CLI. The
+`51ab00795f8109bb3fad7c717bf9f427fec63772`, build it, and invoke the CLI. The
 full commit SHA is immutable; adapters must never use `main`, another branch,
 or a moving tag for runtime acquisition.
 
@@ -189,9 +189,11 @@ fixtures/tests, secured consumer templates, plugin skills, release history,
 and linked documentation together.
 
 `npm run build:runtime` stages the deterministic template manifest. It uses
-the source release placeholder `__SL_SOURCE_RELEASE_COMMIT__`, copies the
+the source release value from `SL_RUNTIME_SOURCE_RELEASE_COMMIT`, copies the
 manifest schema into the template, and records LF-normalized hashes for every
-runtime payload. See
+runtime payload. The version commit uses
+`__SL_SOURCE_RELEASE_COMMIT__`; the dedicated immutable-pin commit replaces
+it with the reviewed version commit SHA. See
 [Repository-local PowerShell runtime contract](SL-runtime.md) for the exact
 layout, supported YAML/frontmatter/validation/glob subsets, and exit codes.
 

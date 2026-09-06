@@ -19,7 +19,7 @@ The consuming pipeline must declare a repository resource named `SLRuntime`
 and pin it to this exact commit:
 
 ```text
-3c6bb31d1f717595791e9a575d698b5593cbcf10
+51ab00795f8109bb3fad7c717bf9f427fec63772
 ```
 
 For an Azure Repos mirror in the same organization:
@@ -30,7 +30,7 @@ resources:
     - repository: SLRuntime
       type: git
       name: <runtime-project>/<runtime-repository>
-      ref: 3c6bb31d1f717595791e9a575d698b5593cbcf10
+      ref: 51ab00795f8109bb3fad7c717bf9f427fec63772
 ```
 
 Use normal Azure Repos repository permissions. If the mirror is in another
@@ -46,7 +46,7 @@ resources:
       type: github
       endpoint: <github-service-connection>
       name: <runtime-owner>/<runtime-repository>
-      ref: 3c6bb31d1f717595791e9a575d698b5593cbcf10
+      ref: 51ab00795f8109bb3fad7c717bf9f427fec63772
 ```
 
 The service connection supplies authentication. The installed templates
@@ -69,7 +69,7 @@ resources:
     - repository: SLRuntime
       type: git
       name: <runtime-project>/<runtime-repository>
-      ref: 3c6bb31d1f717595791e9a575d698b5593cbcf10
+      ref: 51ab00795f8109bb3fad7c717bf9f427fec63772
 
 jobs:
   - template: /.azure-pipelines/SL-learning/SL-validation.yml
@@ -125,7 +125,7 @@ resources:
     - repository: SLRuntime
       type: git
       name: <runtime-project>/<runtime-repository>
-      ref: 3c6bb31d1f717595791e9a575d698b5593cbcf10
+      ref: 51ab00795f8109bb3fad7c717bf9f427fec63772
 
 jobs:
   - template: /.azure-pipelines/SL-learning/SL-retention.yml
