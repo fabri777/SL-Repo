@@ -102,7 +102,7 @@ describe("SL plugin package", () => {
 
     expect(manifest).toEqual({
       name: "sl-repo",
-      version: "0.3.0",
+      version: "0.4.0",
       description:
         "Repository-local capture, promotion, validation, and forgetting for GitHub Copilot agents",
       author: {

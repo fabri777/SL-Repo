@@ -330,7 +330,7 @@ async function slEvaluationArtifactId(
 const program = new Command()
   .name("sl-repo")
   .description("Repository-local self-learning lifecycle")
-  .version("0.3.0");
+  .version("0.4.0");
 
 for (const mode of ["init", "update"] as const) {
   program

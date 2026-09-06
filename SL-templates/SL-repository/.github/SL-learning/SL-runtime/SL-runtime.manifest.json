@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "runtimeVersion": "0.3.0",
+  "runtimeVersion": "0.4.0",
   "sourceReleaseCommit": "__SL_SOURCE_RELEASE_COMMIT__",
   "configContractVersion": 1,
   "conformanceVersion": 1,
@@ -56,11 +56,11 @@
     },
     {
       "path": "SL.Runtime.psm1",
-      "sha256": "1316c3e7a9bd46bc4ecbd55aea5cf2ba632bd230f249fd79687801c85edce3e9"
+      "sha256": "b94864cfd3182b738d9764d0e5ca10c9e778df5344d32d2d1cf8edc8dea34857"
     },
     {
       "path": "SL.ps1",
-      "sha256": "068cecc1e80695f7f1b21b92fe3b427facf4b9fd70b7b25dec4c2e0824e70033"
+      "sha256": "fcd889214f5926397cd22d72508290fdae762cf46614a26fc4133e67b37b9f1a"
     },
     {
       "path": "SL.sh",

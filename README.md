@@ -8,6 +8,16 @@ experience -> lesson -> verified reuse -> instruction or skill
                    \-> stale -> quarantine -> deletion
 ```
 
+## Release 0.4.0
+
+Version 0.4.0 adds a complete repository-local PowerShell 7 runtime for the
+SL lifecycle, including deterministic TypeScript/PowerShell conformance,
+integrity-checked immutable payloads, transactional installation and updates,
+provider-neutral resource receipt and efficiency reporting, monorepo scope
+support, and lowercase Agent Skills-compatible names. After initialization,
+repositories can operate SL without Node, npm, network access, or external
+PowerShell modules.
+
 ## Release 0.3.0
 
 Version 0.3.0 adds production monorepo support: hierarchical scope catalogs,

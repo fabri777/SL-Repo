@@ -1,14 +1,6 @@
 # Changelog
 
-## Unreleased
-
-### Added
-
-- Repository-local PowerShell resource receipt import, recording, baseline,
-  projection, validation, and advisory efficiency reporting with promotion
-  lineage.
-
-## Unreleased
+## 0.4.0 - 2026-09-06
 
 ### Added
 
@@ -21,6 +13,36 @@
 - Provider-neutral resource import, artifact resource recording, paired
   baseline commands, segmented advisory efficiency metrics, and promotion
   lineage resource reporting.
+
+### Changed
+
+- Installed repositories can run the complete SL lifecycle without Node, npm,
+  network access, or external PowerShell modules.
+- Runtime installation and updates verify a deterministic manifest and every
+  LF-normalized payload hash before loading executable PowerShell.
+- Runtime and installer mutations are transactional, including rollback of
+  partially staged schema, manifest, projection, and update changes.
+- Monorepo scope-sharded state and governed cross-scope promotion remain
+  supported by the self-contained runtime.
+
+### Fixed
+
+- Preserve valid empty usage and resource projection arrays across
+  PowerShell projection and validation.
+- Reject malformed resource inputs and locally modified, incomplete, or
+  mixed-version runtime payloads without partially updating the repository.
+- Reclaim stale mutation locks while preserving live-owner and unknown-owner
+  safety checks.
+- Install and promote bundled skills with lowercase directory and frontmatter
+  names for Agent Skills compatibility.
+
+### Compatibility
+
+- 0.3 monorepo state, installed runtime manifests, and optional automation
+  adapters remain supported update inputs.
+- The source release commit remains the staging placeholder and automation
+  adapters retain their reviewed 0.3 pin in this version commit; both must be
+  updated in a later dedicated immutable-pin commit.
 
 ## 0.3.0 - 2026-09-04
 

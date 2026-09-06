@@ -12,8 +12,13 @@ or update SL. After initialization, the complete operational lifecycle runs
 through repository-local PowerShell without Node, npm, npx, a global SL CLI,
 network access, or external PowerShell modules.
 
-SL Repo 0.3.0 supports both single repositories and hierarchical monorepos.
-Existing 0.2 root state is migrated additively into deterministic scope shards.
+SL Repo 0.4.0 supports both single repositories and hierarchical monorepos.
+It installs a complete repository-local PowerShell 7 runtime, including
+resource receipt and advisory efficiency operations. Existing 0.2 root state
+is migrated additively into deterministic scope shards, and 0.3 runtime
+installations can be updated through the guarded manifest transaction.
+Bundled and promoted skill directory and frontmatter names are lowercase for
+Agent Skills compatibility.
 
 ## From a local development clone
 
@@ -189,6 +194,14 @@ manifest schema into the template, and records LF-normalized hashes for every
 runtime payload. See
 [Repository-local PowerShell runtime contract](SL-runtime.md) for the exact
 layout, supported YAML/frontmatter/validation/glob subsets, and exit codes.
+
+Version releases use two reviewed commits. The first commit updates versions,
+release notes, tests, generated runtime payloads, and the manifest hashes while
+leaving `sourceReleaseCommit` as `__SL_SOURCE_RELEASE_COMMIT__` and retaining
+the previous reviewed adapter pin. After that commit is reviewed, the
+follow-up immutable-pin commit replaces the placeholder and every documented,
+template, and test pin with the first commit's full 40-character SHA, rebuilds
+the runtime manifest, and reruns the complete release validation.
 
 After installation or update, run:
 
