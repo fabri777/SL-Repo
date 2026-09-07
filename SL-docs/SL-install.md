@@ -3,14 +3,21 @@
 ## Prerequisites
 
 - Git
-- Node.js 20 or newer
 - PowerShell 7 or newer for the installed repository-local runtime
 - A Git repository to receive the SL layer
 
-No CI provider is required. Node is currently required to build, initialize,
-or update SL. After initialization, the complete operational lifecycle runs
-through repository-local PowerShell without Node, npm, npx, a global SL CLI,
-network access, or external PowerShell modules.
+Choose one runtime acquisition path:
+
+| Installation path | Additional prerequisites |
+|---|---|
+| Portable release | GitHub CLI authenticated to the private repository; no separately installed Node.js |
+| npm or private Git source | Node.js 20 or newer and npm |
+| Local development clone | Node.js 20 or newer, npm, and source-repository access |
+
+No CI provider is required. The portable release removes the Node prerequisite
+for initial installation. After initialization, the complete operational
+lifecycle runs through the repository-local PowerShell runtime without Node,
+npm, npx, a global SL CLI, network access, or external PowerShell modules.
 
 SL Repo 0.4.0 supports both single repositories and hierarchical monorepos.
 It installs a complete repository-local PowerShell 7 runtime, including
@@ -19,6 +26,58 @@ is migrated additively into deterministic scope shards, and 0.3 runtime
 installations can be updated through the guarded manifest transaction.
 Bundled and promoted skill directory and frontmatter names are lowercase for
 Agent Skills compatibility.
+
+## Portable installation without system Node.js
+
+Portable archives contain the compiled SL Repo package, schemas, templates,
+plugin assets, documentation, and a private Node runtime. They install under a
+user-local directory and do not modify the system Node.js installation or
+require administrator permissions.
+
+Download and inspect the bootstrapper from an exact reviewed release. On
+Windows:
+
+```powershell
+gh release download <release-tag> --repo fabri777/SL-Repo --pattern SL-install.ps1
+Get-Content .\SL-install.ps1
+.\SL-install.ps1 -Release <release-tag>
+```
+
+On macOS or Linux:
+
+```sh
+gh release download <release-tag> --repo fabri777/SL-Repo --pattern SL-install.sh
+cat SL-install.sh
+chmod +x SL-install.sh
+./SL-install.sh --release <release-tag>
+```
+
+The scripts:
+
+1. Detect the current operating system and architecture.
+2. Download `SL-release-manifest.json`, `SL-checksums.txt`, and the matching
+   archive through the authenticated GitHub CLI session.
+3. Verify the archive SHA-256 and confirm that its embedded source commit,
+   runtime version, platform, and architecture match the release manifest.
+4. Extract to a temporary directory and atomically move the verified runtime
+   into the user-local installation.
+5. Create a launcher under the installation's `bin` directory without editing
+   the user's `PATH`.
+
+Use `-InstallRoot` on Windows or `--install-root` on POSIX systems to choose an
+explicit location. Use `-AssetDirectory` or `--asset-directory` for an offline
+installation from previously reviewed assets. Replacing an installed version
+requires `-Force` or `--force`; failed verification or extraction leaves the
+current installation selected.
+
+After adding the printed `bin` directory to `PATH`, initialize a repository:
+
+```powershell
+sl-repo init C:\path\to\target --dry-run
+sl-repo init C:\path\to\target
+sl-repo doctor C:\path\to\target
+sl-repo validate C:\path\to\target
+```
 
 ## From a local development clone
 

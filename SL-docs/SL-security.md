@@ -39,6 +39,16 @@ repository.
 - Acquire an optional automation-adapter runtime only from reviewed immutable
   commit `51ab00795f8109bb3fad7c717bf9f427fec63772` until a signed versioned
   package or release is available.
+- Acquire portable runtimes from an exact reviewed release through the user's
+  authenticated GitHub CLI session. Never accept credentials as bootstrapper
+  parameters or embed them in download URLs.
+- Verify every portable archive against the release SHA-256 list before
+  extraction. After extraction, require the embedded version, source commit,
+  Node runtime version, platform, and architecture to match the release
+  manifest before changing the selected installation.
+- Stage portable updates in a temporary directory and replace the selected
+  user-local runtime only after verification succeeds. Preserve the prior
+  runtime if download, verification, extraction, or replacement fails.
 - Set `persist-credentials: false` on consumer and runtime checkouts.
   Authentication comes from normal Git-host repository permissions, secrets,
   or service connections and is never embedded in an SL template.

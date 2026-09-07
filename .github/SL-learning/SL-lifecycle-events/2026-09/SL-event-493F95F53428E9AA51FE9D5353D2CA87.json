@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "timestamp": "2026-09-05T07:43:26.492Z",
+  "artifactId": "SL-20260905-KEEP-CROSS-PLATFORM-BOOTSTRAP-LOGIC-THIN",
+  "action": "captured",
+  "toStatus": "raw",
+  "toPath": ".github/SL-learning/SL-lessons/2026-09/SL-2026-09-05-keep-cross-platform-bootstrap-logic-thin.md",
+  "eventId": "SL-EVENT-493F95F53428E9AA51FE9D5353D2CA87",
+  "idempotencyKey": "sha256:493f95f53428e9aa51fe9d5353d2ca872e69f60ee6529ac20f79017515b1a4bf"
+}

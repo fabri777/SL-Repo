@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Portable Windows, Linux, and macOS bootstrap bundles that include the
+  compiled initialization CLI, production dependencies, repository assets,
+  and a private Node runtime.
+- Native PowerShell and POSIX bootstrap scripts with authenticated release
+  download, SHA-256 verification, manifest validation, and atomic user-local
+  installation.
+- A pinned multi-platform release workflow and Node-free initial installation
+  integration coverage.
+
 ## 0.4.0 - 2026-09-06
 
 ### Added

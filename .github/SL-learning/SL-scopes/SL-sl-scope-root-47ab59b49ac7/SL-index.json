@@ -4,5 +4,17 @@
     "id": "SL-SCOPE-ROOT",
     "path": "."
   },
-  "artifacts": []
+  "artifacts": [
+    {
+      "id": "SL-20260905-KEEP-CROSS-PLATFORM-BOOTSTRAP-LOGIC-THIN",
+      "path": ".github/SL-learning/SL-lessons/2026-09/SL-2026-09-05-keep-cross-platform-bootstrap-logic-thin.md",
+      "artifactType": "lesson",
+      "status": "raw",
+      "trigger": [
+        "cross-platform distribution",
+        "portable installer"
+      ],
+      "relatedTo": []
+    }
+  ]
 }

@@ -14,6 +14,8 @@
     "SL-templates",
     "SL-plugin",
     "SL-tests",
+    "SL-install.ps1",
+    "SL-install.sh",
     "CHANGELOG.md",
     "README.md",
     "SECURITY.md"
@@ -28,6 +30,8 @@
     "test:runtime": "npm run build && vitest run --config SL-vitest.config.ts SL-tests/SL-unit/SL-runtime-contract.test.ts SL-tests/SL-integration/SL-runtime.test.ts",
     "runtime:conformance": "npm run build && node dist/SL-src/SL-runtime/SL-runtime-conformance.js",
     "test:watch": "vitest",
+    "portable:stage": "node dist/SL-src/SL-distribution/SL-package-portable.js",
+    "portable:manifest": "node dist/SL-src/SL-distribution/SL-create-release-manifest.js",
     "validate:self": "npm run build && node dist/SL-src/SL-cli/SL-cli.js validate .",
     "ci": "npm run check && npm test"
   },

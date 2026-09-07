@@ -139,6 +139,8 @@ describe("SL plugin package", () => {
       "SL-templates",
       "SL-plugin",
       "SL-tests",
+      "SL-install.ps1",
+      "SL-install.sh",
       "CHANGELOG.md",
       "README.md",
       "SECURITY.md",
@@ -147,6 +149,8 @@ describe("SL plugin package", () => {
     const requiredFiles = [
       "CHANGELOG.md",
       "SECURITY.md",
+      "SL-install.ps1",
+      "SL-install.sh",
       "SL-docs/SL-azure-pipelines.md",
       "SL-docs/SL-install.md",
       "SL-docs/SL-migration-0.2.md",

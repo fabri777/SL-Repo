@@ -109,6 +109,28 @@ An authenticated Git installation can also invoke the package directly:
 npm exec --yes --package=github:fabri777/SL-Repo#51ab00795f8109bb3fad7c717bf9f427fec63772 -c "sl-repo --help"
 ```
 
+For machines without Node.js, install a portable release that carries its own
+reviewed Node runtime. Windows uses the PowerShell bootstrapper:
+
+```powershell
+gh release download <release-tag> --repo fabri777/SL-Repo --pattern SL-install.ps1
+.\SL-install.ps1 -Release <release-tag>
+```
+
+macOS and Linux use the POSIX bootstrapper:
+
+```sh
+gh release download <release-tag> --repo fabri777/SL-Repo --pattern SL-install.sh
+chmod +x SL-install.sh
+./SL-install.sh --release <release-tag>
+```
+
+Both bootstrappers use the existing authenticated GitHub CLI session, verify
+the selected archive against `SL-checksums.txt`, validate its release
+manifest, and install under a user-local directory without administrator
+permissions. Add the printed `bin` directory to `PATH`. Git remains required;
+a separately installed Node.js runtime does not.
+
 ## Install into a repository
 
 Preview the installation:
