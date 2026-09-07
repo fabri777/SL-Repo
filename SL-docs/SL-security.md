@@ -37,7 +37,7 @@ repository.
 - Store opaque receipt and approval references, never reviewer identity,
   command output, or source evidence in telemetry.
 - Acquire an optional automation-adapter runtime only from reviewed immutable
-  commit `51ab00795f8109bb3fad7c717bf9f427fec63772` until a signed versioned
+  commit `e841414d13bfdcd1c534eb7e101f7f2330dc4709` until a signed versioned
   package or release is available.
 - Acquire portable runtimes from an exact reviewed release through the user's
   authenticated GitHub CLI session. Never accept credentials as bootstrapper

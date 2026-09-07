@@ -199,7 +199,7 @@ describe("SL plugin package", () => {
       await readFile(resolve("SL-docs/SL-install.md"), "utf8"),
     ].join("\n");
     expect(sourceInstallExamples).toContain(
-      "github:ffishkel_microsoft/SL#51ab00795f8109bb3fad7c717bf9f427fec63772",
+      "github:ffishkel_microsoft/SL#e841414d13bfdcd1c534eb7e101f7f2330dc4709",
     );
     expect(sourceInstallExamples).not.toMatch(
       /github:ffishkel_microsoft\/SL(?!#[0-9a-f]{40})/,

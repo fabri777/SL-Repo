@@ -116,7 +116,7 @@ npm link
 An authenticated Git installation can also invoke the package directly:
 
 ```powershell
-npm exec --yes --package=github:ffishkel_microsoft/SL#51ab00795f8109bb3fad7c717bf9f427fec63772 -c "sl-repo --help"
+npm exec --yes --package=github:ffishkel_microsoft/SL#e841414d13bfdcd1c534eb7e101f7f2330dc4709 -c "sl-repo --help"
 ```
 
 For machines without Node.js, install a portable release that carries its own
