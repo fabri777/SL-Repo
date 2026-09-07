@@ -52,6 +52,17 @@ function expectSuccess(result: ReturnType<typeof run>): void {
   ).toBe(0);
 }
 
+function environmentWithoutSystemNode(): NodeJS.ProcessEnv {
+  const nodeDirectory = dirname(process.execPath).toLowerCase();
+  const pathEntries = (process.env.PATH ?? "")
+    .split(process.platform === "win32" ? ";" : ":")
+    .filter((entry) => resolve(entry).toLowerCase() !== nodeDirectory);
+  return {
+    ...process.env,
+    PATH: pathEntries.join(process.platform === "win32" ? ";" : ":"),
+  };
+}
+
 describe("SL portable installation", () => {
   test("runs the bundled CLI without system Node and initializes a repository", async () => {
     const outputRoot = await mkdtemp(join(tmpdir(), "SL-portable-e2e-"));
@@ -80,7 +91,7 @@ describe("SL portable installation", () => {
       "SL-cli",
       "SL-cli.js",
     );
-    const noSystemNodeEnvironment = { ...process.env, PATH: "" };
+    const noSystemNodeEnvironment = environmentWithoutSystemNode();
 
     const help = run(runtimePath, [cliPath, "--help"], {
       env: noSystemNodeEnvironment,
@@ -190,7 +201,7 @@ describe("SL portable installation", () => {
       "SL-cli.js",
     );
     const result = run(installedRuntime, [installedCli, "--help"], {
-      env: { ...process.env, PATH: "" },
+      env: environmentWithoutSystemNode(),
     });
     expectSuccess(result);
     expect(result.stdout).toContain("sl-repo");
