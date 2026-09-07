@@ -19,13 +19,17 @@ for initial installation. After initialization, the complete operational
 lifecycle runs through the repository-local PowerShell runtime without Node,
 npm, npx, a global SL CLI, network access, or external PowerShell modules.
 
-SL Repo 0.4.0 supports both single repositories and hierarchical monorepos.
+SL Repo 0.5.0 supports both single repositories and hierarchical monorepos.
 It installs a complete repository-local PowerShell 7 runtime, including
 resource receipt and advisory efficiency operations. Existing 0.2 root state
 is migrated additively into deterministic scope shards, and 0.3 runtime
 installations can be updated through the guarded manifest transaction.
 Bundled and promoted skill directory and frontmatter names are lowercase for
 Agent Skills compatibility.
+
+Version 0.5.0 uses the package identity `@ffishkel_microsoft/sl`. Consumers of
+the historical `@fabri777/sl-repo` package must update their dependency or
+immutable Git source explicitly. The installed `sl-repo` command is unchanged.
 
 ## Portable installation without system Node.js
 
@@ -38,7 +42,7 @@ Download and inspect the bootstrapper from an exact reviewed release. On
 Windows:
 
 ```powershell
-gh release download <release-tag> --repo fabri777/SL-Repo --pattern SL-install.ps1
+gh release download <release-tag> --repo ffishkel_microsoft/SL --pattern SL-install.ps1
 Get-Content .\SL-install.ps1
 .\SL-install.ps1 -Release <release-tag>
 ```
@@ -46,7 +50,7 @@ Get-Content .\SL-install.ps1
 On macOS or Linux:
 
 ```sh
-gh release download <release-tag> --repo fabri777/SL-Repo --pattern SL-install.sh
+gh release download <release-tag> --repo ffishkel_microsoft/SL --pattern SL-install.sh
 cat SL-install.sh
 chmod +x SL-install.sh
 ./SL-install.sh --release <release-tag>
@@ -153,7 +157,7 @@ Configure normal Git authentication for the authorized source, then run an
 immutable package reference. The current GitHub source example is:
 
 ```powershell
-npm exec --yes --package=github:fabri777/SL-Repo#51ab00795f8109bb3fad7c717bf9f427fec63772 -c "sl-repo init C:\path\to\target"
+npm exec --yes --package=github:ffishkel_microsoft/SL#51ab00795f8109bb3fad7c717bf9f427fec63772 -c "sl-repo init C:\path\to\target"
 ```
 
 An Azure Repos mirror can be cloned and checked out at the same full commit

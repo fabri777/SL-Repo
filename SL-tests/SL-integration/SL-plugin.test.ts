@@ -102,7 +102,7 @@ describe("SL plugin package", () => {
 
     expect(manifest).toEqual({
       name: "sl-repo",
-      version: "0.4.0",
+      version: "0.5.0",
       description:
         "Repository-local capture, promotion, validation, and forgetting for GitHub Copilot agents",
       author: {
@@ -199,10 +199,10 @@ describe("SL plugin package", () => {
       await readFile(resolve("SL-docs/SL-install.md"), "utf8"),
     ].join("\n");
     expect(sourceInstallExamples).toContain(
-      "github:fabri777/SL-Repo#51ab00795f8109bb3fad7c717bf9f427fec63772",
+      "github:ffishkel_microsoft/SL#51ab00795f8109bb3fad7c717bf9f427fec63772",
     );
     expect(sourceInstallExamples).not.toMatch(
-      /github:fabri777\/SL-Repo(?!#[0-9a-f]{40})/,
+      /github:ffishkel_microsoft\/SL(?!#[0-9a-f]{40})/,
     );
   }, SL_PACKAGE_AUDIT_TIMEOUT_MS);
 

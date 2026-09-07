@@ -73,7 +73,7 @@ describe("repository-local PowerShell runtime", () => {
     const nested = join(root, "services", "orders");
     await mkdir(nested, { recursive: true });
 
-    expect(manifest.runtimeVersion).toBe("0.4.0");
+    expect(manifest.runtimeVersion).toBe("0.5.0");
     expect(manifest.files).toHaveLength(15);
     expect(
       registry.artifacts.filter((artifact) =>
@@ -354,7 +354,7 @@ describe("repository-local PowerShell runtime", () => {
     expect(await readFile(manualPath, "utf8")).toBe("preserve\n");
     expect(
       JSON.parse(await readFile(manifestPath, "utf8")).runtimeVersion,
-    ).toBe("0.4.0");
+    ).toBe("0.5.0");
   });
 
   test("rejects a runtime without its previous manifest", async () => {

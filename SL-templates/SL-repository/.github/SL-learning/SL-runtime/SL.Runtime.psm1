@@ -1,6 +1,6 @@
 Set-StrictMode -Version Latest
 
-$script:SLRuntimeVersion = '0.4.0'
+$script:SLRuntimeVersion = '0.5.0'
 $script:SLRuntimePayloadFiles = [string[]] @(
     'SL-conformance-vectors.json',
     'SL-runtime-manifest.schema.json',

@@ -812,7 +812,7 @@ describe("SL telemetry integration", () => {
       "secrets.GITHUB_TOKEN",
     );
     expect(JSON.stringify(forgetting.jobs.propose.steps)).not.toContain(
-      "fabri777/SL-Repo",
+      "ffishkel_microsoft/SL",
     );
     expect(JSON.stringify(forgetting.jobs.propose.steps)).not.toContain(
       ".SL-tool",

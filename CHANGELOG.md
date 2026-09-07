@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 - 2026-09-07
 
 ### Added
 
@@ -12,6 +12,8 @@
   installation.
 - A pinned multi-platform release workflow and Node-free initial installation
   integration coverage.
+- Corporate source ownership under `ffishkel_microsoft/SL`, including the
+  `@ffishkel_microsoft/sl` package identity and updated schema identifiers.
 
 ## 0.4.0 - 2026-09-06
 

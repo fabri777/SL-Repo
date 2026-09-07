@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "runtimeVersion": "0.4.0",
+  "runtimeVersion": "0.5.0",
   "sourceReleaseCommit": "51ab00795f8109bb3fad7c717bf9f427fec63772",
   "configContractVersion": 1,
   "conformanceVersion": 1,
@@ -12,7 +12,7 @@
     },
     {
       "path": "SL-runtime-manifest.schema.json",
-      "sha256": "548dc3be566f1ec8aedb8483c3eb27b93e52f1c7d25ea85fe07d3fa5d7a71bbc"
+      "sha256": "696e8e47486769cc5643c08de64874056e466735f2ca7c28fe8df4734ba835ee"
     },
     {
       "path": "SL.Runtime.Artifacts.ps1",
@@ -56,11 +56,11 @@
     },
     {
       "path": "SL.Runtime.psm1",
-      "sha256": "b94864cfd3182b738d9764d0e5ca10c9e778df5344d32d2d1cf8edc8dea34857"
+      "sha256": "51ee0395a000f1f49534280b16483c42d639f494a5270206c572db485d09d8db"
     },
     {
       "path": "SL.ps1",
-      "sha256": "fcd889214f5926397cd22d72508290fdae762cf46614a26fc4133e67b37b9f1a"
+      "sha256": "c258de62a5d706611dfb15340315b9c0e47986f6dec11fbabddfbbd578cb839b"
     },
     {
       "path": "SL.sh",

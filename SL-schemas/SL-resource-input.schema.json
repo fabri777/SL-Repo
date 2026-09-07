@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/fabri777/SL-Repo/SL-resource-input.schema.json",
+  "$id": "https://github.com/ffishkel_microsoft/SL/SL-resource-input.schema.json",
   "title": "SL provider-neutral resource receipt input",
   "oneOf": [
     { "$ref": "#/$defs/input" },

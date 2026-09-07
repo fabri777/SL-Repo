@@ -109,8 +109,8 @@ async function pathExists(path: string): Promise<boolean> {
 }
 
 describe("sl-repo CLI", () => {
-  test("reports the 0.4.0 release version", () => {
-    expect(runCli(["--version"]).trim()).toBe("0.4.0");
+  test("reports the 0.5.0 release version", () => {
+    expect(runCli(["--version"]).trim()).toBe("0.5.0");
   });
 
   test(

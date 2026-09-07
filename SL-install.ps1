@@ -3,7 +3,7 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$Release,
 
-    [string]$Repository = "fabri777/SL-Repo",
+    [string]$Repository = "ffishkel_microsoft/SL",
 
     [string]$InstallRoot = $(if ($env:LOCALAPPDATA) {
         Join-Path $env:LOCALAPPDATA "SL-Repo"

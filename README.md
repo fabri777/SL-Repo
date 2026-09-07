@@ -8,6 +8,16 @@ experience -> lesson -> verified reuse -> instruction or skill
                    \-> stale -> quarantine -> deletion
 ```
 
+## Release 0.5.0
+
+Version 0.5.0 moves the reviewed source and distribution identity to
+`ffishkel_microsoft/SL`, publishes the package as
+`@ffishkel_microsoft/sl`, and adds portable bootstrap bundles for installing
+the initialization CLI without a separately installed Node.js runtime.
+Consumers of the historical `@fabri777/sl-repo` package must update their
+package reference explicitly; the `sl-repo` command and repository-local
+lifecycle identifiers remain unchanged.
+
 ## Release 0.4.0
 
 Version 0.4.0 adds a complete repository-local PowerShell 7 runtime for the
@@ -106,21 +116,21 @@ npm link
 An authenticated Git installation can also invoke the package directly:
 
 ```powershell
-npm exec --yes --package=github:fabri777/SL-Repo#51ab00795f8109bb3fad7c717bf9f427fec63772 -c "sl-repo --help"
+npm exec --yes --package=github:ffishkel_microsoft/SL#51ab00795f8109bb3fad7c717bf9f427fec63772 -c "sl-repo --help"
 ```
 
 For machines without Node.js, install a portable release that carries its own
 reviewed Node runtime. Windows uses the PowerShell bootstrapper:
 
 ```powershell
-gh release download <release-tag> --repo fabri777/SL-Repo --pattern SL-install.ps1
+gh release download <release-tag> --repo ffishkel_microsoft/SL --pattern SL-install.ps1
 .\SL-install.ps1 -Release <release-tag>
 ```
 
 macOS and Linux use the POSIX bootstrapper:
 
 ```sh
-gh release download <release-tag> --repo fabri777/SL-Repo --pattern SL-install.sh
+gh release download <release-tag> --repo ffishkel_microsoft/SL --pattern SL-install.sh
 chmod +x SL-install.sh
 ./SL-install.sh --release <release-tag>
 ```

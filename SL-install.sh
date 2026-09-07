@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-REPOSITORY="fabri777/SL-Repo"
+REPOSITORY="ffishkel_microsoft/SL"
 INSTALL_ROOT="${XDG_DATA_HOME:-$HOME/.local/share}/sl-repo"
 ASSET_DIRECTORY=""
 RELEASE=""

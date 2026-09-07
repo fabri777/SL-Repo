@@ -10,7 +10,7 @@ if ($PSVersionTable.PSVersion.Major -lt 7) {
 }
 
 $RuntimeHome = Split-Path -Parent $PSCommandPath
-$ExpectedRuntimeVersion = '0.4.0'
+$ExpectedRuntimeVersion = '0.5.0'
 $ExpectedPayloadFiles = [string[]] @(
     'SL-conformance-vectors.json',
     'SL-runtime-manifest.schema.json',

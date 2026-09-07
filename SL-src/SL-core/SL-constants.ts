@@ -3,7 +3,7 @@ import type { SLConfig } from "./SL-types.js";
 export const SL_MANAGED_BLOCK_START = "<!-- SL-REPO:START -->";
 export const SL_MANAGED_BLOCK_END = "<!-- SL-REPO:END -->";
 
-export const SL_RUNTIME_VERSION = "0.4.0";
+export const SL_RUNTIME_VERSION = "0.5.0";
 export const SL_RUNTIME_SCHEMA_VERSION = 1;
 export const SL_RUNTIME_CONFIG_CONTRACT_VERSION = 1;
 export const SL_RUNTIME_CONFORMANCE_VERSION = 1;

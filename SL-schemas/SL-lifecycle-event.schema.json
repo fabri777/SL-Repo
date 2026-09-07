@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/fabri777/SL-Repo/SL-lifecycle-event.schema.json",
+  "$id": "https://github.com/ffishkel_microsoft/SL/SL-lifecycle-event.schema.json",
   "title": "SL immutable lifecycle event",
   "type": "object",
   "additionalProperties": false,

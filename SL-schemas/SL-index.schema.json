@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/fabri777/SL-Repo/SL-index.schema.json",
+  "$id": "https://github.com/ffishkel_microsoft/SL/SL-index.schema.json",
   "title": "SL discovery index",
   "type": "object",
   "additionalProperties": false,
