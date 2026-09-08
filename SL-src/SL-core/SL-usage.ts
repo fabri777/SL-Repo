@@ -26,7 +26,6 @@ import {
 } from "./SL-registry.js";
 import type {
   SLChange,
-  SLLegacyUsageBaselineEvent,
   SLRegistry,
   SLRegistryArtifact,
   SLUsageApplicationEvent,
@@ -77,9 +76,6 @@ const SL_NON_CONTENT_FRONTMATTER_FIELDS = new Set([
   "status",
   "previousStatus",
   "pinned",
-  "hits",
-  "retrievals",
-  "notUsefulVotes",
   "lastRetrievedAt",
   "lastSuccessfulUseAt",
   "lastVerifiedAt",
@@ -260,13 +256,13 @@ function slAssertExpectedArtifactKind(
   const isLesson =
     artifact.artifactType === "lesson" &&
     artifact.classification === "evidence" &&
-    fileName.startsWith("SL-") &&
+    fileName.startsWith("sl-") &&
     fileName.endsWith(".md") &&
     ["win", "pitfall", "mixed"].includes(String(frontmatter.kind));
   const isInstruction =
     artifact.artifactType === "instruction" &&
     artifact.classification === "promoted" &&
-    fileName.startsWith("SL-") &&
+    fileName.startsWith("sl-") &&
     fileName.endsWith(".instructions.md");
   const isSkill =
     artifact.artifactType === "skill" &&
@@ -292,7 +288,7 @@ export async function slReadOwnedArtifactMarkdown(
   expectedClassification?: SLRegistryArtifact["classification"],
 ): Promise<SLOwnedMarkdownSnapshot> {
   if (
-    artifact.managedBy !== "SL-Repo" ||
+    artifact.managedBy !== "sl" ||
     !artifact.path ||
     !artifact.path.endsWith(".md") ||
     (expectedArtifactType !== undefined &&
@@ -330,7 +326,7 @@ function slOwnedArtifactMarkdownSnapshot(
   if (
     markdown.frontmatter.id !== artifact.id ||
     markdown.frontmatter.schemaVersion !== 1 ||
-    markdown.frontmatter.managedBy !== "SL-Repo" ||
+    markdown.frontmatter.managedBy !== "sl" ||
     markdown.frontmatter.status !== artifact.status ||
     markdown.frontmatter.pinned !== artifact.pinned
   ) {
@@ -354,41 +350,10 @@ export async function slLoadUsageOwnershipSnapshots(
     if (artifact.classification === "system" || artifact.status === "deleted") {
       continue;
     }
-    if (
-      eventArtifactIds.has(artifact.id) ||
-      slLegacyCounter(artifact.hits) > 0 ||
-      slLegacyCounter(artifact.retrievals) > 0 ||
-      slLegacyCounter(artifact.notUsefulVotes) > 0
-    ) {
+    if (eventArtifactIds.has(artifact.id)) {
       snapshots.set(
         artifact.id,
         await slReadOwnedArtifactMarkdown(root, artifact),
-      );
-      continue;
-    }
-    if (
-      artifact.classification !== "evidence" ||
-      !artifact.path?.endsWith(".md")
-    ) {
-      continue;
-    }
-    let content: string;
-    let frontmatter: Record<string, unknown>;
-    try {
-      content = await slReadContainedText(root, artifact.path);
-      frontmatter =
-        slParseMarkdown<Record<string, unknown>>(content).frontmatter;
-    } catch {
-      continue;
-    }
-    if (
-      slLegacyCounter(frontmatter.hits) > 0 ||
-      slLegacyCounter(frontmatter.retrievals) > 0 ||
-      slLegacyCounter(frontmatter.notUsefulVotes) > 0
-    ) {
-      snapshots.set(
-        artifact.id,
-        slOwnedArtifactMarkdownSnapshot(artifact, content),
       );
     }
   }
@@ -424,80 +389,6 @@ export function slCreateUsageEvent(
   return event;
 }
 
-export function slCreateLegacyUsageBaseline(
-  artifact: SLRegistryArtifact,
-  artifactContentHash: string,
-): SLLegacyUsageBaselineEvent | undefined {
-  const verifiedSuccessCount = Math.max(0, artifact.hits ?? 0);
-  const verifiedFailureCount = Math.max(0, artifact.notUsefulVotes ?? 0);
-  const retrievalCount = Math.max(
-    0,
-    artifact.retrievals ?? 0,
-    verifiedSuccessCount + verifiedFailureCount,
-  );
-  if (
-    retrievalCount === 0 &&
-    verifiedSuccessCount === 0 &&
-    verifiedFailureCount === 0
-  ) {
-    return undefined;
-  }
-  const applicationCount = retrievalCount;
-  const unknownCount = Math.max(
-    0,
-    applicationCount - verifiedSuccessCount - verifiedFailureCount,
-  );
-  const artifactVersion = slArtifactVersion(artifactContentHash);
-  const idempotencyHash = slHash(
-    [
-      "legacy-baseline",
-      artifact.id,
-      artifactVersion,
-      retrievalCount,
-      verifiedSuccessCount,
-      verifiedFailureCount,
-      artifact.lastRetrievedAt ?? "",
-      artifact.lastSuccessfulUseAt ?? "",
-    ].join(":"),
-  );
-  const timestamp =
-    artifact.lastRetrievedAt ??
-    artifact.lastSuccessfulUseAt ??
-    artifact.lastVerifiedAt ??
-    artifact.createdAt;
-  const event: SLLegacyUsageBaselineEvent = {
-    schemaVersion: 1,
-    eventType: "legacy-baseline",
-    eventId: `SL-USE-${idempotencyHash.slice(0, 32).toUpperCase()}`,
-    idempotencyKey: `sha256:${idempotencyHash}`,
-    artifactId: artifact.id,
-    artifactVersion,
-    artifactContentHash,
-    taskRunId: "SL-legacy-migration",
-    applicationId: "SL-legacy-migration",
-    stage: "verified",
-    outcome: "unknown",
-    verifierType: "legacy-counter-migration",
-    timestamp,
-    scope: slNormalizeScope(artifact.scope ?? SL_DEFAULT_SCOPE),
-    legacyCounts: {
-      retrievalCount,
-      applicationCount,
-      verifiedSuccessCount,
-      verifiedFailureCount,
-      unknownCount,
-    },
-    ...(artifact.lastRetrievedAt
-      ? { legacyLastRetrievedAt: artifact.lastRetrievedAt }
-      : {}),
-    ...(artifact.lastSuccessfulUseAt
-      ? { legacyLastSuccessfulUseAt: artifact.lastSuccessfulUseAt }
-      : {}),
-  };
-  slValidateUsageEvent(event);
-  return event;
-}
-
 export function slValidateUsageEvent(event: SLUsageEvent): void {
   if (event.schemaVersion !== 1) {
     throw new Error("Unsupported SL usage event schemaVersion.");
@@ -514,8 +405,8 @@ export function slValidateUsageEvent(event: SLUsageEvent): void {
   ) {
     throw new Error("eventId must match idempotencyKey.");
   }
-  if (!["usage", "legacy-baseline"].includes(event.eventType)) {
-    throw new Error("eventType must be usage or legacy-baseline.");
+  if (event.eventType !== "usage") {
+    throw new Error("eventType must be usage.");
   }
   if (!SL_ARTIFACT_ID_PATTERN.test(event.artifactId)) {
     throw new Error("artifactId must be a valid SL artifact ID.");
@@ -539,84 +430,35 @@ export function slValidateUsageEvent(event: SLUsageEvent): void {
   if (event.evidenceRef) {
     slAssertEvidenceRef(event.evidenceRef);
   }
-  if (event.scope) {
-    const normalizedScope = slNormalizeScope(event.scope);
-    if (slScopeKey(event.scope) !== slScopeKey(normalizedScope)) {
-      throw new Error("scope must be normalized.");
-    }
+  if (!event.scope) {
+    throw new Error("scope is required.");
   }
-  if (event.eventType === "legacy-baseline") {
-    for (const [name, value] of Object.entries(event.legacyCounts)) {
-      if (!Number.isSafeInteger(value) || value < 0) {
-        throw new Error(`legacyCounts.${name} must be a non-negative integer.`);
-      }
-    }
-    if (event.legacyLastRetrievedAt) {
-      slAssertTimestamp(
-        "legacyLastRetrievedAt",
-        event.legacyLastRetrievedAt,
-      );
-    }
-    if (event.legacyLastSuccessfulUseAt) {
-      slAssertTimestamp(
-        "legacyLastSuccessfulUseAt",
-        event.legacyLastSuccessfulUseAt,
-      );
-    }
-    if (
-      event.taskRunId !== "SL-legacy-migration" ||
-      event.applicationId !== "SL-legacy-migration" ||
-      event.stage !== "verified" ||
-      event.outcome !== "unknown" ||
-      event.verifierType !== "legacy-counter-migration" ||
-      event.evidenceRef !== undefined
-    ) {
-      throw new Error("Legacy baseline identity and stage fields are invalid.");
-    }
-    if (
-      event.legacyCounts.retrievalCount <
-        event.legacyCounts.applicationCount ||
-      event.legacyCounts.applicationCount <
-        event.legacyCounts.verifiedSuccessCount +
-          event.legacyCounts.verifiedFailureCount +
-          event.legacyCounts.unknownCount
-    ) {
-      throw new Error("Legacy baseline counts are internally inconsistent.");
-    }
-  } else {
-    if (
-      (event.stage === "selected" || event.stage === "applied") &&
-      (event.outcome !== "unknown" || event.verifierType !== "unverified")
-    ) {
-      throw new Error(
-        "Selected and applied events must remain unverified with unknown outcome.",
-      );
-    }
-    if (
-      event.stage === "verified" &&
-      ["none", "self-report", "self-reported", "unknown", "unverified"].includes(
-        event.verifierType.toLowerCase(),
-      )
-    ) {
-      throw new Error("Verified events require a trustworthy verifier type.");
-    }
+  const normalizedScope = slNormalizeScope(event.scope);
+  if (slScopeKey(event.scope) !== slScopeKey(normalizedScope)) {
+    throw new Error("scope must be normalized.");
+  }
+  if (
+    (event.stage === "selected" || event.stage === "applied") &&
+    (event.outcome !== "unknown" || event.verifierType !== "unverified")
+  ) {
+    throw new Error(
+      "Selected and applied events must remain unverified with unknown outcome.",
+    );
+  }
+  if (
+    event.stage === "verified" &&
+    ["none", "self-report", "self-reported", "unknown", "unverified"].includes(
+      event.verifierType.toLowerCase(),
+    )
+  ) {
+    throw new Error("Verified events require a trustworthy verifier type.");
   }
 }
 
 export function slUsageEventPath(event: SLUsageEvent): string {
   const month = event.timestamp.slice(0, 7);
-  if (event.scope) {
-    if (event.scope.id === "repo" && event.scope.path === ".") {
-      const shardHash = createHash("sha256")
-        .update("repo\0.")
-        .digest("hex")
-        .slice(0, 12);
-      return `${SL_PATHS.scopeRoot}/SL-repo-${shardHash}/SL-usage-events/${slArtifactShardName(event.artifactId)}/${month}/SL-usage-${event.eventId.slice("SL-USE-".length)}.json`;
-    }
-    const scopeEntry = slScopeCatalogEntry(event.scope);
-    return `${scopeEntry.usageEventsPath}/${slArtifactShardName(event.artifactId)}/${month}/SL-usage-${event.eventId.slice("SL-USE-".length)}.json`;
-  }
-  return `${SL_PATHS.usageEvents}/${month}/SL-usage-${event.eventId.slice("SL-USE-".length)}.json`;
+  const scopeEntry = slScopeCatalogEntry(event.scope);
+  return `${scopeEntry.usageEventsPath}/${slArtifactShardName(event.artifactId)}/${month}/sl-usage-${event.eventId.slice("SL-USE-".length)}.json`;
 }
 
 export async function slWriteUsageEvent(
@@ -753,10 +595,6 @@ export async function slWriteUsageOperationEvent(
 
 export async function slLoadUsageEvents(root: string): Promise<SLUsageEvent[]> {
   await slAssertRealPathInside(root, SL_PATHS.learningRoot);
-  const legacyUsageRoot = slResolveInside(root, SL_PATHS.usageEvents);
-  if (await slExists(legacyUsageRoot)) {
-    await slAssertRealPathInside(root, SL_PATHS.usageEvents);
-  }
   const catalog = await slLoadStateCatalog(root);
   for (const entry of catalog.scopes) {
     const usageRoot = slResolveInside(root, entry.usageEventsPath);
@@ -765,10 +603,7 @@ export async function slLoadUsageEvents(root: string): Promise<SLUsageEvent[]> {
     }
   }
   const paths = await fg(
-    [
-      `${SL_PATHS.usageEvents}/**/*.json`,
-      `${SL_PATHS.scopeRoot}/*/SL-usage-events/**/*.json`,
-    ],
+    `${SL_PATHS.scopeRoot}/*/sl-usage-events/**/*.json`,
     {
       cwd: root,
       onlyFiles: true,
@@ -1349,14 +1184,6 @@ export function slProjectUsageEvents(
     if (!first) {
       continue;
     }
-    let baselineRetrievalCount = 0;
-    let baselineApplicationCount = 0;
-    let baselineVerifiedSuccessCount = 0;
-    let baselineVerifiedFailureCount = 0;
-    let baselineUnknownCount = 0;
-    let baselineOutcomeSuccessCount = 0;
-    let baselineOutcomeFailureCount = 0;
-    let baselineOutcomeUnknownCount = 0;
     let lastRetrievedAt: string | undefined;
     let lastAppliedAt: string | undefined;
     let lastVerifiedSuccessAt: string | undefined;
@@ -1364,63 +1191,20 @@ export function slProjectUsageEvents(
     const applications = new Map<string, SLUsageApplicationEvent[]>();
 
     for (const event of events) {
-      if (event.eventType === "legacy-baseline") {
-        baselineRetrievalCount = Math.max(
-          baselineRetrievalCount,
-          event.legacyCounts.retrievalCount,
-        );
-        baselineApplicationCount = Math.max(
-          baselineApplicationCount,
-          event.legacyCounts.applicationCount,
-        );
-        baselineVerifiedSuccessCount = Math.max(
-          baselineVerifiedSuccessCount,
-          event.legacyCounts.verifiedSuccessCount,
-        );
-        baselineVerifiedFailureCount = Math.max(
-          baselineVerifiedFailureCount,
-          event.legacyCounts.verifiedFailureCount,
-        );
-        baselineUnknownCount = Math.max(
-          baselineUnknownCount,
-          event.legacyCounts.unknownCount,
-        );
-        baselineOutcomeSuccessCount = Math.max(
-          baselineOutcomeSuccessCount,
-          event.legacyCounts.verifiedSuccessCount,
-        );
-        baselineOutcomeFailureCount = Math.max(
-          baselineOutcomeFailureCount,
-          event.legacyCounts.verifiedFailureCount,
-        );
-        baselineOutcomeUnknownCount = Math.max(
-          baselineOutcomeUnknownCount,
-          event.legacyCounts.unknownCount,
-        );
-        lastRetrievedAt = slMaxTimestamp(
-          lastRetrievedAt,
-          event.legacyLastRetrievedAt ?? event.timestamp,
-        );
-        lastVerifiedSuccessAt = slMaxTimestamp(
-          lastVerifiedSuccessAt,
-          event.legacyLastSuccessfulUseAt,
-        );
-        continue;
-      }
       const applicationEvents = applications.get(event.applicationId) ?? [];
       applicationEvents.push(event);
       applications.set(event.applicationId, applicationEvents);
     }
 
-    let retrievalCount = baselineRetrievalCount;
-    let applicationCount = baselineApplicationCount;
-    let verifiedSuccessCount = baselineVerifiedSuccessCount;
-    let verifiedFailureCount = baselineVerifiedFailureCount;
-    let unknownCount = baselineUnknownCount;
-    let outcomeSuccessCount = baselineOutcomeSuccessCount;
-    let outcomeFailureCount = baselineOutcomeFailureCount;
+    let retrievalCount = 0;
+    let applicationCount = 0;
+    let verifiedSuccessCount = 0;
+    let verifiedFailureCount = 0;
+    let unknownCount = 0;
+    let outcomeSuccessCount = 0;
+    let outcomeFailureCount = 0;
     let outcomePartialCount = 0;
-    let outcomeUnknownCount = baselineOutcomeUnknownCount;
+    let outcomeUnknownCount = 0;
 
     for (const applicationEvents of applications.values()) {
       retrievalCount += 1;
@@ -1554,33 +1338,6 @@ export function slProjectUsageEvents(
       slCompareOrdinal(left.artifactId, right.artifactId) ||
       slCompareOrdinal(left.artifactVersion, right.artifactVersion),
   );
-}
-
-function slLegacyCounter(value: unknown): number {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
-    ? value
-    : 0;
-}
-
-async function slLegacyBaselineArtifact(
-  artifact: SLRegistryArtifact,
-  snapshot: SLOwnedMarkdownSnapshot,
-): Promise<SLRegistryArtifact> {
-  return {
-    ...artifact,
-    hits: Math.max(
-      artifact.hits ?? 0,
-      slLegacyCounter(snapshot.frontmatter.hits),
-    ),
-    retrievals: Math.max(
-      artifact.retrievals ?? 0,
-      slLegacyCounter(snapshot.frontmatter.retrievals),
-    ),
-    notUsefulVotes: Math.max(
-      artifact.notUsefulVotes ?? 0,
-      slLegacyCounter(snapshot.frontmatter.notUsefulVotes),
-    ),
-  };
 }
 
 async function slCurrentUsageProjection(
@@ -1849,53 +1606,6 @@ export async function slSynchronizeUsageProjectionUnlocked(
     registry,
     events,
   );
-  const baselineArtifactIds = new Set(
-    events
-      .filter(
-        (event): event is SLLegacyUsageBaselineEvent =>
-          event.eventType === "legacy-baseline",
-      )
-      .map((event) => event.artifactId),
-  );
-
-  for (const artifact of registry.artifacts) {
-    if (
-      artifact.classification !== "evidence" ||
-      baselineArtifactIds.has(artifact.id) ||
-      !artifact.path
-    ) {
-      continue;
-    }
-    const snapshot = ownershipSnapshots.get(artifact.id);
-    if (!snapshot) {
-      continue;
-    }
-    const baselineArtifact = await slLegacyBaselineArtifact(
-      artifact,
-      snapshot,
-    );
-    if (
-      (baselineArtifact.hits ?? 0) === 0 &&
-      (baselineArtifact.retrievals ?? 0) === 0 &&
-      (baselineArtifact.notUsefulVotes ?? 0) === 0
-    ) {
-      continue;
-    }
-    const artifactContentHash = slArtifactUsageContentHash(
-      snapshot.content,
-    );
-    const baseline = slCreateLegacyUsageBaseline(
-      baselineArtifact,
-      artifactContentHash,
-    );
-    if (!baseline) {
-      continue;
-    }
-    changes.push(await slWriteUsageEvent(root, baseline, dryRun));
-    events.push(baseline);
-    baselineArtifactIds.add(artifact.id);
-  }
-
   const previousStatuses = new Map(
     registry.artifacts.map((artifact) => [artifact.id, artifact.status]),
   );

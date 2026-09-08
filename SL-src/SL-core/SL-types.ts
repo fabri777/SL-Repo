@@ -165,16 +165,13 @@ export interface SLRegistryArtifact {
   originalPath?: string;
   artifactType: SLArtifactType;
   classification: SLClassification;
-  managedBy: "SL-Repo";
+  managedBy: "sl";
   status: SLStatus;
   previousStatus?: SLStatus;
   createdAt: string;
   lastVerifiedAt: string;
   lastRetrievedAt?: string;
   lastSuccessfulUseAt?: string;
-  hits?: number;
-  retrievals?: number;
-  notUsefulVotes?: number;
   staleAt?: string;
   quarantinedAt?: string;
   deleteEligibleAt?: string;
@@ -505,7 +502,7 @@ export interface SLLifecycleEvent extends SLEvent {
   idempotencyKey: string;
 }
 
-export interface SLLegacyRepositoryApprovalEvidence {
+export interface SLRepositoryApprovalEvidence {
   kind: "repository-review";
   evidenceRef: string;
 }
@@ -518,7 +515,7 @@ export interface SLPromotionOwnerApprovalEvidence {
 }
 
 export type SLPromotionApprovalEvidence =
-  | SLLegacyRepositoryApprovalEvidence
+  | SLRepositoryApprovalEvidence
   | SLPromotionOwnerApprovalEvidence;
 
 export interface SLPromotionScopeRef {
@@ -587,7 +584,7 @@ export interface SLPromotionGovernanceRecord {
   artifactScope: SLPromotionArtifactScope;
   evidenceSummary: SLPromotionEvidenceSummary[];
   ownerApprovals: SLPromotionOwnerApprovalEvidence[];
-  legacyApproval?: SLLegacyRepositoryApprovalEvidence;
+  repositoryApproval?: SLRepositoryApprovalEvidence;
   conflictResolutions: SLPromotionConflictResolution[];
   reasons: string[];
 }
@@ -642,29 +639,14 @@ export interface SLUsageEventBase {
   verifierType: string;
   timestamp: string;
   evidenceRef?: string;
-  scope?: SLScopeDescriptor;
+  scope: SLScopeDescriptor;
 }
 
 export interface SLUsageApplicationEvent extends SLUsageEventBase {
   eventType: "usage";
 }
 
-export interface SLLegacyUsageBaselineEvent extends SLUsageEventBase {
-  eventType: "legacy-baseline";
-  legacyCounts: {
-    retrievalCount: number;
-    applicationCount: number;
-    verifiedSuccessCount: number;
-    verifiedFailureCount: number;
-    unknownCount: number;
-  };
-  legacyLastRetrievedAt?: string;
-  legacyLastSuccessfulUseAt?: string;
-}
-
-export type SLUsageEvent =
-  | SLUsageApplicationEvent
-  | SLLegacyUsageBaselineEvent;
+export type SLUsageEvent = SLUsageApplicationEvent;
 
 export interface SLUsageProjection {
   scope: SLScopeDescriptor;

@@ -1,64 +1,45 @@
 import type { SLConfig } from "./SL-types.js";
 
-export const SL_MANAGED_BLOCK_START = "<!-- SL-REPO:START -->";
-export const SL_MANAGED_BLOCK_END = "<!-- SL-REPO:END -->";
+export const SL_MANAGED_BLOCK_START = "<!-- sl:start -->";
+export const SL_MANAGED_BLOCK_END = "<!-- sl:end -->";
 
-export const SL_RUNTIME_VERSION = "0.5.0";
+export const SL_RUNTIME_VERSION = "0.6.0";
 export const SL_RUNTIME_SCHEMA_VERSION = 1;
 export const SL_RUNTIME_CONFIG_CONTRACT_VERSION = 1;
 export const SL_RUNTIME_CONFORMANCE_VERSION = 1;
 export const SL_RUNTIME_SOURCE_RELEASE_COMMIT =
   "e841414d13bfdcd1c534eb7e101f7f2330dc4709";
 export const SL_RUNTIME_MINIMUM_POWERSHELL_VERSION = "7.0.0";
-export const SL_RUNTIME_MANIFEST_FILE = "SL-runtime.manifest.json";
+export const SL_RUNTIME_MANIFEST_FILE = "sl-runtime.manifest.json";
 export const SL_RUNTIME_MANIFEST_SCHEMA_FILE =
-  "SL-runtime-manifest.schema.json";
-export const SL_RUNTIME_BASH_LAUNCHER = "SL.sh";
+  "sl-runtime-manifest.schema.json";
+export const SL_RUNTIME_BASH_LAUNCHER = "sl.sh";
 export const SL_RUNTIME_PAYLOAD_FILES = [
-  "SL-conformance-vectors.json",
-  "SL-runtime-manifest.schema.json",
-  "SL.Runtime.Artifacts.ps1",
-  "SL.Runtime.Conformance.ps1",
-  "SL.Runtime.Core.ps1",
-  "SL.Runtime.Doctor.ps1",
-  "SL.Runtime.Lifecycle.ps1",
-  "SL.Runtime.Promotion.ps1",
-  "SL.Runtime.Resource.ps1",
-  "SL.Runtime.State.ps1",
-  "SL.Runtime.Syntax.ps1",
-  "SL.Runtime.Validation.ps1",
-  "SL.Runtime.psm1",
-  "SL.ps1",
-  "SL.sh",
+  "sl.ps1",
+  "sl.runtime.psm1",
+  "sl.sh",
 ] as const;
 
 export const SL_PATHS = {
-  learningRoot: ".github/SL-learning",
-  runtimeRoot: ".github/SL-learning/SL-runtime",
+  learningRoot: ".github/sl-learning",
+  runtimeRoot: ".github/sl-learning/sl-runtime",
   runtimeManifest:
-    ".github/SL-learning/SL-runtime/SL-runtime.manifest.json",
-  runtimePowerShellLauncher: ".github/SL-learning/SL-runtime/SL.ps1",
-  runtimeBashLauncher: ".github/SL-learning/SL-runtime/SL.sh",
-  runtimeConformanceVectors:
-    ".github/SL-learning/SL-runtime/SL-conformance-vectors.json",
-  config: ".github/SL-learning/SL-config.yml",
-  scopeCatalog: ".github/SL-learning/SL-scope-catalog.yml",
+    ".github/sl-learning/sl-runtime/sl-runtime.manifest.json",
+  runtimePowerShellLauncher: ".github/sl-learning/sl-runtime/sl.ps1",
+  runtimeBashLauncher: ".github/sl-learning/sl-runtime/sl.sh",
+  config: ".github/sl-learning/sl-config.yml",
+  scopeCatalog: ".github/sl-learning/sl-scope-catalog.yml",
   scopeCatalogCandidates: [
-    ".github/SL-learning/SL-scope-catalog.yml",
-    ".github/SL-learning/SL-scope-catalog.yaml",
-    ".github/SL-learning/SL-scope-catalog.json",
+    ".github/sl-learning/sl-scope-catalog.yml",
+    ".github/sl-learning/sl-scope-catalog.yaml",
+    ".github/sl-learning/sl-scope-catalog.json",
   ],
-  registry: ".github/SL-learning/SL-registry.json",
-  index: ".github/SL-learning/SL-index.json",
-  stateCatalog: ".github/SL-learning/SL-state-catalog.json",
-  scopeRoot: ".github/SL-learning/SL-scopes",
-  legacyEvents: ".github/SL-learning/SL-events.jsonl",
-  lifecycleEvents: ".github/SL-learning/SL-lifecycle-events",
-  usageEvents: ".github/SL-learning/SL-usage-events",
-  resourceReceipts: ".github/SL-learning/SL-resource-receipts",
-  lessons: ".github/SL-learning/SL-lessons",
-  probation: ".github/SL-learning/SL-probation",
-  quarantine: ".github/SL-learning/SL-quarantine",
+  stateCatalog: ".github/sl-learning/sl-state-catalog.json",
+  scopeRoot: ".github/sl-learning/sl-scopes",
+  lifecycleEvents: ".github/sl-learning/sl-lifecycle-events",
+  lessons: ".github/sl-learning/sl-lessons",
+  probation: ".github/sl-learning/sl-probation",
+  quarantine: ".github/sl-learning/sl-quarantine",
   agentInstructions: "AGENTS.md",
   copilotInstructions: ".github/copilot-instructions.md",
 } as const;

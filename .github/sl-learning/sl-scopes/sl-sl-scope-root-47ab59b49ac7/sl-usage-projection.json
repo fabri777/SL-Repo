@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "scope": {
+    "id": "SL-SCOPE-ROOT",
+    "path": "."
+  },
+  "currentArtifactVersions": {
+    "SL-20260905-KEEP-CROSS-PLATFORM-BOOTSTRAP-LOGIC-THIN": "sha256:63f256c2b939a9207f6e971ab865ea02c323fdda19882f55ed7d2611b7338945"
+  },
+  "projections": [
+    {
+      "scope": {
+        "id": "SL-SCOPE-ROOT",
+        "path": "."
+      },
+      "artifactId": "SL-20260905-KEEP-CROSS-PLATFORM-BOOTSTRAP-LOGIC-THIN",
+      "artifactVersion": "sha256:63f256c2b939a9207f6e971ab865ea02c323fdda19882f55ed7d2611b7338945",
+      "artifactContentHash": "63f256c2b939a9207f6e971ab865ea02c323fdda19882f55ed7d2611b7338945",
+      "retrievalCount": 1,
+      "applicationCount": 1,
+      "applicationRate": 1,
+      "outcomeCount": 1,
+      "outcomeSuccessCount": 1,
+      "outcomeFailureCount": 0,
+      "outcomePartialCount": 0,
+      "outcomeUnknownCount": 0,
+      "outcomeSuccessRate": 1,
+      "verifiedCount": 1,
+      "resolvedCount": 1,
+      "verifiedSuccessCount": 1,
+      "verifiedFailureCount": 0,
+      "unknownCount": 0,
+      "verifiedSuccessRate": 1,
+      "lastRetrievedAt": "2026-09-08T14:10:00.000Z",
+      "lastAppliedAt": "2026-09-08T14:10:00.000Z",
+      "lastVerifiedSuccessAt": "2026-09-08T14:11:00.000Z"
+    }
+  ]
+}

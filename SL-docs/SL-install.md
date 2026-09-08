@@ -1,284 +1,189 @@
-# Installing SL Repo
+# Installing SL
+
+SL is distributed as one PowerShell file, `sl.ps1`. The same file installs the
+persistent `sl` command and implements release acquisition, repository
+initialization, refresh, diagnostics, projection, and validation.
 
 ## Prerequisites
 
 - Git
-- PowerShell 7 or newer for the installed repository-local runtime
-- A Git repository to receive the SL layer
+- PowerShell 7 or newer
+- A Git repository to initialize
+- GitHub CLI authentication for online acquisition
 
-Choose one runtime acquisition path:
+Node.js is not required on consumer machines. Portable archives temporarily
+carry the compiled implementation and a private Node runtime; `initrepo`
+deletes the extracted package in `finally`.
 
-| Installation path | Additional prerequisites |
+## Install
+
+Download `sl.ps1` from an exact reviewed release, inspect it, then run:
+
+```powershell
+pwsh .\sl.ps1 install
+```
+
+The command rejects symbolic links and reparse points, copies through a
+temporary file, atomically replaces the installed command, and confirms the
+user-local bin directory on `PATH`.
+
+Installed location:
+
+| Platform | Path |
 |---|---|
-| Portable release | GitHub CLI authenticated to the private repository; no separately installed Node.js |
-| npm or private Git source | Node.js 20 or newer and npm |
-| Local development clone | Node.js 20 or newer, npm, and source-repository access |
+| Windows | `%LOCALAPPDATA%\sl\bin\sl.ps1` |
+| Linux/macOS | `~/.local/bin/sl` |
 
-No CI provider is required. The portable release removes the Node prerequisite
-for initial installation. After initialization, the complete operational
-lifecycle runs through the repository-local PowerShell runtime without Node,
-npm, npx, a global SL CLI, network access, or external PowerShell modules.
+The machine retains exactly one SL command file. No wrapper, private Node
+runtime, daemon, or service remains installed.
 
-SL Repo 0.5.0 supports both single repositories and hierarchical monorepos.
-It installs a complete repository-local PowerShell 7 runtime, including
-resource receipt and advisory efficiency operations. Existing 0.2 root state
-is migrated additively into deterministic scope shards, and 0.3 runtime
-installations can be updated through the guarded manifest transaction.
-Bundled and promoted skill directory and frontmatter names are lowercase for
-Agent Skills compatibility.
+## Initialize or refresh
 
-Version 0.5.0 uses the package identity `@ffishkel_microsoft/sl`. Consumers of
-the historical `@fabri777/sl-repo` package must update their dependency or
-immutable Git source explicitly. The installed `sl-repo` command is unchanged.
-
-## Portable installation without system Node.js
-
-Portable archives contain the compiled SL Repo package, schemas, templates,
-plugin assets, documentation, and a private Node runtime. They install under a
-user-local directory and do not modify the system Node.js installation or
-require administrator permissions.
-
-Download and inspect the bootstrapper from an exact reviewed release. On
-Windows:
+Use the current directory:
 
 ```powershell
-gh release download <release-tag> --repo ffishkel_microsoft/SL --pattern SL-install.ps1
-Get-Content .\SL-install.ps1
-.\SL-install.ps1 -Release <release-tag>
+sl initrepo
 ```
 
-On macOS or Linux:
-
-```sh
-gh release download <release-tag> --repo ffishkel_microsoft/SL --pattern SL-install.sh
-cat SL-install.sh
-chmod +x SL-install.sh
-./SL-install.sh --release <release-tag>
-```
-
-The scripts:
-
-1. Detect the current operating system and architecture.
-2. Download `SL-release-manifest.json`, `SL-checksums.txt`, and the matching
-   archive through the authenticated GitHub CLI session.
-3. Verify the archive SHA-256 and confirm that its embedded source commit,
-   runtime version, platform, and architecture match the release manifest.
-4. Extract to a temporary directory and atomically move the verified runtime
-   into the user-local installation.
-5. Create a launcher under the installation's `bin` directory without editing
-   the user's `PATH`.
-
-Use `-InstallRoot` on Windows or `--install-root` on POSIX systems to choose an
-explicit location. Use `-AssetDirectory` or `--asset-directory` for an offline
-installation from previously reviewed assets. Replacing an installed version
-requires `-Force` or `--force`; failed verification or extraction leaves the
-current installation selected.
-
-After adding the printed `bin` directory to `PATH`, initialize a repository:
+Or provide a repository:
 
 ```powershell
-sl-repo init C:\path\to\target --dry-run
-sl-repo init C:\path\to\target
-sl-repo doctor C:\path\to\target
-sl-repo validate C:\path\to\target
+sl initrepo C:\path\to\repository
 ```
 
-## From a local development clone
+The operation:
+
+1. Resolves the repository and requires `.git`.
+2. Rejects uppercase, unsupported, or ambiguous partial layouts.
+3. Resolves an exact release and matching platform archive.
+4. Verifies repository identity, release, commit, platform, architecture,
+   filename, byte size, and SHA-256.
+5. Extracts only safe contained archive paths into a unique temporary folder.
+6. Runs the internal init or current-layout refresh as a dry run.
+7. Displays the complete plan and requires `y` or `yes`.
+8. Applies the operation and runs `doctor`, `project`, and `validate`.
+9. Deletes the temporary package.
+
+Non-interactive execution must include `-Yes`:
 
 ```powershell
-Set-Location C:\dev\SL-Repo
-npm install
-npm run build
-npm link
-sl-repo init C:\path\to\target --dry-run
-sl-repo init C:\path\to\target
-sl-repo validate C:\path\to\target
+sl initrepo . -Yes
 ```
 
-Initialization installs the runtime at
-`.github/SL-learning/SL-runtime/`. Run it directly:
+## Offline assets
+
+Supply a directory containing:
+
+- `sl-release-manifest.json`
+- `sl-checksums.txt`
+- `sl-<version>-<platform>-<architecture>.tar.gz`
 
 ```powershell
-pwsh -NoLogo -NoProfile -File `
-  C:\path\to\target\.github\SL-learning\SL-runtime\SL.ps1 doctor --json
+sl initrepo . -AssetDirectory C:\reviewed\sl-assets
 ```
 
-All lifecycle commands use the same entry point:
+The same manifest, metadata, size, platform, architecture, commit, and checksum
+verification applies offline.
+
+## Automation selection
+
+Fresh repositories default to no hosted automation:
 
 ```powershell
-$sl = "C:\path\to\target\.github\SL-learning\SL-runtime\SL.ps1"
-pwsh -NoLogo -NoProfile -File $sl capture `
-  --title "Verified local lesson" --trigger "local cue" --json
-pwsh -NoLogo -NoProfile -File $sl retrieve --path src/example.ts --json
-pwsh -NoLogo -NoProfile -File $sl use start SL-LESSON-ID --json
+sl initrepo . -Automation none
+sl initrepo . -Automation github
+sl initrepo . -Automation azure
+sl initrepo . -Automation all
+```
+
+On refresh, an omitted selection preserves the current managed adapters.
+Explicit changes remove only unchanged SL-managed adapter files. Modified,
+unregistered, linked, or ambiguously owned files block mutation.
+
+GitHub Actions templates are installed under `.github/workflows/`. Azure
+Pipelines templates are installed under `.azure-pipelines/sl-learning/`.
+Neither provider is required for local operation.
+
+## Fresh repository inventory
+
+The inactive baseline is exactly 15 files:
+
+```text
+AGENTS.md
+.github/copilot-instructions.md
+.github/skills/sl-learning-audit/SKILL.md
+.github/skills/sl-lesson-curator/SKILL.md
+.github/sl-learning/.gitattributes
+.github/sl-learning/sl-config.yml
+.github/sl-learning/sl-schema-bundle.schema.json
+.github/sl-learning/sl-state-catalog.json
+.github/sl-learning/sl-system.manifest.json
+.github/sl-learning/sl-runtime/sl-runtime.manifest.json
+.github/sl-learning/sl-runtime/sl.ps1
+.github/sl-learning/sl-runtime/sl.runtime.psm1
+.github/sl-learning/sl-runtime/sl.sh
+.github/sl-learning/sl-scopes/sl-sl-scope-root-47ab59b49ac7/sl-index.json
+.github/sl-learning/sl-scopes/sl-sl-scope-root-47ab59b49ac7/sl-registry.json
+```
+
+The root scope is implicit. Usage and resource projections are created lazily
+only when the corresponding immutable source records exist.
+
+## Repository-local operation
+
+The machine command delegates repository operations to:
+
+```text
+.github/sl-learning/sl-runtime/sl.ps1
+```
+
+Direct invocation is also supported:
+
+```powershell
+$sl = ".github/sl-learning/sl-runtime/sl.ps1"
+pwsh -NoLogo -NoProfile -File $sl doctor --json
 pwsh -NoLogo -NoProfile -File $sl project --json
 pwsh -NoLogo -NoProfile -File $sl validate --json
 ```
 
-From Bash:
+The Bash launcher is a thin PowerShell entry point:
 
 ```bash
-./.github/SL-learning/SL-runtime/SL.sh conformance --json
+./.github/sl-learning/sl-runtime/sl.sh validate --json
 ```
 
-The Bash file is a thin `pwsh` launcher and contains no Node or package-manager
-fallback.
-
-## Update
+## Self-update
 
 ```powershell
-sl-repo update C:\path\to\target --dry-run
-sl-repo update C:\path\to\target
+sl self-update
+sl self-update -Release v0.6.0
 ```
 
-Update replaces only registered system templates and the SL-managed
-instruction blocks in `AGENTS.md` and
-`.github/copilot-instructions.md`. It also refreshes registered schema copies
-under `.github/SL-learning/SL-schemas/`. Produced lessons, instructions,
-skills, manual catalogs, unknown files, and unregistered same-path files are
-retained.
+Self-update verifies the replacement `sl.ps1` before atomically replacing the
+installed command. Failed acquisition or verification leaves the current
+command intact.
 
-Runtime updates use a stricter manifest guard. Before changing any runtime
-file, update verifies the installed manifest, version, and every declared
-SHA-256. Local runtime modifications, missing files, mixed-version files, or
-an occupied newly managed path reject the whole update. Obsolete files are
-removed only when the previous manifest proves SL ownership. Unrelated files
-below `SL-runtime/` are preserved, and `--dry-run` performs no writes.
+## Release assets
 
-## Uninstall
+Each release publishes:
 
-The first milestone intentionally does not provide destructive uninstall.
-Remove system templates only after `sl-repo doctor` identifies them. Produced
-knowledge remains ordinary Git content.
+- `sl.ps1`
+- `sl-release-manifest.json`
+- `sl-checksums.txt`
+- one `sl-<version>-<platform>-<architecture>.tar.gz` per supported platform
 
-## Install from an immutable Git source
+Portable archives contain internal launchers and `sl-release.json`; those are
+temporary implementation details, not additional installed commands.
 
-Configure normal Git authentication for the authorized source, then run an
-immutable package reference. The current GitHub source example is:
+## Development source
+
+Building this repository requires Node.js 20 or newer:
 
 ```powershell
-npm exec --yes --package=github:ffishkel_microsoft/SL#e841414d13bfdcd1c534eb7e101f7f2330dc4709 -c "sl-repo init C:\path\to\target"
+npm ci
+npm run build
+npm run ci
+npm run runtime:conformance
 ```
 
-An Azure Repos mirror can be cloned and checked out at the same full commit
-before `npm ci`, `npm run build`, and `npm link`. A direct npm Git URL can
-also be used when the local Git credential configuration already authorizes
-it:
-
-```powershell
-npm exec --yes --package="git+https://dev.azure.com/<organization>/<project>/_git/<runtime-repository>#e841414d13bfdcd1c534eb7e101f7f2330dc4709" -c "sl-repo --help"
-```
-
-Do not place credentials in the URL, repository files, or SL state. The Git
-host supplies authentication through its normal credential manager, Azure
-Repos permissions, or service-connection configuration.
-
-## Local and agent invocation
-
-Local and agent-driven operation is complete without a pipeline:
-
-```powershell
-sl-repo retrieve C:\path\to\target --path src/example.ts
-sl-repo project C:\path\to\target
-sl-repo validate C:\path\to\target
-sl-repo sweep C:\path\to\target --dry-run
-```
-
-The SL managed block in `AGENTS.md` tells repository agents when to inspect
-the index and capture verified lessons. The
-`.github/copilot-instructions.md` mirror supports GitHub Copilot discovery but
-is not a GitHub hosting dependency.
-
-## Optional automation adapters
-
-Installation includes two adapters:
-
-- GitHub Actions workflows under `.github/workflows/`.
-- Azure Pipelines job templates under
-  `.azure-pipelines/SL-learning/`.
-
-The adapters acquire reviewed source snapshot
-`e841414d13bfdcd1c534eb7e101f7f2330dc4709`, build it, and invoke the CLI. The
-full commit SHA is immutable; adapters must never use `main`, another branch,
-or a moving tag for runtime acquisition.
-
-The GitHub adapter uses a repository secret named `SL_REPO_TOKEN` when the
-private GitHub source requires it. The Azure Pipelines adapter embeds no
-credential and instead uses a repository resource authorized by normal Azure
-Repos permissions or a configured service connection. See
-[Optional Azure Pipelines adapter](SL-azure-pipelines.md).
-
-In the GitHub adapter, both the consumer checkout and runtime checkout set
-`persist-credentials: false`. Validation runs with `contents: read`.
-Forgetting also runs the downloaded runtime in a read-only planning job. On a
-manual apply request, that job uploads a Git binary patch. A separate job,
-which never downloads or executes SL Repo source, receives narrowly scoped
-repository write permission, checks and applies the patch, and opens a pull
-request for review. Scheduled forgetting is preview-only, and retention pull
-requests are not automatically merged.
-
-The Azure Pipelines retention adapter also leaves checkout credentials
-unpersisted. Its scheduled/default mode is preview-only. A manual
-`applySweep: true` run mutates only the disposable pipeline workspace and
-publishes a binary patch artifact for human review; it never pushes, creates
-or merges a pull request, or bypasses branch protections.
-
-Without automation, SL capture and retrieval still work. What is lost is the
-automated merge gate, scheduled projection/retention execution, and hosted
-cross-platform release validation.
-
-Every external action in the write-scoped job is pinned to a reviewed full
-40-character commit SHA. The trailing `owner/action vX.Y.Z` comment records
-the upstream release represented by the pin. Pin updates must resolve the
-official major-version tag with GitHub or Git metadata, review the resolved
-commit, and update the source and consumer workflows together.
-
-To update the runtime pin, maintainers must:
-
-1. Review a specific SL Repo commit and verify its provenance.
-2. At that commit, run `npm ci`, `npm run ci`, and `npm run validate:self`.
-3. Run `node dist/SL-src/SL-cli/SL-cli.js --help` and verify the `validate`
-   and `sweep` commands are present.
-4. Replace the full SHA in both GitHub workflow templates, both Azure
-   Pipelines templates, the source installation examples, and the matching
-   security-test expectations.
-5. Run `npm run ci` again and review every adapter diff before
-   distributing an update.
-
-Packed artifact contents include `dist/`, `SL-schemas/`, `SL-templates/`,
-`SL-plugin/`, `SL-tests/`, `SL-docs/`, `CHANGELOG.md`, `README.md`, and
-`SECURITY.md`. This keeps the runtime, validation schemas, reusable
-fixtures/tests, secured consumer templates, plugin skills, release history,
-and linked documentation together.
-
-`npm run build:runtime` stages the deterministic template manifest. It uses
-the source release value from `SL_RUNTIME_SOURCE_RELEASE_COMMIT`, copies the
-manifest schema into the template, and records LF-normalized hashes for every
-runtime payload. The version commit uses
-`__SL_SOURCE_RELEASE_COMMIT__`; the dedicated immutable-pin commit replaces
-it with the reviewed version commit SHA. See
-[Repository-local PowerShell runtime contract](SL-runtime.md) for the exact
-layout, supported YAML/frontmatter/validation/glob subsets, and exit codes.
-
-Version releases use two reviewed commits. The first commit updates versions,
-release notes, tests, generated runtime payloads, and the manifest hashes while
-leaving `sourceReleaseCommit` as `__SL_SOURCE_RELEASE_COMMIT__` and retaining
-the previous reviewed adapter pin. After that commit is reviewed, the
-follow-up immutable-pin commit replaces the placeholder and every documented,
-template, and test pin with the first commit's full 40-character SHA, rebuilds
-the runtime manifest, and reruns the complete release validation.
-
-After installation or update, run:
-
-```powershell
-sl-repo project C:\path\to\target
-sl-repo validate C:\path\to\target
-```
-
-`project` imports legacy mutable counters once, rebuilds immutable usage
-projections, and refreshes the discovery index.
-
-For a 0.2 repository, follow
-[Migration from 0.2 to 0.3](SL-migration-0.2.md). Update is additive: legacy
-registry, index, counter, and unscoped event inputs remain readable and are
-not deleted.
+Consumer initialization does not require a system Node installation.

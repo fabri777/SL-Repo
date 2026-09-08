@@ -1,0 +1,160 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ffishkel_microsoft/SL/sl-index.schema.json",
+  "title": "SL discovery index",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "artifacts"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "enum": [1, 2]
+    },
+    "scope": {
+      "$ref": "#/$defs/scope"
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "path",
+          "artifactType",
+          "status",
+          "relatedTo"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "artifactType": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "trigger": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "relatedTo": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "dependsOn": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "path"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "usageProjection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifactId",
+        "artifactVersion",
+        "artifactContentHash",
+        "retrievalCount",
+        "applicationCount",
+        "resolvedCount",
+        "verifiedSuccessCount",
+        "verifiedFailureCount",
+        "unknownCount",
+        "verifiedSuccessRate"
+      ],
+      "properties": {
+        "artifactId": {
+          "type": "string",
+          "pattern": "^SL-[A-Z0-9][A-Z0-9-]*$"
+        },
+        "artifactVersion": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "artifactContentHash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "retrievalCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "applicationCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "resolvedCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "verifiedSuccessCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "verifiedFailureCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unknownCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "verifiedSuccessRate": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "lastRetrievedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "lastAppliedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "lastVerifiedSuccessAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "lastVerifiedFailureAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}

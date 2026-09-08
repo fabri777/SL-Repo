@@ -113,7 +113,7 @@ function slPromotionType(path: string): SLPromotedArtifactType {
     return "skill";
   }
   throw new Error(
-    "Promoted path must be .github/instructions/SL-*.instructions.md or .github/skills/<skill-name>/SKILL.md.",
+    "Promoted path must be .github/instructions/sl-*.instructions.md or .github/skills/<skill-name>/SKILL.md.",
   );
 }
 
@@ -122,9 +122,10 @@ function slProbationPath(
   artifactType: SLPromotedArtifactType,
   targetPath: string,
 ): string {
+  const directoryName = artifactId.toLowerCase();
   return artifactType === "instruction"
-    ? `${SL_PATHS.probation}/${artifactId}/${basename(targetPath)}`
-    : `${SL_PATHS.probation}/${artifactId}/SKILL.md`;
+    ? `${SL_PATHS.probation}/${directoryName}/${basename(targetPath)}`
+    : `${SL_PATHS.probation}/${directoryName}/SKILL.md`;
 }
 
 function slGate(
@@ -244,20 +245,17 @@ async function slCurrentSourceScopes(
 function slGovernedActiveGuidance(
   registry: SLRegistry,
   activeContracts: SLActiveValidationContract[],
-): {
-  governed: SLScopedGuidance[];
-  legacy: SLActiveValidationContract[];
-} {
+): SLScopedGuidance[] {
   const governed: SLScopedGuidance[] = [];
-  const legacy: SLActiveValidationContract[] = [];
   for (const active of activeContracts) {
     const artifact = registry.artifacts.find(
       (candidate) => candidate.id === active.artifactId,
     );
     const scope = artifact?.promotionEvaluation?.governance?.targetScope;
     if (!scope) {
-      legacy.push(active);
-      continue;
+      throw new Error(
+        `Active promoted artifact ${active.artifactId} lacks governed scope evidence.`,
+      );
     }
     governed.push({
       artifactId: active.artifactId,
@@ -266,7 +264,7 @@ function slGovernedActiveGuidance(
       declarations: active.contract.declarations ?? [],
     });
   }
-  return { governed, legacy };
+  return governed;
 }
 
 async function slBuildGovernanceInput(
@@ -278,10 +276,7 @@ async function slBuildGovernanceInput(
   >,
   context: SLPromotionGovernanceContext,
   activeContracts: SLActiveValidationContract[],
-): Promise<{
-  input: SLPromotionGovernanceInput;
-  legacyConflictsPassed: boolean;
-}> {
+): Promise<SLPromotionGovernanceInput> {
   const config = await slLoadConfig(root);
   if (config.promotion.mode !== "monorepo") {
     throw new Error(
@@ -299,7 +294,7 @@ async function slBuildGovernanceInput(
     artifact,
     context,
   );
-  const active = slGovernedActiveGuidance(registry, activeContracts);
+  const activeGuidance = slGovernedActiveGuidance(registry, activeContracts);
   const candidate: SLScopedGuidance = {
     artifactId: artifact.id,
     scope: context.targetScope,
@@ -309,7 +304,7 @@ async function slBuildGovernanceInput(
   const callerGuidance = context.activeGuidance ?? [];
   const combined = new Map<string, SLScopedGuidance>();
   for (const guidance of [
-    ...active.governed,
+    ...activeGuidance,
     ...callerGuidance,
     candidate,
   ]) {
@@ -325,19 +320,11 @@ async function slBuildGovernanceInput(
     }
     combined.set(guidance.artifactId, guidance);
   }
-  const legacyConflictsPassed =
-    slFindValidationContractConflicts([
-      ...active.legacy,
-      { artifactId: artifact.id, contract },
-    ]).length === 0;
   return {
-    input: {
-      policy: config.promotion,
-      ...context,
-      sourceScopes,
-      activeGuidance: [...combined.values()],
-    },
-    legacyConflictsPassed,
+    policy: config.promotion,
+    ...context,
+    sourceScopes,
+    activeGuidance: [...combined.values()],
   };
 }
 
@@ -388,15 +375,12 @@ async function slLoadActiveContracts(
     if (
       artifact.id === candidateId ||
       artifact.classification !== "promoted" ||
-      !["active", "promoted"].includes(artifact.status) ||
+      artifact.status !== "active" ||
       !artifact.path
     ) {
       continue;
     }
-    if (
-      artifact.status === "active" &&
-      !(await slPromotionEvaluationIsCurrent(root, artifact))
-    ) {
+    if (!(await slPromotionEvaluationIsCurrent(root, artifact))) {
       return { contracts, valid: false };
     }
     let frontmatter: Record<string, unknown>;
@@ -409,12 +393,6 @@ async function slLoadActiveContracts(
     }
     const target = slPromotedContractTarget(artifact, frontmatter);
     if (!target) {
-      if (
-        artifact.status === "promoted" &&
-        typeof frontmatter.validationContract !== "string"
-      ) {
-        continue;
-      }
       return { contracts, valid: false };
     }
     const evaluation = await slEvaluateValidationContract(root, target);
@@ -531,9 +509,9 @@ async function slRegisterPromotionUnlocked(
   }
   if (
     artifactType === "instruction" &&
-    !promotedPath.split("/").at(-1)?.startsWith("SL-")
+    !promotedPath.split("/").at(-1)?.startsWith("sl-")
   ) {
-    throw new Error("Promoted instruction filename must start with SL-.");
+    throw new Error("Promoted instruction filename must start with sl-.");
   }
   const source = slFindArtifact(registry, sourceId);
   if (source.classification !== "evidence") {
@@ -630,7 +608,7 @@ async function slRegisterPromotionUnlocked(
 
   markdown.frontmatter.id = promotedId;
   markdown.frontmatter.schemaVersion = 1;
-  markdown.frontmatter.managedBy = "SL-Repo";
+  markdown.frontmatter.managedBy = "sl";
   markdown.frontmatter.status = "probation";
   markdown.frontmatter.pinned = false;
   markdown.frontmatter.sourceIds = [sourceId];
@@ -664,7 +642,7 @@ async function slRegisterPromotionUnlocked(
   );
   if (
     sourceMarkdown.frontmatter.id !== source.id ||
-    sourceMarkdown.frontmatter.managedBy !== "SL-Repo"
+    sourceMarkdown.frontmatter.managedBy !== "sl"
   ) {
     throw new Error("Promotion source file ownership does not match the registry.");
   }
@@ -697,7 +675,7 @@ async function slRegisterPromotionUnlocked(
     promotionTargetPath: promotedPath,
     artifactType,
     classification: "promoted",
-    managedBy: "SL-Repo",
+    managedBy: "sl",
     status: "probation",
     createdAt: existingIdOwner?.createdAt ?? now.toISOString(),
     lastVerifiedAt: now.toISOString(),
@@ -865,10 +843,9 @@ async function slBuildPromotionEvaluation(
         options.governance,
         active.contracts,
       );
-      governance = slEvaluatePromotionGovernance(governed.input);
+      governance = slEvaluatePromotionGovernance(governed);
       conflictPassed =
         active.valid &&
-        governed.legacyConflictsPassed &&
         governance.conflictsPassed;
     } else {
       conflictPassed =

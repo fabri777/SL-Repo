@@ -689,17 +689,17 @@ export function slResourceReceiptPath(receipt: SLResourceReceipt): string {
   const entry = slScopeCatalogEntry(receipt.scope);
   const root =
     entry.resourceReceiptsPath ??
-    `${SL_PATHS.scopeRoot}/${entry.shard}/SL-resource-receipts`;
+    `${SL_PATHS.scopeRoot}/${entry.shard}/sl-resource-receipts`;
   const month = receipt.timestamp.slice(0, 7);
   const owner =
     receipt.phase === "baseline"
-      ? `SL-baselines/${slArtifactShardName(
+      ? `sl-baselines/${slArtifactShardName(
           `SL-BASELINE-${slHash(receipt.comparison.comparisonId)
             .slice(0, 12)
             .toUpperCase()}`,
         )}`
       : slArtifactShardName(receipt.artifactId);
-  return `${root}/${owner}/${month}/SL-resource-${receipt.receiptId.slice(
+  return `${root}/${owner}/${month}/sl-resource-${receipt.receiptId.slice(
     "SL-RESOURCE-".length,
   )}.json`;
 }
@@ -771,10 +771,7 @@ export async function slLoadResourceReceipts(
 ): Promise<SLResourceReceipt[]> {
   await slAssertRealPathInside(root, SL_PATHS.learningRoot);
   const paths = await fg(
-    [
-      `${SL_PATHS.resourceReceipts}/**/*.json`,
-      `${SL_PATHS.scopeRoot}/*/SL-resource-receipts/**/*.json`,
-    ],
+    `${SL_PATHS.scopeRoot}/*/sl-resource-receipts/**/*.json`,
     {
       cwd: root,
       onlyFiles: true,
@@ -1159,12 +1156,15 @@ export async function slSynchronizeResourceProjectionUnlocked(
     receiptsByScope.set(key, scopedReceipts);
   }
   for (const entry of catalog.scopes) {
+    const scopedReceipts =
+      receiptsByScope.get(slScopeKey(entry.scope)) ?? [];
+    if (scopedReceipts.length === 0) {
+      continue;
+    }
     const projection: SLScopeResourceProjection = {
       schemaVersion: 1,
       scope: entry.scope,
-      projections: slProjectResourceReceipts(
-        receiptsByScope.get(slScopeKey(entry.scope)) ?? [],
-      ),
+      projections: slProjectResourceReceipts(scopedReceipts),
     };
     await writeJson(
       root,

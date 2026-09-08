@@ -326,7 +326,7 @@ function slEvidenceGate(
     return {
       passed: true,
       reason:
-        "Single-repository compatibility mode preserves the existing root promotion evidence behavior.",
+        "Single-repository mode uses repository review evidence for root promotion.",
     };
   }
 
@@ -393,12 +393,12 @@ function slApprovalGate(
   passed: boolean;
   reason: string;
   ownerApprovals: SLPromotionOwnerApprovalEvidence[];
-  legacyApproval:
+  repositoryApproval:
     | Extract<SLPromotionApprovalEvidence, { kind: "repository-review" }>
     | undefined;
 } {
   if (input.policy.mode === "single-repository") {
-    const legacyApproval = input.approvals.find(
+    const repositoryApproval = input.approvals.find(
       (
         approval,
       ): approval is Extract<
@@ -409,12 +409,12 @@ function slApprovalGate(
         slValidReference(approval.evidenceRef),
     );
     return {
-      passed: legacyApproval !== undefined,
-      reason: legacyApproval
+      passed: repositoryApproval !== undefined,
+      reason: repositoryApproval
         ? "Explicit repository review approval was supplied."
         : "Explicit repository review approval is missing or invalid.",
       ownerApprovals: [],
-      legacyApproval,
+      repositoryApproval,
     };
   }
 
@@ -434,7 +434,7 @@ function slApprovalGate(
       ? `Target owner set ${input.targetScope.ownerSetId} approved the promotion.`
       : `Promotion requires approval from target owner set ${input.targetScope.ownerSetId}.`,
     ownerApprovals,
-    legacyApproval: undefined,
+    repositoryApproval: undefined,
   };
 }
 
@@ -701,8 +701,8 @@ export function slEvaluatePromotionGovernance(
     artifactScope: input.artifactScope,
     evidenceSummary: slEvidenceSummary(input.evidence),
     ownerApprovals: approvalGate.ownerApprovals,
-    ...(approvalGate.legacyApproval
-      ? { legacyApproval: approvalGate.legacyApproval }
+    ...(approvalGate.repositoryApproval
+      ? { repositoryApproval: approvalGate.repositoryApproval }
       : {}),
     conflictResolutions: conflicts.resolutions,
     reasons,

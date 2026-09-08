@@ -8,10 +8,10 @@ import type {
 } from "../../SL-src/SL-validation/SL-validation-contract.js";
 
 export const SL_TEST_CONTRACT_ROOT =
-  ".github/SL-learning/SL-validation-contracts";
+  ".github/sl-learning/sl-validation-contracts";
 
 export function slTestContractPath(artifactId: string): string {
-  return `${SL_TEST_CONTRACT_ROOT}/${artifactId}.validation.json`;
+  return `${SL_TEST_CONTRACT_ROOT}/${artifactId.toLowerCase()}.validation.json`;
 }
 
 export function slCreateTestContract(options: {

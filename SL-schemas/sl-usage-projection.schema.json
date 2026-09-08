@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ffishkel_microsoft/SL/sl-usage-projection.schema.json",
+  "title": "SL scope usage projection shard",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "scope",
+    "currentArtifactVersions",
+    "projections"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "scope": { "$ref": "sl-state-catalog.schema.json#/$defs/scope" },
+    "currentArtifactVersions": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^SL-[A-Z0-9][A-Z0-9-]*$"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^sha256:[a-f0-9]{64}$"
+      }
+    },
+    "projections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "scope",
+          "artifactId",
+          "artifactVersion",
+          "artifactContentHash",
+          "retrievalCount",
+          "applicationCount",
+          "applicationRate",
+          "outcomeCount",
+          "outcomeSuccessCount",
+          "outcomeFailureCount",
+          "outcomePartialCount",
+          "outcomeUnknownCount",
+          "outcomeSuccessRate",
+          "verifiedCount",
+          "resolvedCount",
+          "verifiedSuccessCount",
+          "verifiedFailureCount",
+          "unknownCount",
+          "verifiedSuccessRate"
+        ],
+        "properties": {
+          "scope": { "$ref": "sl-state-catalog.schema.json#/$defs/scope" },
+          "artifactId": { "type": "string", "pattern": "^SL-[A-Z0-9][A-Z0-9-]*$" },
+          "artifactVersion": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+          "artifactContentHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "retrievalCount": { "type": "integer", "minimum": 0 },
+          "applicationCount": { "type": "integer", "minimum": 0 },
+          "applicationRate": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+          "outcomeCount": { "type": "integer", "minimum": 0 },
+          "outcomeSuccessCount": { "type": "integer", "minimum": 0 },
+          "outcomeFailureCount": { "type": "integer", "minimum": 0 },
+          "outcomePartialCount": { "type": "integer", "minimum": 0 },
+          "outcomeUnknownCount": { "type": "integer", "minimum": 0 },
+          "outcomeSuccessRate": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+          "verifiedCount": { "type": "integer", "minimum": 0 },
+          "resolvedCount": { "type": "integer", "minimum": 0 },
+          "verifiedSuccessCount": { "type": "integer", "minimum": 0 },
+          "verifiedFailureCount": { "type": "integer", "minimum": 0 },
+          "unknownCount": { "type": "integer", "minimum": 0 },
+          "verifiedSuccessRate": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+          "lastRetrievedAt": { "type": "string", "format": "date-time" },
+          "lastAppliedAt": { "type": "string", "format": "date-time" },
+          "lastVerifiedSuccessAt": { "type": "string", "format": "date-time" },
+          "lastVerifiedFailureAt": { "type": "string", "format": "date-time" }
+        }
+      }
+    }
+  }
+}

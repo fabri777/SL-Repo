@@ -34,7 +34,7 @@ afterEach(async () => {
 });
 
 function runtimePath(root: string): string {
-  return join(root, ".github", "SL-learning", "SL-runtime", "SL.ps1");
+  return join(root, ".github", "sl-learning", "sl-runtime", "sl.ps1");
 }
 
 function runRuntime(
@@ -237,7 +237,7 @@ describe("repository-local PowerShell lifecycle", () => {
 
       const stateCatalog = JSON.parse(
         await readFile(
-          join(root, ".github", "SL-learning", "SL-state-catalog.json"),
+          join(root, ".github", "sl-learning", "sl-state-catalog.json"),
           "utf8",
         ),
       ) as { scopes: Array<{ registryPath: string }> };
@@ -275,23 +275,21 @@ describe("repository-local PowerShell lifecycle", () => {
     SUITE_TEST_TIMEOUT_MS,
   );
 
-  test("keeps empty usage projections as JSON arrays", async () => {
+  test("keeps empty usage projections absent", async () => {
     const root = await createPowerShellRepository();
     jsonOutput(runRuntime(root, ["project"]));
     const stateCatalog = JSON.parse(
       await readFile(
-        join(root, ".github", "SL-learning", "SL-state-catalog.json"),
+        join(root, ".github", "sl-learning", "sl-state-catalog.json"),
         "utf8",
       ),
     ) as { scopes: Array<{ projectionPath: string }> };
-    const projection = JSON.parse(
-      await readFile(
+    await expect(
+      readFile(
         join(root, ...stateCatalog.scopes[0]!.projectionPath.split("/")),
         "utf8",
       ),
-    ) as { projections: unknown };
-
-    expect(projection.projections).toEqual([]);
+    ).rejects.toThrow();
     expect(
       (jsonOutput(runRuntime(root, ["doctor"])) as { healthy: boolean }).healthy,
     ).toBe(true);
@@ -382,7 +380,7 @@ describe("repository-local PowerShell lifecycle", () => {
 
       const artifactId = "SL-POWERSHELL-E2E";
       const artifactPath =
-        ".github/instructions/SL-POWERSHELL-E2E.instructions.md";
+        ".github/instructions/sl-powershell-e2e.instructions.md";
       const contractPath = slTestContractPath(artifactId);
       await slWriteTestPromotedArtifact({
         root,
@@ -470,9 +468,12 @@ describe("repository-local PowerShell lifecycle", () => {
     "keeps dry-run side-effect free and handles Unicode paths",
     async () => {
       const root = await createPowerShellRepository();
-      await rm(join(root, ".github", "SL-learning", "SL-scope-catalog.yml"));
+      await rm(
+        join(root, ".github", "sl-learning", "sl-scope-catalog.yml"),
+        { force: true },
+      );
       await writeFile(
-        join(root, ".github", "SL-learning", "SL-scope-catalog.json"),
+        join(root, ".github", "sl-learning", "sl-scope-catalog.json"),
         `${JSON.stringify(
           {
             schemaVersion: 1,
@@ -545,7 +546,7 @@ describe("repository-local PowerShell lifecycle", () => {
       const lockPath = join(
         root,
         ".github",
-        "SL-learning",
+        "sl-learning",
         ".SL-repository-mutation.lock",
       );
       await mkdir(lockPath);
@@ -633,10 +634,10 @@ describe("repository-local PowerShell lifecycle", () => {
       const registryPath = join(
         root,
         ".github",
-        "SL-learning",
-        "SL-scopes",
-        "SL-sl-scope-root-47ab59b49ac7",
-        "SL-registry.json",
+        "sl-learning",
+        "sl-scopes",
+        "sl-sl-scope-root-47ab59b49ac7",
+        "sl-registry.json",
       );
       const beforeRegistry = await readFile(registryPath);
       await mkdir(dirname(join(root, capture.path)), { recursive: true });
@@ -657,9 +658,12 @@ describe("repository-local PowerShell lifecycle", () => {
     "activates a shared monorepo promotion only after two-scope evidence",
     async () => {
       const root = await createPowerShellRepository();
-      await rm(join(root, ".github", "SL-learning", "SL-scope-catalog.yml"));
+      await rm(
+        join(root, ".github", "sl-learning", "sl-scope-catalog.yml"),
+        { force: true },
+      );
       await writeFile(
-        join(root, ".github", "SL-learning", "SL-scope-catalog.json"),
+        join(root, ".github", "sl-learning", "sl-scope-catalog.json"),
         `${JSON.stringify(
           {
             schemaVersion: 1,
@@ -700,7 +704,7 @@ describe("repository-local PowerShell lifecycle", () => {
         )}\n`,
         "utf8",
       );
-      const configPath = join(root, ".github", "SL-learning", "SL-config.yml");
+      const configPath = join(root, ".github", "sl-learning", "sl-config.yml");
       await writeFile(
         configPath,
         (await readFile(configPath, "utf8")).replace(
@@ -762,7 +766,7 @@ describe("repository-local PowerShell lifecycle", () => {
       }
       const artifactId = "SL-SHARED-POWERSHELL";
       const artifactPath =
-        ".github/instructions/SL-SHARED-POWERSHELL.instructions.md";
+        ".github/instructions/sl-shared-powershell.instructions.md";
       const contractPath = slTestContractPath(artifactId);
       await slWriteTestPromotedArtifact({
         root,
@@ -1100,8 +1104,8 @@ describe("repository-local PowerShell lifecycle", () => {
         .map((path) => path.replaceAll("\\", "/"))
         .find(
           (path) =>
-            path.includes("/SL-resource-receipts/") &&
-            path.includes("/2026-09/SL-resource-"),
+            path.includes("/sl-resource-receipts/") &&
+            path.includes("/2026-09/sl-resource-"),
         );
       expect(originalRelative).toBeDefined();
       const receipt = JSON.parse(
@@ -1123,7 +1127,7 @@ describe("repository-local PowerShell lifecycle", () => {
       jsonOutput(runRuntime(root, ["project"]));
       const stateCatalog = JSON.parse(
         await readFile(
-          join(root, ".github", "SL-learning", "SL-state-catalog.json"),
+          join(root, ".github", "sl-learning", "sl-state-catalog.json"),
           "utf8",
         ),
       ) as { scopes: Array<{ resourceProjectionPath: string }> };
@@ -1143,12 +1147,15 @@ describe("repository-local PowerShell lifecycle", () => {
     "matches TypeScript case-sensitive parent exclusion validation",
     async () => {
       const root = await createPowerShellRepository();
-      await rm(join(root, ".github", "SL-learning", "SL-scope-catalog.yml"));
+      await rm(
+        join(root, ".github", "sl-learning", "sl-scope-catalog.yml"),
+        { force: true },
+      );
       const catalogPath = join(
         root,
         ".github",
-        "SL-learning",
-        "SL-scope-catalog.json",
+        "sl-learning",
+        "sl-scope-catalog.json",
       );
       const catalog = {
         schemaVersion: 1,
@@ -1190,9 +1197,22 @@ describe("repository-local PowerShell lifecycle", () => {
     "reports a missing declared resource projection as validation failure",
     async () => {
       const root = await createPowerShellRepository();
+      jsonOutput(
+        runRuntime(root, [
+          "resource", "baseline", "--task-run-id", "missing-projection-task",
+          "--comparison-id", "missing-projection-comparison",
+          "--scenario-key", "missing-projection-scenario",
+          "--idempotency-key", "missing-projection-resource",
+          "--source", "manual", "--quality", "measured",
+          "--provider", "provider-a", "--model", "model-a",
+          "--input-tokens", "10", "--output-tokens", "2",
+          "--wall-clock-ms", "100", "--timestamp", FIXED_DATE,
+        ]),
+      );
+      jsonOutput(runRuntime(root, ["project"]));
       const stateCatalog = JSON.parse(
         await readFile(
-          join(root, ".github", "SL-learning", "SL-state-catalog.json"),
+          join(root, ".github", "sl-learning", "sl-state-catalog.json"),
           "utf8",
         ),
       ) as { scopes: Array<{ resourceProjectionPath: string }> };
@@ -1264,7 +1284,7 @@ describe("repository-local PowerShell lifecycle", () => {
       ) as { id: string };
       const artifactId = "SL-TRANSACTIONAL-PROMOTION";
       const artifactPath =
-        ".github/instructions/SL-TRANSACTIONAL-PROMOTION.instructions.md";
+        ".github/instructions/sl-transactional-promotion.instructions.md";
       const contractPath = slTestContractPath(artifactId);
       await slWriteTestPromotedArtifact({
         root,

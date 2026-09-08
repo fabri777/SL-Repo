@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "layoutVersion": 1,
+  "runtimeVersion": "0.6.0",
+  "files": [
+    {
+      "path": ".azure-pipelines/sl-learning/sl-retention.yml",
+      "category": "azure",
+      "sha256": "f8a25db96f5caac29886f2af98a68e729da0e9fe15a77e5e5c56869cb1126914"
+    },
+    {
+      "path": ".azure-pipelines/sl-learning/sl-validation.yml",
+      "category": "azure",
+      "sha256": "f52cea418ac3733f9b5773af9ce006c9ce2fd6b0a1539eed158e2abb8f631c38"
+    },
+    {
+      "path": ".github/skills/sl-learning-audit/SKILL.md",
+      "category": "core",
+      "sha256": "9906d6227889cf019a248cc51f1a2822b095ff82fb0d210a01d35010f4ba0744"
+    },
+    {
+      "path": ".github/skills/sl-lesson-curator/SKILL.md",
+      "category": "core",
+      "sha256": "2cfd8e434d125ced3ba24900f6b678936558715ce721c570e3717b30ab07d7a6"
+    },
+    {
+      "path": ".github/sl-learning/.gitattributes",
+      "category": "core",
+      "sha256": "8b89cca44ad767adb9268e0bf11969281c583dc647400e802b75b3be66bb53e5"
+    },
+    {
+      "path": ".github/sl-learning/sl-schema-bundle.schema.json",
+      "category": "core",
+      "sha256": "73c8833b034dc7ceffe28d50200a7caff6212ff22b751aca472a4a655cde0562"
+    },
+    {
+      "path": ".github/workflows/sl-learning-forget.yml",
+      "category": "github",
+      "sha256": "8ecf1984c9c9f2cfc09901a29fa2375dabb3519d2dd9e72eb1347ea51f3db9fb"
+    },
+    {
+      "path": ".github/workflows/sl-learning-validation.yml",
+      "category": "github",
+      "sha256": "20f4106a91ac9defae451a64325e8b3c563018609b02d17fb1d1509552cb3f63"
+    }
+  ]
+}

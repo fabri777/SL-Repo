@@ -7,10 +7,11 @@ import {
   slStringifyMarkdown,
 } from "../../SL-src/SL-core/SL-frontmatter.js";
 import { slInstall } from "../../SL-src/SL-core/SL-installer.js";
+import { slLoadRegistry } from "../../SL-src/SL-core/SL-registry.js";
 import {
-  slLoadRegistry,
-  slSaveRegistry,
-} from "../../SL-src/SL-core/SL-registry.js";
+  SL_DEFAULT_SCOPE,
+  slScopeCatalogEntry,
+} from "../../SL-src/SL-core/SL-state.js";
 import {
   slLoadUsageEvents,
   slProjectUsage,
@@ -22,6 +23,14 @@ import {
 } from "../SL-fixtures/SL-test-repository.js";
 
 const repositories: string[] = [];
+
+function rootStatePaths(root: string) {
+  const entry = slScopeCatalogEntry(SL_DEFAULT_SCOPE);
+  return {
+    registryPath: join(root, ...entry.registryPath.split("/")),
+    indexPath: join(root, ...entry.indexPath.split("/")),
+  };
+}
 
 afterEach(async () => {
   await Promise.all(repositories.splice(0).map(slRemoveTestRepository));
@@ -83,9 +92,6 @@ describe("SL reuse voting", () => {
       registry.artifacts.find((artifact) => artifact.id === lesson.id),
     ).toMatchObject({
       status: "promotion-candidate",
-      hits: 0,
-      retrievals: 0,
-      notUsefulVotes: 0,
     });
     expect(await slProjectUsage(root, lesson.id)).toEqual([
       expect.objectContaining({
@@ -132,9 +138,6 @@ describe("SL reuse voting", () => {
     );
     expect(artifact).toMatchObject({
       status: "raw",
-      hits: 0,
-      retrievals: 0,
-      notUsefulVotes: 0,
     });
     expect(artifact?.lastSuccessfulUseAt).toBeUndefined();
     expect(await slProjectUsage(root, lesson.id)).toEqual([
@@ -242,13 +245,7 @@ describe("SL reuse voting", () => {
         idempotencyKey: "first-shared-vote",
       },
     );
-    const registryPath = join(
-      root,
-      ".github",
-      "SL-learning",
-      "SL-registry.json",
-    );
-    const indexPath = join(root, ".github", "SL-learning", "SL-index.json");
+    const { registryPath, indexPath } = rootStatePaths(root);
     const beforeRegistry = await readFile(registryPath, "utf8");
     const beforeIndex = await readFile(indexPath, "utf8");
     const beforeSecondLesson = await readFile(
@@ -361,13 +358,7 @@ describe("SL reuse voting", () => {
       slStringifyMarkdown(markdown.frontmatter, markdown.body),
       "utf8",
     );
-    const registryPath = join(
-      root,
-      ".github",
-      "SL-learning",
-      "SL-registry.json",
-    );
-    const indexPath = join(root, ".github", "SL-learning", "SL-index.json");
+    const { registryPath, indexPath } = rootStatePaths(root);
     const beforeLesson = await readFile(lessonPath, "utf8");
     const beforeRegistry = await readFile(registryPath, "utf8");
     const beforeIndex = await readFile(indexPath, "utf8");
@@ -393,71 +384,4 @@ describe("SL reuse voting", () => {
     expect(await readFile(indexPath, "utf8")).toBe(beforeIndex);
   });
 
-  test("migrates existing counters into an immutable baseline", async () => {
-    const root = await slCreateTestRepository();
-    repositories.push(root);
-    await slInstall(root, "init", false);
-    const lesson = await slCaptureLesson(root, {
-      title: "Legacy counter lesson",
-      kind: "win",
-      scope: "tests",
-      triggers: ["legacy counter"],
-      dryRun: false,
-      now: new Date("2026-09-01T08:00:00.000Z"),
-    });
-    const registry = await slLoadRegistry(root);
-    const artifact = registry.artifacts.find(
-      (candidate) => candidate.id === lesson.id,
-    );
-    if (!artifact) {
-      throw new Error("Captured lesson was not registered.");
-    }
-    artifact.hits = 2;
-    artifact.retrievals = 3;
-    artifact.notUsefulVotes = 1;
-    artifact.lastRetrievedAt = "2026-09-02T10:00:00.000Z";
-    artifact.lastSuccessfulUseAt = "2026-09-02T09:00:00.000Z";
-    await slSaveRegistry(root, registry, false, []);
-
-    await slVoteOnLesson(
-      root,
-      lesson.id,
-      "useful",
-      false,
-      new Date("2026-09-03T09:00:00.000Z"),
-      {
-        taskRunId: "task-after-migration",
-        applicationId: "application-after-migration",
-        idempotencyKey: "vote-after-migration",
-      },
-    );
-
-    const updatedRegistry = await slLoadRegistry(root);
-    expect(
-      updatedRegistry.artifacts.find(
-        (candidate) => candidate.id === lesson.id,
-      ),
-    ).toMatchObject({
-      status: "promotion-candidate",
-      hits: 2,
-      retrievals: 3,
-      notUsefulVotes: 1,
-    });
-    expect(await slProjectUsage(root, lesson.id)).toEqual([
-      expect.objectContaining({
-        retrievalCount: 4,
-        applicationCount: 4,
-        verifiedSuccessCount: 3,
-        verifiedFailureCount: 1,
-        unknownCount: 0,
-        verifiedSuccessRate: 0.75,
-        lastVerifiedSuccessAt: "2026-09-03T09:00:00.000Z",
-      }),
-    ]);
-    expect(
-      (await slLoadUsageEvents(root)).filter(
-        (event) => event.eventType === "legacy-baseline",
-      ),
-    ).toHaveLength(1);
-  });
 });

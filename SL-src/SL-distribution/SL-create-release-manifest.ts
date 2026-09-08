@@ -15,7 +15,7 @@ async function main(): Promise<void> {
   const outputPath = resolve(
     process.argv.includes("--output")
       ? slArgument("--output")
-      : `${assetDirectory}/SL-release-manifest.json`,
+      : `${assetDirectory}/sl-release-manifest.json`,
   );
   const manifest = await slWritePortableReleaseManifest(
     assetDirectory,

@@ -118,12 +118,6 @@ export interface SLMonorepoFixture {
   };
 }
 
-export interface SLLegacy02Fixture {
-  root: string;
-  lessonId: string;
-  legacyRegistryPath: string;
-}
-
 function repositoryPath(root: string, relativePath: string): string {
   return join(root, ...relativePath.split("/"));
 }
@@ -139,10 +133,10 @@ async function writeRepositoryFile(
 }
 
 async function writeMonorepoCatalog(root: string): Promise<void> {
-  const learningRoot = repositoryPath(root, ".github/SL-learning");
-  await rm(join(learningRoot, "SL-scope-catalog.yml"), { force: true });
+  const learningRoot = repositoryPath(root, ".github/sl-learning");
+  await rm(join(learningRoot, "sl-scope-catalog.yml"), { force: true });
   await writeFile(
-    join(learningRoot, "SL-scope-catalog.json"),
+    join(learningRoot, "sl-scope-catalog.json"),
     `${JSON.stringify(
       {
         schemaVersion: 1,
@@ -153,7 +147,7 @@ async function writeMonorepoCatalog(root: string): Promise<void> {
     )}\n`,
     "utf8",
   );
-  const configPath = join(learningRoot, "SL-config.yml");
+  const configPath = join(learningRoot, "sl-config.yml");
   const config = parse(await readFile(configPath, "utf8"));
   config.promotion.mode = "monorepo";
   await writeFile(configPath, stringify(config), "utf8");
@@ -193,7 +187,7 @@ async function activatePromotion(options: {
   >;
 }): Promise<void> {
   const artifactPath =
-    `.github/instructions/${options.artifactId}.instructions.md`;
+    `.github/instructions/${options.artifactId.toLowerCase()}.instructions.md`;
   const contractPath = slTestContractPath(options.artifactId);
   await slWriteTestJson(
     options.root,
@@ -418,57 +412,4 @@ export async function slCreateMonorepoFixture(): Promise<SLMonorepoFixture> {
       ordersPromotion: find("SL-ORDERS-TEST-RUNNER"),
     },
   };
-}
-
-export async function slCreateLegacy02Fixture(): Promise<SLLegacy02Fixture> {
-  const root = await slCreateTestRepository();
-  await slInstall(root, "init", false);
-  const lesson = await slCaptureLesson(root, {
-    title: "Legacy zero two evidence",
-    kind: "win",
-    scope: "legacy",
-    triggers: ["legacy-0.2"],
-    dryRun: false,
-    now: FIXED_NOW,
-  });
-  const registry = await slLoadRegistry(root);
-  const artifact = registry.artifacts.find(
-    (candidate) => candidate.id === lesson.id,
-  );
-  if (!artifact) {
-    throw new Error("Legacy fixture lesson was not registered.");
-  }
-  delete artifact.scope;
-  delete artifact.usageProjection;
-  artifact.hits = 2;
-  artifact.retrievals = 3;
-  artifact.notUsefulVotes = 1;
-  const learningRoot = repositoryPath(root, ".github/SL-learning");
-  const legacyRegistryPath = join(learningRoot, "SL-registry.json");
-  await writeFile(
-    legacyRegistryPath,
-    `${JSON.stringify(registry, null, 2)}\n`,
-    "utf8",
-  );
-  await Promise.all([
-    rm(join(learningRoot, "SL-state-catalog.json"), { force: true }),
-    rm(join(learningRoot, "SL-scopes"), { recursive: true, force: true }),
-    rm(join(learningRoot, "SL-scope-catalog.yml"), { force: true }),
-    rm(join(learningRoot, "SL-schemas"), { recursive: true, force: true }),
-  ]);
-  const content = await readFile(repositoryPath(root, lesson.path), "utf8");
-  const event = slCreateUsageEvent({
-    artifactId: lesson.id,
-    artifactContentHash: slArtifactUsageContentHash(content),
-    taskRunId: "legacy-task",
-    applicationId: "legacy-application",
-    stage: "verified",
-    outcome: "success",
-    verifierType: "test-suite",
-    timestamp: new Date(FIXED_NOW.getTime() + 60_000).toISOString(),
-    idempotencyKey: "legacy-unscoped-success",
-  });
-  delete event.scope;
-  await slWriteUsageEvent(root, event, false);
-  return { root, lessonId: lesson.id, legacyRegistryPath };
 }

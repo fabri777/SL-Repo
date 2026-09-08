@@ -3,10 +3,10 @@
 Every newly registered probationary instruction or skill references a
 versioned JSON contract from
 its `validationContract` frontmatter field. Contract files live under
-`.github/SL-learning/SL-validation-contracts/` and use the
+`.github/sl-learning/sl-validation-contracts/` and use the
 `SL-*.validation.json` naming convention.
 
-The version 1 schema is `SL-schemas/SL-validation-contract.schema.json`. A
+The version 1 schema is `SL-schemas/validation-contract.schema.json`. A
 contract binds the promoted artifact ID, type, repository path, and evidence
 source IDs. It also declares repository or path scope, deterministic behavioral
 scenarios, optional counterexamples, and optional exclusive declarations used
@@ -14,7 +14,7 @@ to detect obvious conflicts between active artifacts.
 
 Skills may define executable checks with a supported command, argument array,
 repository-relative working directory, timeout, and expected exit code.
-Commands are never run by `sl-repo validate` or promotion registration.
+Commands are never run by `sl validate` or promotion registration.
 Callers must explicitly invoke the core evaluator with
 `{ executeCommands: true }`. Commands run without a shell, are restricted to
 `node` repository scripts or `npm run` package scripts, and fail closed on
@@ -51,17 +51,13 @@ the evaluation and its approval stale. Repository validation reports the stale
 evaluation, the active index omits stale active guidance, and activation
 requires a new evaluation and approval reference.
 
-Legacy registry status `promoted` maps to active for compatibility. Existing
-guidance remains discoverable while repositories migrate to the governed
-probation/activation flow.
-
 The CLI exposes the evaluator by registered artifact ID or path:
 
 ```powershell
-sl-repo evaluate <artifact-id-or-path> [path] --json
-sl-repo evaluate <artifact-id-or-path> [path] --execute-checks --json
-sl-repo promotion-evaluate <artifact-id> [path] --approval-ref <ref>
-sl-repo promotion-activate <artifact-id> [path]
+sl evaluate <artifact-id-or-path> [path] --json
+sl evaluate <artifact-id-or-path> [path] --execute-checks --json
+sl promotion-evaluate <artifact-id> [path] --approval-ref <ref>
+sl promotion-activate <artifact-id> [path]
 ```
 
 The first form is static. The second is the explicit executable opt-in and

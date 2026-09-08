@@ -5,7 +5,7 @@ SL Repo separates reasoning from deterministic enforcement.
 | Layer | Responsibility |
 |---|---|
 | Copilot skills | Decide whether a verified experience is worth capturing and how to express it |
-| Installer CLI | Bootstrap and update the repository-local runtime and managed templates |
+| `sl` command | Install itself and initialize or refresh the repository-local runtime and managed templates |
 | Repository-local PowerShell runtime | Dispatch post-install operations without Node/npm/global CLI dependencies |
 | Repository files | Preserve evidence and promoted knowledge in Git |
 | `AGENTS.md` | Provider-neutral entry point that directs agents to repository knowledge |
@@ -18,10 +18,10 @@ validation, promotion, or forgetting, so Azure Repos and other Git hosts use
 the same state layout.
 
 The installer also maintains a delimited
-`.github/copilot-instructions.md` compatibility block. It improves GitHub
-Copilot discovery but is not required by the SL data model or CLI.
+`.github/copilot-instructions.md` discovery block. It improves GitHub Copilot
+discovery but is not required by the SL data model or CLI.
 
-The managed runtime lives at `.github/SL-learning/SL-runtime/`. Its manifest
+The managed runtime lives at `.github/sl-learning/sl-runtime/`. Its manifest
 defines the complete managed boundary and hashes every payload file. The
 runtime implements command dispatch, health/integrity validation, safe
 primitives, supported syntax, cross-language conformance, and the complete
@@ -30,25 +30,24 @@ post-initialization lifecycle without Node/npm/global CLI dependencies. See
 
 ## Source-of-truth boundaries
 
-| Data | Authority | Derived or compatibility behavior |
+| Data | Authority | Derived behavior |
 |---|---|---|
-| Scope ownership and relationships | Hand-authored `SL-scope-catalog.yml`, `.yaml`, or `.json` | Exactly one catalog; no catalog means the compatibility root scope |
+| Scope ownership and relationships | Optional hand-authored `sl-scope-catalog.yml`, `.yaml`, or `.json` | Exactly one catalog; no catalog means the implicit root scope |
 | Lesson/guidance content | SL-managed Markdown plus validation contracts | Registry metadata cannot replace or silently rewrite content |
-| Usage and lifecycle evidence | Immutable event shards | Mutable counters and legacy JSONL are read-only migration inputs |
+| Usage and lifecycle evidence | Immutable event shards | Projections are deterministic and never replace source events |
 | Resource evidence | Immutable provider-neutral resource receipt shards | Projections and advisory efficiency reports are derived; provider prices are never inferred |
-| Lifecycle ownership | Per-scope registry shards | Root `SL-registry.json` is retained as 0.2 compatibility input |
+| Lifecycle ownership | Per-scope registry shards | Every managed artifact has one authoritative scope shard |
 | Retrieval discovery | Per-scope indexes | Rebuilt from active registry state; never a metrics authority |
 | Usage metrics | Per-scope projections rebuilt from events | Repository aggregation exposes counts only, not a blended success rate |
-| Shard routing | Generated `SL-state-catalog.json` | Contains descriptors and deterministic paths, not artifacts or metrics |
+| Shard routing | Generated `sl-state-catalog.json` | Contains descriptors and deterministic paths, not artifacts or metrics |
 | Enforcement schemas | Schemas bundled with the reviewed runtime | Installed schema copies are review/editor aids and SL-managed templates |
-| Runtime identity and ownership | Installed `SL-runtime.manifest.json` | Hashes are generated deterministically from LF-normalized template bytes |
+| Runtime identity and ownership | Installed `sl-runtime.manifest.json` | Hashes are generated deterministically from LF-normalized template bytes |
 
 Per-scope registry shards are the authority for ownership and governed
 lifecycle state. The root state catalog contains only scope descriptors and
 shard paths.
 Immutable per-event files are the authority for retrieval and verified usage.
-Registry timestamps and maturity are rebuildable caches; mutable legacy
-counters are never incremented. Usage metrics live in separate per-scope
+Registry timestamps and maturity are rebuildable caches. Usage metrics live in separate per-scope
 projection shards. The Markdown artifact preserves human-readable evidence.
 Each generated scope index contains discovery paths and metadata, not metrics.
 See [SL monorepo state layout](SL-state-layout.md).
@@ -66,7 +65,7 @@ owner process, host, timestamp, and random-token metadata, refreshes its lease,
 waits for a bounded interval, and reclaims only demonstrably abandoned locks
 through atomic rename-before-remove.
 
-Generated guidance is moved into `.github/SL-learning/SL-probation/` before it
+Generated guidance is moved into `.github/sl-learning/sl-probation/` before it
 is registered, so normal Copilot discovery cannot load it. Activation moves a
 passing artifact to its ecosystem path only after contract, provenance,
 scenario, conflict, executable, approval, and content-version gates pass.

@@ -14,6 +14,10 @@ import {
 } from "../../SL-src/SL-core/SL-registry.js";
 import { slInstall } from "../../SL-src/SL-core/SL-installer.js";
 import {
+  SL_DEFAULT_SCOPE,
+  slScopeCatalogEntry,
+} from "../../SL-src/SL-core/SL-state.js";
+import {
   slCreateUsageEvent,
   slLoadUsageEvents,
   slUsageEventPath,
@@ -38,7 +42,7 @@ describe("SL event safety", () => {
     repositories.push(root, outside);
     await slInstall(root, "init", false);
 
-    const learningPath = join(root, ".github", "SL-learning");
+    const learningPath = join(root, ".github", "sl-learning");
     const outsideLearning = join(outside, "outside-learning");
     await mkdir(outsideLearning);
     await writeFile(join(outsideLearning, "SL-events.jsonl"), "", "utf8");
@@ -73,9 +77,7 @@ describe("SL event safety", () => {
 
     const usagePath = join(
       root,
-      ".github",
-      "SL-learning",
-      "SL-usage-events",
+      ...slScopeCatalogEntry(SL_DEFAULT_SCOPE).usageEventsPath.split("/"),
     );
     const outsideUsage = join(outside, "outside-usage");
     await mkdir(outsideUsage);
@@ -90,8 +92,8 @@ describe("SL event safety", () => {
     );
     expect(await slValidateRepository(root)).toContainEqual(
       expect.objectContaining({
-        code: "usage-event-containment",
-        path: ".github/SL-learning/SL-usage-events",
+        code: "scope-shard-containment",
+        path: ".github/sl-learning/sl-state-catalog.json",
       }),
     );
   });

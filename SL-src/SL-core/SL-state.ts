@@ -23,20 +23,10 @@ export const SL_DEFAULT_SCOPE: SLScopeDescriptor = {
 };
 
 const SL_SCOPE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
-const SL_LEGACY_DEFAULT_SCOPE: SLScopeDescriptor = {
-  id: "repo",
-  path: ".",
-};
 
 export function slNormalizeScope(
   input: SLScopeDescriptor = SL_DEFAULT_SCOPE,
 ): SLScopeDescriptor {
-  if (
-    input.id.trim() === SL_LEGACY_DEFAULT_SCOPE.id &&
-    input.path.trim().replaceAll("\\", "/") === SL_LEGACY_DEFAULT_SCOPE.path
-  ) {
-    return { ...SL_DEFAULT_SCOPE };
-  }
   const id = input.id.trim();
   if (!SL_SCOPE_ID_PATTERN.test(id)) {
     throw new Error(
@@ -83,7 +73,7 @@ export function slScopeShardName(scope: SLScopeDescriptor): string {
     .update(slScopeKey(normalized))
     .digest("hex")
     .slice(0, 12);
-  return `SL-${slug}-${hash}`;
+  return `sl-${slug}-${hash}`;
 }
 
 export function slArtifactShardName(artifactId: string): string {
@@ -92,7 +82,7 @@ export function slArtifactShardName(artifactId: string): string {
     .update(artifactId)
     .digest("hex")
     .slice(0, 12);
-  return `SL-${slug}-${hash}`;
+  return `sl-${slug}-${hash}`;
 }
 
 export function slScopeCatalogEntry(
@@ -104,12 +94,12 @@ export function slScopeCatalogEntry(
   return {
     scope: normalized,
     shard,
-    registryPath: `${root}/SL-registry.json`,
-    indexPath: `${root}/SL-index.json`,
-    projectionPath: `${root}/SL-usage-projection.json`,
-    usageEventsPath: `${root}/SL-usage-events`,
-    resourceReceiptsPath: `${root}/SL-resource-receipts`,
-    resourceProjectionPath: `${root}/SL-resource-projection.json`,
+    registryPath: `${root}/sl-registry.json`,
+    indexPath: `${root}/sl-index.json`,
+    projectionPath: `${root}/sl-usage-projection.json`,
+    usageEventsPath: `${root}/sl-usage-events`,
+    resourceReceiptsPath: `${root}/sl-resource-receipts`,
+    resourceProjectionPath: `${root}/sl-resource-projection.json`,
   };
 }
 
@@ -168,31 +158,6 @@ export async function slWriteStateCatalog(
 }
 
 export function slAssertCatalogEntryPaths(entry: SLScopeCatalogEntry): void {
-  if (
-    entry.scope.id === SL_LEGACY_DEFAULT_SCOPE.id &&
-    entry.scope.path === SL_LEGACY_DEFAULT_SCOPE.path
-  ) {
-    const legacyKey = `${SL_LEGACY_DEFAULT_SCOPE.id}\0${SL_LEGACY_DEFAULT_SCOPE.path}`;
-    const hash = createHash("sha256")
-      .update(legacyKey)
-      .digest("hex")
-      .slice(0, 12);
-    const shard = `SL-repo-${hash}`;
-    const root = `${SL_PATHS.scopeRoot}/${shard}`;
-    if (
-      entry.shard === shard &&
-      entry.registryPath === `${root}/SL-registry.json` &&
-      entry.indexPath === `${root}/SL-index.json` &&
-      entry.projectionPath === `${root}/SL-usage-projection.json` &&
-      entry.usageEventsPath === `${root}/SL-usage-events` &&
-      (entry.resourceReceiptsPath === undefined ||
-        entry.resourceReceiptsPath === `${root}/SL-resource-receipts`) &&
-      (entry.resourceProjectionPath === undefined ||
-        entry.resourceProjectionPath === `${root}/SL-resource-projection.json`)
-    ) {
-      return;
-    }
-  }
   const expected = slScopeCatalogEntry(entry.scope);
   if (
     entry.scope.id !== expected.scope.id ||

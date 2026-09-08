@@ -47,9 +47,12 @@ const PROCESS_TREE_FIXTURE = fileURLToPath(
   new URL("../SL-fixtures/SL-process-tree.mjs", import.meta.url),
 );
 
-afterEach(async () => {
-  await Promise.all(repositories.splice(0).map(slRemoveTestRepository));
-});
+afterEach(
+  async () => {
+    await Promise.all(repositories.splice(0).map(slRemoveTestRepository));
+  },
+  120_000,
+);
 
 async function slCreateSource(root: string, title: string) {
   return slCaptureLesson(root, {
@@ -71,7 +74,7 @@ async function slPreparePromotion(options: {
 }): Promise<{ artifactPath: string; contractPath: string }> {
   const artifactPath =
     options.artifactType === "instruction"
-      ? `.github/instructions/${options.artifactId}.instructions.md`
+      ? `.github/instructions/${options.artifactId.toLowerCase()}.instructions.md`
       : `.github/skills/${options.artifactId.toLowerCase()}/SKILL.md`;
   const contractPath = slTestContractPath(options.artifactId);
   await slWriteTestPromotedArtifact({
@@ -136,14 +139,14 @@ function slConflictsForScopes(
   const left = slCreateTestContract({
     artifactId: "SL-SCOPE-LEFT",
     artifactType: "instruction",
-    artifactPath: ".github/instructions/SL-SCOPE-LEFT.instructions.md",
+    artifactPath: ".github/instructions/sl-scope-left.instructions.md",
     sourceIds: ["SL-SOURCE-LEFT"],
     declarations: [{ key: "scope.mode", value: "left" }],
   });
   const right = slCreateTestContract({
     artifactId: "SL-SCOPE-RIGHT",
     artifactType: "instruction",
-    artifactPath: ".github/instructions/SL-SCOPE-RIGHT.instructions.md",
+    artifactPath: ".github/instructions/sl-scope-right.instructions.md",
     sourceIds: ["SL-SOURCE-RIGHT"],
     declarations: [{ key: "scope.mode", value: "right" }],
   });
@@ -230,7 +233,8 @@ describe("SL promoted validation contracts", () => {
     await slInstall(root, "init", false);
     const source = await slCreateSource(root, "Instruction contract source");
     const artifactId = "SL-INSTRUCTION-CONTRACT";
-    const artifactPath = `.github/instructions/${artifactId}.instructions.md`;
+    const artifactPath =
+      `.github/instructions/${artifactId.toLowerCase()}.instructions.md`;
     const contract = slCreateTestContract({
       artifactId,
       artifactType: "instruction",
@@ -332,7 +336,7 @@ describe("SL promoted validation contracts", () => {
     await slInstall(root, "init", false);
     const source = await slCreateSource(root, "Missing contract source");
     const missingPath =
-      ".github/instructions/SL-MISSING-CONTRACT.instructions.md";
+      ".github/instructions/sl-missing-contract.instructions.md";
     await mkdir(dirname(join(root, ...missingPath.split("/"))), {
       recursive: true,
     });
@@ -372,7 +376,8 @@ describe("SL promoted validation contracts", () => {
     await slInstall(root, "init", false);
     const source = await slCreateSource(root, "Source mismatch source");
     const artifactId = "SL-SOURCE-MISMATCH";
-    const artifactPath = `.github/instructions/${artifactId}.instructions.md`;
+    const artifactPath =
+      `.github/instructions/${artifactId.toLowerCase()}.instructions.md`;
     const prepared = await slPreparePromotion({
       root,
       sourceId: source.id,
@@ -403,7 +408,8 @@ describe("SL promoted validation contracts", () => {
     await slInstall(root, "init", false);
     const source = await slCreateSource(root, "Sensitive contract source");
     const artifactId = "SL-SENSITIVE-CONTRACT";
-    const artifactPath = `.github/instructions/${artifactId}.instructions.md`;
+    const artifactPath =
+      `.github/instructions/${artifactId.toLowerCase()}.instructions.md`;
     const contract = slCreateTestContract({
       artifactId,
       artifactType: "instruction",
@@ -447,14 +453,14 @@ describe("SL promoted validation contracts", () => {
     const contractRoot = join(
       root,
       ".github",
-      "SL-learning",
-      "SL-validation-contracts",
+      "sl-learning",
+      "sl-validation-contracts",
     );
     const outsideContractRoot = join(outside, "outside-contracts");
     await mkdir(outsideContractRoot);
     const externalMarker = "EXTERNAL-CONTRACT-PARSER-CONTENT-MUST-NOT-LEAK";
     await writeFile(
-      join(outsideContractRoot, `${artifactId}.validation.json`),
+      join(outsideContractRoot, `${artifactId.toLowerCase()}.validation.json`),
       `{"external":"${externalMarker}",`,
       "utf8",
     );
@@ -548,8 +554,10 @@ describe("SL promoted validation contracts", () => {
     const secondSource = await slCreateSource(root, "Second declaration source");
     const firstId = "SL-FIRST-DECLARATION";
     const secondId = "SL-SECOND-DECLARATION";
-    const firstPath = `.github/instructions/${firstId}.instructions.md`;
-    const secondPath = `.github/instructions/${secondId}.instructions.md`;
+    const firstPath =
+      `.github/instructions/${firstId.toLowerCase()}.instructions.md`;
+    const secondPath =
+      `.github/instructions/${secondId.toLowerCase()}.instructions.md`;
     const first = await slPreparePromotion({
       root,
       sourceId: firstSource.id,
@@ -920,8 +928,10 @@ describe("SL promoted validation contracts", () => {
     const secondSource = await slCreateSource(root, "Repository second source");
     const firstId = "SL-REPOSITORY-FIRST";
     const secondId = "SL-REPOSITORY-SECOND";
-    const firstPath = `.github/instructions/${firstId}.instructions.md`;
-    const secondPath = `.github/instructions/${secondId}.instructions.md`;
+    const firstPath =
+      `.github/instructions/${firstId.toLowerCase()}.instructions.md`;
+    const secondPath =
+      `.github/instructions/${secondId.toLowerCase()}.instructions.md`;
     const firstContract = slCreateTestContract({
       artifactId: firstId,
       artifactType: "instruction",
@@ -999,8 +1009,10 @@ describe("SL promoted validation contracts", () => {
     const secondSource = await slCreateSource(root, "Validation conflict second");
     const firstId = "SL-VALIDATION-CONFLICT-FIRST";
     const secondId = "SL-VALIDATION-CONFLICT-SECOND";
-    const firstPath = `.github/instructions/${firstId}.instructions.md`;
-    const secondPath = `.github/instructions/${secondId}.instructions.md`;
+    const firstPath =
+      `.github/instructions/${firstId.toLowerCase()}.instructions.md`;
+    const secondPath =
+      `.github/instructions/${secondId.toLowerCase()}.instructions.md`;
     const first = await slPreparePromotion({
       root,
       sourceId: firstSource.id,

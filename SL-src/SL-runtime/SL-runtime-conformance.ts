@@ -31,11 +31,7 @@ export async function slRunTypeScriptConformance(
     vectorsPath ??
     resolve(
       packageRoot,
-      "SL-templates",
-      "SL-repository",
-      ".github",
-      "SL-learning",
-      "SL-runtime",
+      "SL-runtime-source",
       "SL-conformance-vectors.json",
     );
   const suite = JSON.parse(

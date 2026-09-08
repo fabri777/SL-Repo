@@ -84,7 +84,7 @@ async function slCaptureLessonUnlocked(
   }
 
   const month = date.slice(0, 7);
-  const path = `${SL_PATHS.lessons}/${month}/SL-${date}-${slug}.md`;
+  const path = `${SL_PATHS.lessons}/${month}/sl-${date}-${slug}.md`;
   if (await slExists(slResolveInside(root, path))) {
     throw new Error(`Lesson file already exists: ${path}`);
   }
@@ -92,14 +92,12 @@ async function slCaptureLessonUnlocked(
   const frontmatter = {
     id,
     schemaVersion: 1,
-    managedBy: "SL-Repo",
+    managedBy: "sl",
     date,
     kind: options.kind,
     scope: options.scope,
     status: "raw",
     trigger: [...new Set(options.triggers.map((value) => value.trim()).filter(Boolean))],
-    hits: 0,
-    retrievals: 0,
     lastVerifiedAt: date,
     pinned: false,
     relatedTo: [],
@@ -140,16 +138,13 @@ async function slCaptureLessonUnlocked(
     path,
     artifactType: "lesson",
     classification: "evidence",
-    managedBy: "SL-Repo",
+    managedBy: "sl",
     status: "raw",
     createdAt: timestamp,
     lastVerifiedAt: timestamp,
     pinned: false,
     relatedTo: [],
     trigger: frontmatter.trigger,
-    hits: 0,
-    retrievals: 0,
-    notUsefulVotes: 0,
     scope: resolvedStateScope ?? SL_DEFAULT_SCOPE,
   };
   slUpsertArtifact(registry, artifact);

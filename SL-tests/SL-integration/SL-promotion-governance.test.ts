@@ -166,14 +166,14 @@ async function slPrepareGovernedPromotion(): Promise<{
   const configPath = join(
     root,
     ".github",
-    "SL-learning",
-    "SL-config.yml",
+    "sl-learning",
+    "sl-config.yml",
   );
   const config = parse(await readFile(configPath, "utf8"));
   config.promotion.mode = "monorepo";
   await writeFile(configPath, stringify(config), "utf8");
   await writeFile(
-    join(root, ".github", "SL-learning", "SL-scope-catalog.yml"),
+    join(root, ".github", "sl-learning", "sl-scope-catalog.yml"),
     stringify({
       schemaVersion: 1,
       scopes: [
@@ -239,7 +239,7 @@ async function slPrepareGovernedPromotion(): Promise<{
   });
   const artifactId = "SL-SCOPED-INTEGRATION";
   const artifactPath =
-    `.github/instructions/${artifactId}.instructions.md`;
+    `.github/instructions/${artifactId.toLowerCase()}.instructions.md`;
   const contractPath = slTestContractPath(artifactId);
   await slWriteTestPromotedArtifact({
     root,
@@ -531,7 +531,7 @@ describe("SL monorepo promotion governance", () => {
     ).toBe(false);
   });
 
-  test("preserves legacy root promotion approval behavior without synthetic scopes", () => {
+  test("preserves repository approval behavior without synthetic scopes", () => {
     const input = slBaseInput(ROOT_SCOPE);
     input.policy.mode = "single-repository";
     input.sourceScopes[0]!.scope = ROOT_SCOPE;
@@ -539,7 +539,7 @@ describe("SL monorepo promotion governance", () => {
     input.approvals = [
       {
         kind: "repository-review",
-        evidenceRef: "review:legacy-root",
+        evidenceRef: "review:repository-root",
       },
     ];
 
@@ -547,9 +547,9 @@ describe("SL monorepo promotion governance", () => {
 
     expect(evaluation.record.status).toBe("passed");
     expect(evaluation.evidencePassed).toBe(true);
-    expect(evaluation.record.legacyApproval).toEqual({
+    expect(evaluation.record.repositoryApproval).toEqual({
       kind: "repository-review",
-      evidenceRef: "review:legacy-root",
+      evidenceRef: "review:repository-root",
     });
   });
 

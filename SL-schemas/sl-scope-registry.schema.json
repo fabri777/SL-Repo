@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ffishkel_microsoft/SL/sl-scope-registry.schema.json",
+  "title": "SL scope registry shard",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "scope", "artifacts"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "scope": { "$ref": "sl-state-catalog.schema.json#/$defs/scope" },
+    "artifacts": {
+      "type": "array",
+      "items": { "$ref": "sl-registry.schema.json#/properties/artifacts/items" }
+    }
+  }
+}

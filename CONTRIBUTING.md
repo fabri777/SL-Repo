@@ -14,7 +14,7 @@ Scope changes require:
 1. Update exactly one hand-authored scope catalog.
 2. Resolve representative Windows and POSIX paths before moving content.
 3. Migrate artifact/event ownership before removing or renaming a scope ID.
-4. Run `sl-repo project .` and `sl-repo validate .`.
+4. Run `sl project .` and `sl validate .`.
 5. Review orphan, ambiguity, dependency-cycle, and projection-drift findings.
 
 Do not hand-edit generated state to repair a merge. Preserve immutable shards,

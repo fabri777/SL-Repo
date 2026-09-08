@@ -147,17 +147,17 @@ export async function slValidateRepository(root: string): Promise<SLValidationIs
     resourceReceiptSchema,
     resourceProjectionSchema,
   ] = await Promise.all([
-    slReadJson<object>(resolve(packageRoot, "SL-schemas/SL-config.schema.json")),
-    slReadJson<object>(resolve(packageRoot, "SL-schemas/SL-lesson.schema.json")),
-    slReadJson<object>(resolve(packageRoot, "SL-schemas/SL-registry.schema.json")),
-    slReadJson<object>(resolve(packageRoot, "SL-schemas/SL-index.schema.json")),
-    slReadJson<object>(resolve(packageRoot, "SL-schemas/SL-usage-event.schema.json")),
-    slReadJson<object>(resolve(packageRoot, "SL-schemas/SL-lifecycle-event.schema.json")),
-    slReadJson<object>(resolve(packageRoot, "SL-schemas/SL-state-catalog.schema.json")),
-    slReadJson<object>(resolve(packageRoot, "SL-schemas/SL-scope-registry.schema.json")),
-    slReadJson<object>(resolve(packageRoot, "SL-schemas/SL-usage-projection.schema.json")),
-    slReadJson<object>(resolve(packageRoot, "SL-schemas/SL-resource-receipt.schema.json")),
-    slReadJson<object>(resolve(packageRoot, "SL-schemas/SL-resource-projection.schema.json")),
+    slReadJson<object>(resolve(packageRoot, "SL-schemas/sl-config.schema.json")),
+    slReadJson<object>(resolve(packageRoot, "SL-schemas/sl-lesson.schema.json")),
+    slReadJson<object>(resolve(packageRoot, "SL-schemas/sl-registry.schema.json")),
+    slReadJson<object>(resolve(packageRoot, "SL-schemas/sl-index.schema.json")),
+    slReadJson<object>(resolve(packageRoot, "SL-schemas/sl-usage-event.schema.json")),
+    slReadJson<object>(resolve(packageRoot, "SL-schemas/sl-lifecycle-event.schema.json")),
+    slReadJson<object>(resolve(packageRoot, "SL-schemas/sl-state-catalog.schema.json")),
+    slReadJson<object>(resolve(packageRoot, "SL-schemas/sl-scope-registry.schema.json")),
+    slReadJson<object>(resolve(packageRoot, "SL-schemas/sl-usage-projection.schema.json")),
+    slReadJson<object>(resolve(packageRoot, "SL-schemas/sl-resource-receipt.schema.json")),
+    slReadJson<object>(resolve(packageRoot, "SL-schemas/sl-resource-projection.schema.json")),
   ]);
   ajv.addSchema(stateCatalogSchema);
   ajv.addSchema(registrySchema);
@@ -226,17 +226,16 @@ export async function slValidateRepository(root: string): Promise<SLValidationIs
       path: SL_PATHS.stateCatalog,
       message: error instanceof Error ? error.message : String(error),
     });
-    const legacyRegistryPath = slResolveInside(root, SL_PATHS.registry);
-    registry = (await slExists(legacyRegistryPath))
-      ? await slReadJson<SLRegistry>(legacyRegistryPath)
-      : { schemaVersion: 1, artifacts: [] };
-    registry.artifacts = registry.artifacts.map((artifact) => ({
-      ...artifact,
-      scope: slNormalizeScope(artifact.scope ?? { id: "repo", path: "." }),
-    }));
+    registry = { schemaVersion: 1, artifacts: [] };
   }
   if (!validateRegistry(registry)) {
-    issues.push(...slAjvIssues("registry-schema", SL_PATHS.registry, validateRegistry.errors));
+    issues.push(
+      ...slAjvIssues(
+        "registry-schema",
+        SL_PATHS.stateCatalog,
+        validateRegistry.errors,
+      ),
+    );
   }
 
   const catalog = await slLoadStateCatalog(root);
@@ -383,7 +382,7 @@ export async function slValidateRepository(root: string): Promise<SLValidationIs
         severity: "error",
         code: "state-catalog-drift",
         path: SL_PATHS.stateCatalog,
-        message: "Scope catalog is stale; run sl-repo project after merging.",
+        message: "Scope catalog is stale; run sl project after merging.",
       });
     }
   } catch (error) {
@@ -504,7 +503,7 @@ export async function slValidateRepository(root: string): Promise<SLValidationIs
             if (
               artifact.classification !== "system" &&
               (
-                parsed.frontmatter.managedBy !== "SL-Repo" ||
+                parsed.frontmatter.managedBy !== "sl" ||
                 parsed.frontmatter.status !== artifact.status ||
                 parsed.frontmatter.pinned !== artifact.pinned
               )
@@ -544,19 +543,6 @@ export async function slValidateRepository(root: string): Promise<SLValidationIs
               artifact,
               parsed.frontmatter,
             );
-            if (
-              artifact.classification === "promoted" &&
-              artifact.status === "promoted" &&
-              typeof parsed.frontmatter.validationContract !== "string"
-            ) {
-              issues.push({
-                severity: "warning",
-                code: "legacy-promoted-compatibility",
-                path: normalizedPath,
-                message:
-                  "Legacy promoted status is treated as active guidance; migrate it through probation to record governed activation evidence.",
-              });
-            }
             if (promotedTarget) {
               const evaluation = await slEvaluateValidationContract(
                 root,
@@ -650,24 +636,24 @@ export async function slValidateRepository(root: string): Promise<SLValidationIs
 
       if (
         artifact.artifactType === "lesson" &&
-        !basename(normalizedPath).startsWith("SL-")
+        !basename(normalizedPath).startsWith("sl-")
       ) {
         issues.push({
           severity: "error",
           code: "lesson-prefix",
           path: normalizedPath,
-          message: "SL-owned lesson filenames must start with SL-.",
+          message: "SL-owned lesson filenames must start with sl-.",
         });
       }
       if (
         artifact.artifactType === "instruction" &&
-        !basename(normalizedPath).startsWith("SL-")
+        !basename(normalizedPath).startsWith("sl-")
       ) {
         issues.push({
           severity: "error",
           code: "instruction-prefix",
           path: normalizedPath,
-          message: "SL-produced instruction filenames must start with SL-.",
+          message: "SL-produced instruction filenames must start with sl-.",
         });
       }
     }
@@ -687,46 +673,29 @@ export async function slValidateRepository(root: string): Promise<SLValidationIs
     }
   }
 
-  const governedContracts: SLActiveValidationContract[] = [];
-  const legacyContracts: SLActiveValidationContract[] = [];
-  const governedGuidance: SLScopedGuidance[] = [];
-  for (const active of activeContracts) {
-    const artifact = registry.artifacts.find(
-      (candidate) => candidate.id === active.artifactId,
-    );
-    const scope = artifact?.promotionEvaluation?.governance?.targetScope;
-    if (!scope) {
-      legacyContracts.push(active);
-      continue;
+  if (config.promotion.mode === "monorepo") {
+    const governedGuidance: SLScopedGuidance[] = [];
+    for (const active of activeContracts) {
+      const artifact = registry.artifacts.find(
+        (candidate) => candidate.id === active.artifactId,
+      );
+      const scope = artifact?.promotionEvaluation?.governance?.targetScope;
+      if (!scope) {
+        issues.push({
+          severity: "error",
+          code: "promotion-governance-missing",
+          ...(artifact?.path ? { path: artifact.path } : {}),
+          message: `Active promoted artifact ${active.artifactId} lacks governed scope evidence.`,
+        });
+        continue;
+      }
+      governedGuidance.push({
+        artifactId: active.artifactId,
+        scope,
+        applicability: active.contract.scope,
+        declarations: active.contract.declarations ?? [],
+      });
     }
-    governedContracts.push(active);
-    governedGuidance.push({
-      artifactId: active.artifactId,
-      scope,
-      applicability: active.contract.scope,
-      declarations: active.contract.declarations ?? [],
-    });
-  }
-  const legacyConflicts = [
-    ...slFindValidationContractConflicts(legacyContracts),
-    ...governedContracts.flatMap((governed) =>
-      legacyContracts.flatMap((legacy) =>
-        slFindValidationContractConflicts([legacy, governed]),
-      ),
-    ),
-  ];
-  for (const conflict of legacyConflicts) {
-    const artifact = registry.artifacts.find(
-      (candidate) => candidate.id === conflict.rightArtifactId,
-    );
-    issues.push({
-      severity: "error",
-      code: "validation-contract-conflict",
-      ...(artifact?.path ? { path: artifact.path } : {}),
-      message: conflict.message,
-    });
-  }
-  if (governedGuidance.length > 0) {
     try {
       const scoped = slEvaluateScopedGuidanceConflicts(
         config.promotion,
@@ -754,33 +723,28 @@ export async function slValidateRepository(root: string): Promise<SLValidationIs
         message: error instanceof Error ? error.message : String(error),
       });
     }
+  } else {
+    for (const conflict of slFindValidationContractConflicts(activeContracts)) {
+      const artifact = registry.artifacts.find(
+        (candidate) => candidate.id === conflict.rightArtifactId,
+      );
+      issues.push({
+        severity: "error",
+        code: "validation-contract-conflict",
+        ...(artifact?.path ? { path: artifact.path } : {}),
+        message: conflict.message,
+      });
+    }
   }
 
   const usageEvents: SLUsageEvent[] = [];
   const usageEventIds = new Map<string, string>();
   const usageIdempotencyKeys = new Map<string, string>();
-  const legacyBaselines = new Map<string, string>();
   const applications = new Map<string, SLUsageApplicationEvent[]>();
   let usageFiles: string[] = [];
-  const legacyUsageRoot = slResolveInside(root, SL_PATHS.usageEvents);
-  if (await slExists(legacyUsageRoot)) {
-    try {
-      await slAssertRealPathInside(root, SL_PATHS.usageEvents);
-    } catch (error) {
-      issues.push({
-        severity: "error",
-        code: "usage-event-containment",
-        path: SL_PATHS.usageEvents,
-        message: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
   try {
     await slAssertRealPathInside(root, SL_PATHS.learningRoot);
-    usageFiles = await fg([
-      `${SL_PATHS.usageEvents}/**/*`,
-      `${SL_PATHS.scopeRoot}/*/SL-usage-events/**/*`,
-    ], {
+    usageFiles = await fg(`${SL_PATHS.scopeRoot}/*/sl-usage-events/**/*`, {
       cwd: root,
       onlyFiles: true,
       followSymbolicLinks: false,
@@ -897,23 +861,9 @@ export async function slValidateRepository(root: string): Promise<SLValidationIs
         message: `Usage event references an undeclared source scope.`,
       });
     }
-    if (event.eventType === "legacy-baseline") {
-      const priorBaseline = legacyBaselines.get(event.artifactId);
-      if (priorBaseline) {
-        issues.push({
-          severity: "error",
-          code: "usage-event-duplicate-baseline",
-          path: usageFile,
-          message: `Legacy baseline for ${event.artifactId} is already present at ${priorBaseline}.`,
-        });
-      } else {
-        legacyBaselines.set(event.artifactId, usageFile);
-      }
-    } else {
-      const applicationEvents = applications.get(event.applicationId) ?? [];
-      applicationEvents.push(event);
-      applications.set(event.applicationId, applicationEvents);
-    }
+    const applicationEvents = applications.get(event.applicationId) ?? [];
+    applicationEvents.push(event);
+    applications.set(event.applicationId, applicationEvents);
     usageEvents.push(event);
   }
 
@@ -970,8 +920,7 @@ export async function slValidateRepository(root: string): Promise<SLValidationIs
     await slAssertRealPathInside(root, SL_PATHS.learningRoot);
     resourceFiles = await fg(
       [
-        `${SL_PATHS.resourceReceipts}/**/*`,
-        `${SL_PATHS.scopeRoot}/*/SL-resource-receipts/**/*`,
+        `${SL_PATHS.scopeRoot}/*/sl-resource-receipts/**/*`,
       ],
       {
         cwd: root,
@@ -1118,6 +1067,12 @@ export async function slValidateRepository(root: string): Promise<SLValidationIs
     }
     const projectionPath = slResolveInside(root, entry.resourceProjectionPath);
     if (!(await slExists(projectionPath))) {
+      if (
+        (resourceProjectionsByScope.get(slScopeKey(entry.scope)) ?? [])
+          .length === 0
+      ) {
+        continue;
+      }
       issues.push({
         severity: "error",
         code: "missing-resource-projection",
@@ -1153,25 +1108,7 @@ export async function slValidateRepository(root: string): Promise<SLValidationIs
         code: "resource-projection-drift",
         path: entry.resourceProjectionPath,
         message:
-          "Generated scope resource projection is stale; run sl-repo project.",
-      });
-    }
-  }
-
-  for (const artifact of registry.artifacts) {
-    if (
-      artifact.classification === "evidence" &&
-      !legacyBaselines.has(artifact.id) &&
-      ((artifact.hits ?? 0) > 0 ||
-        (artifact.retrievals ?? 0) > 0 ||
-        (artifact.notUsefulVotes ?? 0) > 0)
-    ) {
-      issues.push({
-        severity: "error",
-        code: "legacy-usage-baseline-missing",
-        ...(artifact.path ? { path: artifact.path } : {}),
-        message:
-          "Legacy mutable usage counters must be captured once as an immutable baseline.",
+          "Generated scope resource projection is stale; run sl project.",
       });
     }
   }
@@ -1290,47 +1227,6 @@ export async function slValidateRepository(root: string): Promise<SLValidationIs
     }
   }
 
-  const legacyEventPath = slResolveInside(root, SL_PATHS.legacyEvents);
-  if (await slExists(legacyEventPath)) {
-    try {
-      await slAssertRealPathInside(root, SL_PATHS.legacyEvents);
-      const content = await slReadText(legacyEventPath);
-      issues.push(...slCheckContent(SL_PATHS.legacyEvents, content));
-      for (const [lineIndex, line] of content.split(/\r?\n/).entries()) {
-        if (!line.trim()) {
-          continue;
-        }
-        const event = JSON.parse(line) as SLEvent;
-        const persisted = slCreateLifecycleEvent(event);
-        if (!validateLifecycleEvent(persisted)) {
-          throw new Error(
-            `Line ${lineIndex + 1} fails lifecycle event schema validation.`,
-          );
-        }
-        slValidateLifecycleEvent(persisted);
-        if (!registry.artifacts.some((artifact) => artifact.id === event.artifactId)) {
-          throw new Error(
-            `Line ${lineIndex + 1} references unknown artifact ${event.artifactId}.`,
-          );
-        }
-      }
-      issues.push({
-        severity: "warning",
-        code: "legacy-event-log",
-        path: SL_PATHS.legacyEvents,
-        message:
-          "Legacy SL-events.jsonl is read-only compatibility data; new lifecycle events use immutable per-event files.",
-      });
-    } catch (error) {
-      issues.push({
-        severity: "error",
-        code: "legacy-event-log-invalid",
-        path: SL_PATHS.legacyEvents,
-        message: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
-
   const projectedRegistry = structuredClone(registry);
   try {
     await slApplyUsageProjection(root, projectedRegistry, usageEvents);
@@ -1359,7 +1255,7 @@ export async function slValidateRepository(root: string): Promise<SLValidationIs
           code: "usage-projection-drift",
           ...(artifact.path ? { path: artifact.path } : {}),
           message:
-            "Scope registry lifecycle projection is stale; run a usage command or sl-repo project.",
+            "Scope registry lifecycle projection is stale; run a usage command or sl project.",
         });
       }
     }
@@ -1371,7 +1267,7 @@ export async function slValidateRepository(root: string): Promise<SLValidationIs
     });
   }
 
-  const lessonFiles = await fg(".github/SL-learning/SL-lessons/**/*.md", {
+  const lessonFiles = await fg(".github/sl-learning/sl-lessons/**/*.md", {
     cwd: root,
     onlyFiles: true,
   });
@@ -1426,7 +1322,7 @@ export async function slValidateRepository(root: string): Promise<SLValidationIs
           severity: "error",
           code: "index-drift",
           path: entry.indexPath,
-          message: "Generated scope index is stale; run sl-repo project.",
+          message: "Generated scope index is stale; run sl project.",
         });
       }
     } else {
@@ -1480,10 +1376,16 @@ export async function slValidateRepository(root: string): Promise<SLValidationIs
           code: "usage-projection-drift",
           path: entry.projectionPath,
           message:
-            "Generated scope usage projection is stale; run sl-repo project.",
+            "Generated scope usage projection is stale; run sl project.",
         });
       }
     } else {
+      if (
+        expectedProjection.projections.length === 0 &&
+        Object.keys(expectedProjection.currentArtifactVersions).length === 0
+      ) {
+        continue;
+      }
       issues.push({
         severity: "error",
         code: "missing-usage-projection",

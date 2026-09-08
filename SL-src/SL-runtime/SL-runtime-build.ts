@@ -6,7 +6,6 @@ import {
   SL_RUNTIME_CONFIG_CONTRACT_VERSION,
   SL_RUNTIME_CONFORMANCE_VERSION,
   SL_RUNTIME_MANIFEST_FILE,
-  SL_RUNTIME_MANIFEST_SCHEMA_FILE,
   SL_RUNTIME_MINIMUM_POWERSHELL_VERSION,
   SL_RUNTIME_PAYLOAD_FILES,
   SL_RUNTIME_SCHEMA_VERSION,
@@ -19,6 +18,7 @@ import type {
   SLRuntimeManifestFile,
 } from "../SL-core/SL-types.js";
 import { slCompareOrdinal, slNormalizePath } from "../SL-core/SL-utils.js";
+import { slBuildSystemArtifacts } from "../SL-distribution/SL-system-build.js";
 import { slValidateRuntimeManifest } from "./SL-runtime-contract.js";
 
 async function slListFiles(root: string, current = root): Promise<string[]> {
@@ -57,9 +57,29 @@ async function slWriteIfChanged(path: string, content: string): Promise<void> {
 }
 
 interface SLRuntimeBuildOptions {
+  buildSystemArtifacts?: boolean;
   injectFailureAfterSchemaWrite?: boolean;
   packageRoot?: string;
 }
+
+const SL_RUNTIME_SOURCE_FRAGMENTS = [
+  "SL.Runtime.Core.ps1",
+  "SL.Runtime.Syntax.ps1",
+  "SL.Runtime.State.ps1",
+  "SL.Runtime.Artifacts.ps1",
+  "SL.Runtime.Resource.ps1",
+  "SL.Runtime.Promotion.ps1",
+  "SL.Runtime.Lifecycle.ps1",
+  "SL.Runtime.Conformance.ps1",
+  "SL.Runtime.Doctor.ps1",
+  "SL.Runtime.Validation.ps1",
+] as const;
+
+const SL_RUNTIME_MODULE_SOURCE_TEMPLATE = "SL.Runtime.psm1";
+const SL_RUNTIME_MODULE_OUTPUT = "sl.runtime.psm1";
+const SL_RUNTIME_CONFORMANCE_SOURCE = "SL-conformance-vectors.json";
+const SL_RUNTIME_FRAGMENT_MARKER = "__SL_RUNTIME_FRAGMENTS__";
+const SL_RUNTIME_CONFORMANCE_MARKER = "__SL_CONFORMANCE_VECTORS__";
 
 interface SLRuntimeFileSnapshot {
   path: string;
@@ -97,45 +117,95 @@ export async function slBuildRuntimeManifest(
 ): Promise<SLRuntimeManifest> {
   const packageRoot =
     options.packageRoot ?? (await slFindPackageRoot(import.meta.url));
+  if (options.buildSystemArtifacts !== false) {
+    await slBuildSystemArtifacts(packageRoot);
+  }
   const runtimeRoot = resolve(
     packageRoot,
     "SL-templates",
     "SL-repository",
     ".github",
-    "SL-learning",
-    "SL-runtime",
+    "sl-learning",
+    "sl-runtime",
   );
-  const schemaSource = resolve(
-    packageRoot,
-    "SL-schemas",
-    "SL-runtime-manifest.schema.json",
+  const sourceRoot = resolve(packageRoot, "SL-runtime-source");
+  const expectedSourcePaths = [
+    SL_RUNTIME_CONFORMANCE_SOURCE,
+    ...SL_RUNTIME_SOURCE_FRAGMENTS,
+    SL_RUNTIME_MODULE_SOURCE_TEMPLATE,
+  ].sort(slCompareOrdinal);
+  const discoveredSourcePaths = (await slListFiles(sourceRoot)).sort(
+    slCompareOrdinal,
   );
-  const schemaTarget = resolve(runtimeRoot, SL_RUNTIME_MANIFEST_SCHEMA_FILE);
-  const schemaContent = (await readFile(schemaSource, "utf8"))
+  if (
+    JSON.stringify(discoveredSourcePaths) !==
+    JSON.stringify(expectedSourcePaths)
+  ) {
+    throw new Error(
+      `Runtime source layout differs from the build contract: ${JSON.stringify(discoveredSourcePaths)}`,
+    );
+  }
+  const moduleTemplate = (await readFile(
+    resolve(sourceRoot, SL_RUNTIME_MODULE_SOURCE_TEMPLATE),
+    "utf8",
+  ))
     .replaceAll("\r\n", "\n")
     .replaceAll("\r", "\n");
-
+  if (
+    moduleTemplate.split(SL_RUNTIME_FRAGMENT_MARKER).length !== 2 ||
+    moduleTemplate.split(SL_RUNTIME_CONFORMANCE_MARKER).length !== 2
+  ) {
+    throw new Error("PowerShell runtime module template markers are invalid.");
+  }
+  const fragmentContents = await Promise.all(
+    SL_RUNTIME_SOURCE_FRAGMENTS.map(async (path) => {
+      const content = (await readFile(resolve(sourceRoot, path), "utf8"))
+        .replaceAll("\r\n", "\n")
+        .replaceAll("\r", "\n")
+        .trimEnd();
+      return [
+        "# ////////////////////////////////////////////////////////////////////////////////",
+        `# Generated from ${path}`,
+        "# ////////////////////////////////////////////////////////////////////////////////",
+        "",
+        content,
+      ].join("\n");
+    }),
+  );
+  const conformanceVectors = JSON.stringify(
+    JSON.parse(
+      await readFile(
+        resolve(sourceRoot, SL_RUNTIME_CONFORMANCE_SOURCE),
+        "utf8",
+      ),
+    ),
+  );
+  const moduleContent = moduleTemplate
+    .replace(
+      SL_RUNTIME_FRAGMENT_MARKER,
+      () => fragmentContents.join("\n\n"),
+    )
+    .replace(SL_RUNTIME_CONFORMANCE_MARKER, () => conformanceVectors);
+  const moduleTarget = resolve(runtimeRoot, SL_RUNTIME_MODULE_OUTPUT);
+  const manifestPath = resolve(runtimeRoot, SL_RUNTIME_MANIFEST_FILE);
   const discoveredPaths = [
     ...new Set([
       ...(await slListFiles(runtimeRoot)).filter(
         (path) =>
           path !== SL_RUNTIME_MANIFEST_FILE &&
-          path !== SL_RUNTIME_MANIFEST_SCHEMA_FILE,
+          path !== SL_RUNTIME_MODULE_OUTPUT,
       ),
-      SL_RUNTIME_MANIFEST_SCHEMA_FILE,
+      SL_RUNTIME_MODULE_OUTPUT,
     ]),
   ].sort(slCompareOrdinal);
-  const paths = [...SL_RUNTIME_PAYLOAD_FILES];
+  const paths = [...SL_RUNTIME_PAYLOAD_FILES].sort(slCompareOrdinal);
   if (JSON.stringify(discoveredPaths) !== JSON.stringify(paths)) {
     throw new Error(
       `Runtime template layout differs from SL_RUNTIME_PAYLOAD_FILES: ${JSON.stringify(discoveredPaths)}`,
     );
   }
-  const rootModule = await readFile(
-    resolve(runtimeRoot, "SL.Runtime.psm1"),
-    "utf8",
-  );
-  const bootstrap = await readFile(resolve(runtimeRoot, "SL.ps1"), "utf8");
+  const rootModule = moduleContent;
+  const bootstrap = await readFile(resolve(runtimeRoot, "sl.ps1"), "utf8");
   for (const expected of [
     `$script:SLRuntimeVersion = '${SL_RUNTIME_VERSION}'`,
     `runtimeVersion = $script:SLRuntimeVersion`,
@@ -168,8 +238,8 @@ export async function slBuildRuntimeManifest(
   const files: SLRuntimeManifestFile[] = [];
   for (const path of paths) {
     const content =
-      path === SL_RUNTIME_MANIFEST_SCHEMA_FILE
-        ? schemaContent
+      path === SL_RUNTIME_MODULE_OUTPUT
+        ? moduleContent
         : await readFile(resolve(runtimeRoot, path), "utf8");
     files.push({
       path,
@@ -188,15 +258,16 @@ export async function slBuildRuntimeManifest(
     files,
   };
   slValidateRuntimeManifest(manifest);
-  const manifestPath = resolve(runtimeRoot, SL_RUNTIME_MANIFEST_FILE);
   const snapshots = await Promise.all([
-    slSnapshotRuntimeFile(schemaTarget),
+    slSnapshotRuntimeFile(moduleTarget),
     slSnapshotRuntimeFile(manifestPath),
   ]);
   try {
-    await slWriteIfChanged(schemaTarget, schemaContent);
+    await slWriteIfChanged(moduleTarget, moduleContent);
     if (options.injectFailureAfterSchemaWrite) {
-      throw new Error("Injected runtime build failure after schema write.");
+      throw new Error(
+        "Injected runtime build failure after generated module write.",
+      );
     }
     await slWriteIfChanged(
       manifestPath,

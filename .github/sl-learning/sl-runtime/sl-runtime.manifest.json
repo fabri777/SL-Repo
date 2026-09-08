@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "runtimeVersion": "0.6.0",
+  "sourceReleaseCommit": "e841414d13bfdcd1c534eb7e101f7f2330dc4709",
+  "configContractVersion": 1,
+  "conformanceVersion": 1,
+  "minimumPowerShellVersion": "7.0.0",
+  "files": [
+    {
+      "path": "sl.ps1",
+      "sha256": "7dbb9ab1584f3ab880001529e587fc252a2ae2f89b854523f076b6d2fed1c58e"
+    },
+    {
+      "path": "sl.runtime.psm1",
+      "sha256": "7e86f10e4a04152c447ba8238c586911497c0d9f2cb372497ec973cbe9bdfce1"
+    },
+    {
+      "path": "sl.sh",
+      "sha256": "cdeeac3c7320326ef56182f83b3946e12bac5228585fd9ba8765fd7c1e10ed4f"
+    }
+  ]
+}

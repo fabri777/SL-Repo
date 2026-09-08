@@ -26,7 +26,7 @@ export function slPromotionArtifactVersion(contentHash: string): string {
 }
 
 export function slIsActivePromotionStatus(status: string): boolean {
-  return status === "active" || status === "promoted";
+  return status === "active";
 }
 
 export async function slPromotionEvaluationIsCurrent(

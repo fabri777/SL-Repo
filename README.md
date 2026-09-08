@@ -1,343 +1,192 @@
 # Self Learning Repository
 
-SL Repo gives a Git repository a reviewable learning lifecycle for coding
-agents:
+SL adds a reviewable, repository-local learning lifecycle for coding agents:
 
 ```text
 experience -> lesson -> verified reuse -> instruction or skill
-                   \-> stale -> quarantine -> deletion
+                   \-> stale -> quarantine -> guarded deletion
 ```
 
-## Release 0.5.0
+The current release is greenfield: it supports only the lowercase SL layout
+described below. It does not migrate older or partial layouts.
 
-Version 0.5.0 moves the reviewed source and distribution identity to
-`ffishkel_microsoft/SL`, publishes the package as
-`@ffishkel_microsoft/sl`, and adds portable bootstrap bundles for installing
-the initialization CLI without a separately installed Node.js runtime.
-Consumers of the historical `@fabri777/sl-repo` package must update their
-package reference explicitly; the `sl-repo` command and repository-local
-lifecycle identifiers remain unchanged.
+## Install the `sl` command
 
-## Release 0.4.0
+Requirements:
 
-Version 0.4.0 adds a complete repository-local PowerShell 7 runtime for the
-SL lifecycle, including deterministic TypeScript/PowerShell conformance,
-integrity-checked immutable payloads, transactional installation and updates,
-provider-neutral resource receipt and efficiency reporting, monorepo scope
-support, and lowercase Agent Skills-compatible names. After initialization,
-repositories can operate SL without Node, npm, network access, or external
-PowerShell modules.
+- Git
+- PowerShell 7 or newer
+- GitHub CLI authentication for online release acquisition
 
-## Release 0.3.0
+Download the reviewed `sl.ps1` release asset, inspect it, and install it:
 
-Version 0.3.0 adds production monorepo support: hierarchical scope catalogs,
-scope-sharded registries/indexes/usage projections, governed scope-aware
-promotion, cross-scope usage freshness, deterministic ordinal serialization,
-and exact restore rollback across generated state shards. Legacy 0.2 root
-state remains a read-only compatibility input.
+```powershell
+Get-Content .\sl.ps1
+pwsh .\sl.ps1 install
+```
 
-## Core and optional adapters
+The installer persists one command file:
 
-SL is Git-host agnostic. Its functional core is the Node CLI, repository-native
-state committed to Git, immutable Git distribution of the reviewed runtime,
-and the SL managed block in `AGENTS.md`. The installer also maintains the
-equivalent `.github/copilot-instructions.md` block for GitHub Copilot
-repository discovery.
+- Windows: `%LOCALAPPDATA%\sl\bin\sl.ps1`
+- Linux and macOS: `~/.local/bin/sl`
 
-No CI service is required. Agents and maintainers can invoke `sl-repo`
-locally for capture, retrieval, projection, validation, promotion, and guarded
-forgetting. GitHub Actions and Azure Pipelines are optional automation
-adapters. Without either adapter, knowledge capture and retrieval continue;
-the repository gives up an automated merge gate, scheduled projection or
-retention runs, and hosted cross-platform validation.
+It adds or confirms that directory on the user `PATH`. It installs no private
+Node.js runtime, wrapper, daemon, or service.
 
-Azure Repos works because SL state is ordinary repository content and every
-core operation uses Git paths rather than a hosting-provider API.
+## Initialize a repository
 
-## Why Self Learning for Copilot Repositories
+From the target repository:
 
-Self Learning for Copilot Repositories reduces the time and token cost of
-solving the same hard problem twice. When Copilot completes a difficult
-task—one that required substantial reasoning, experimentation, or human
-guidance—SL captures the verified approach as a repository lesson.
+```powershell
+sl initrepo
+```
 
-A pull request can therefore include both **WHAT** changed—the code—and
-**HOW** the result was achieved—the lesson. In a later task or pull request,
-another agent can retrieve that lesson, apply it, and cast a positive reuse
-vote when it helps.
+Or provide a path:
 
-Repeatedly useful lessons automatically become promotion candidates. Copilot
-can then turn the strongest candidates into focused repository instructions
-or reusable skills when appropriate. Registration places generated guidance
-in non-active probation. Contract, provenance, scenario, conflict, executable,
-and explicit repository-review gates must pass before activation makes it
-discoverable. Promotion and forgetting remain governed, reviewable, and
-stored in Git.
+```powershell
+sl initrepo C:\path\to\repository
+```
 
-Raw and distilled lessons are retrievable before promotion. Promotion does not
-make knowledge readable for the first time; it increases reliable automatic
-delivery by converting proven evidence into an activated instruction or skill.
-Vote thresholds create candidates only. Shared or root activation is never
-automatic: it requires verified evidence from distinct non-root scopes,
-current policy/content hashes, conflict checks, and target-owner approval.
+`initrepo` requires a Git repository, downloads and verifies the matching
+portable implementation package, previews the complete operation, asks for
+confirmation, initializes or refreshes the repository, runs `doctor`,
+`project`, and `validate`, and removes the temporary package. Use `-Yes` for
+non-interactive execution.
 
-This repository implements the first project milestone:
+For offline initialization, place the reviewed release manifest, checksums,
+and platform archive in one directory:
 
-- **SL Repo**: repository-local learning, discovery, promotion, validation,
-  installation, and forgetting.
-- **SL Org**: future reviewed sharing across repositories.
-- **SL Company**: future enterprise federation and governance.
+```powershell
+sl initrepo C:\path\to\repository -AssetDirectory C:\reviewed\sl-assets
+```
+
+No hosted automation is installed by default. Opt in explicitly:
+
+```powershell
+sl initrepo . -Automation github
+sl initrepo . -Automation azure
+sl initrepo . -Automation all
+```
+
+On refresh, omitting `-Automation` preserves the current managed selection.
+
+## Exact fresh layout
+
+A new repository contains exactly these 15 SL files before lessons, events,
+receipts, or projections exist:
+
+```text
+AGENTS.md
+.github/copilot-instructions.md
+.github/skills/sl-learning-audit/SKILL.md
+.github/skills/sl-lesson-curator/SKILL.md
+.github/sl-learning/.gitattributes
+.github/sl-learning/sl-config.yml
+.github/sl-learning/sl-schema-bundle.schema.json
+.github/sl-learning/sl-state-catalog.json
+.github/sl-learning/sl-system.manifest.json
+.github/sl-learning/sl-runtime/sl-runtime.manifest.json
+.github/sl-learning/sl-runtime/sl.ps1
+.github/sl-learning/sl-runtime/sl.runtime.psm1
+.github/sl-learning/sl-runtime/sl.sh
+.github/sl-learning/sl-scopes/sl-sl-scope-root-47ab59b49ac7/sl-index.json
+.github/sl-learning/sl-scopes/sl-sl-scope-root-47ab59b49ac7/sl-registry.json
+```
+
+The root scope is implicit, so no scope catalog is created initially.
+`sl-usage-projection.json` appears only after usage events exist in that scope.
+`sl-resource-projection.json` appears only after resource receipts exist.
+Custom monorepo scopes can add `sl-scope-catalog.yml`.
+
+An uppercase or ambiguous partial SL layout is rejected without mutation.
+
+## Command surface
+
+Machine command:
+
+```text
+sl install
+sl self-update [-Release <tag>]
+sl initrepo [repo-path] [-Automation none|github|azure|all] [-Yes]
+sl doctor [repo-path]
+sl project [repo-path]
+sl validate [repo-path]
+sl help
+sl version
+```
+
+After initialization, `doctor`, `project`, and `validate` invoke the committed
+repository-local runtime directly. The complete lifecycle is also available
+through that runtime:
+
+```powershell
+$sl = ".github/sl-learning/sl-runtime/sl.ps1"
+
+pwsh -NoLogo -NoProfile -File $sl retrieve --path src/example.ts --json
+pwsh -NoLogo -NoProfile -File $sl capture `
+  --title "Verified retry policy" `
+  --trigger "retry policy" `
+  --json
+pwsh -NoLogo -NoProfile -File $sl use start SL-LESSON-ID --json
+pwsh -NoLogo -NoProfile -File $sl project --json
+pwsh -NoLogo -NoProfile -File $sl validate --json
+pwsh -NoLogo -NoProfile -File $sl sweep --dry-run --json
+```
+
+The repository-local lifecycle requires PowerShell 7, but not Node.js, npm,
+network access, or external PowerShell modules.
+
+## How learning is shared
+
+Lessons, immutable usage events, projections, promotion state, and managed
+guidance are ordinary Git files. Work created on another machine or branch is
+shared only after it is committed and merged through the repository's normal
+review process.
+
+Agents inspect the scope index, capture only verified reusable evidence, and
+record usage receipts when they apply guidance. Repeated verified success can
+make a lesson a promotion candidate. Activation and forgetting remain
+governed; SL never deletes manual, system, pinned, or actively referenced
+artifacts.
+
+After merging branches that add immutable events or receipts, run:
+
+```powershell
+sl project .
+sl validate .
+```
+
+## Optional automation
+
+GitHub Actions and Azure Pipelines are optional adapters. They can provide
+merge validation, scheduled projection checks, retention previews, and hosted
+cross-platform release validation. Local capture, retrieval, projection,
+validation, promotion, and guarded forgetting do not require either provider.
+
+See:
+
+- [Installation and release verification](SL-docs/SL-install.md)
+- [Architecture and source-of-truth boundaries](SL-docs/SL-architecture.md)
+- [Repository-local PowerShell runtime](SL-docs/SL-runtime.md)
+- [Usage events and projections](SL-docs/SL-usage-events.md)
+- [Scope-aware state](SL-docs/SL-state-layout.md)
+- [Optional Azure Pipelines adapter](SL-docs/SL-azure-pipelines.md)
+- [Security model](SL-docs/SL-security.md)
+- [Forgetting lifecycle](SL-docs/SL-forgetting.md)
 
 ## Development
+
+Node.js 20 or newer is required to build and test this source repository:
 
 ```powershell
 git clone <authorized-SL-source> C:\dev\SL-Repo
 Set-Location C:\dev\SL-Repo
 npm ci
 npm run ci
-npm link
-sl-repo --help
+npm run runtime:conformance
 ```
 
-The source repository is private. Configure normal Git authentication for the
-authorized source before cloning or installing it.
-
-This source repository keeps its GitHub-hosted three-platform CI as a
-release-quality check. That source-release gate does not make GitHub Actions a
-consumer prerequisite.
-
-```powershell
-Set-Location C:\dev\SL-Repo
-npm install
-npm run ci
-npm link
-```
-
-An authenticated Git installation can also invoke the package directly:
-
-```powershell
-npm exec --yes --package=github:ffishkel_microsoft/SL#e841414d13bfdcd1c534eb7e101f7f2330dc4709 -c "sl-repo --help"
-```
-
-For machines without Node.js, install a portable release that carries its own
-reviewed Node runtime. Windows uses the PowerShell bootstrapper:
-
-```powershell
-gh release download <release-tag> --repo ffishkel_microsoft/SL --pattern SL-install.ps1
-.\SL-install.ps1 -Release <release-tag>
-```
-
-macOS and Linux use the POSIX bootstrapper:
-
-```sh
-gh release download <release-tag> --repo ffishkel_microsoft/SL --pattern SL-install.sh
-chmod +x SL-install.sh
-./SL-install.sh --release <release-tag>
-```
-
-Both bootstrappers use the existing authenticated GitHub CLI session, verify
-the selected archive against `SL-checksums.txt`, validate its release
-manifest, and install under a user-local directory without administrator
-permissions. Add the printed `bin` directory to `PATH`. Git remains required;
-a separately installed Node.js runtime does not.
-
-## Install into a repository
-
-Preview the installation:
-
-```powershell
-sl-repo init C:\path\to\repository --dry-run
-```
-
-Apply and validate it:
-
-```powershell
-sl-repo init C:\path\to\repository
-sl-repo doctor C:\path\to\repository
-sl-repo validate C:\path\to\repository
-```
-
-`init` installs the root scope catalog, configuration, skills, optional
-GitHub Actions and Azure Pipelines adapters, and local copies of every SL
-scope/state/event schema under `.github/SL-learning/SL-schemas/`. It merges
-the SL entry block into `AGENTS.md` and preserves existing content. Runtime
-validation still uses the immutable schemas bundled with the reviewed SL
-package; installed copies support review, editors, and repository-local
-auditing. `update` replaces only files already registered as SL-managed
-system artifacts and the delimited agent instruction blocks.
-
-It also installs the self-contained PowerShell 7 runtime under
-`.github/SL-learning/SL-runtime/`. After initialization, agents can invoke
-scope resolution, capture, retrieval, usage, projection, promotion,
-resource receipts, advisory efficiency, validation, retention, doctor, and conformance commands without
-Node/npm/global SL CLI. See [the runtime contract](SL-docs/SL-runtime.md).
-
-```powershell
-$sl = ".github/SL-learning/SL-runtime/SL.ps1"
-pwsh -NoLogo -NoProfile -File $sl scope resolve --file src/example.ts --json
-pwsh -NoLogo -NoProfile -File $sl retrieve --path src/example.ts --json
-pwsh -NoLogo -NoProfile -File $sl resource stats --json
-pwsh -NoLogo -NoProfile -File $sl project --json
-pwsh -NoLogo -NoProfile -File $sl validate --json
-```
-
-Both optional automation adapters use the reviewed immutable SL Repo commit.
-They never intentionally execute mutable `main` as the runtime. See
-`SL-docs/SL-install.md` for the pin-update procedure,
-`SL-docs/SL-azure-pipelines.md` for Azure Repos and GitHub repository-resource
-examples, and `SL-docs/SL-security.md` for credential boundaries.
-
-After a lesson is retrieved and applied:
-
-```powershell
-sl-repo scope resolve C:\path\to\repository --file services\orders\src\handler.ts
-sl-repo retrieve C:\path\to\repository --path services/orders/src/handler.ts
-sl-repo use start SL-LESSON-ID C:\path\to\repository `
-  --target-path services/orders/src/handler.ts `
-  --task-run-id TASK-123 `
-  --application-id APPLY-123
-sl-repo use finish APPLY-123 C:\path\to\repository `
-  --outcome success `
-  --verified `
-  --verifier-type test-suite `
-  --evidence-ref ci:run-123
-sl-repo stats SL-LESSON-ID C:\path\to\repository --scope SL-SCOPE-ORDERS
-sl-repo stats C:\path\to\repository --aggregate repository
-sl-repo resource import .\SL-resource-input.json C:\path\to\repository
-sl-repo resource stats SL-LESSON-ID C:\path\to\repository --json
-sl-repo project C:\path\to\repository
-```
-
-Capture can be explicit or path-inferred:
-
-```powershell
-sl-repo capture C:\path\to\repository --title "Orders retry policy" `
-  --scope SL-SCOPE-ORDERS --lesson-scope orders --trigger "retry policy"
-sl-repo capture C:\path\to\repository --title "Shared result handling" `
-  --target-path packages/shared/common/src/result.ts --trigger "result type"
-```
-
-`use start` returns an application ID and receipt ID. Generated IDs are safe
-for interactive use; automation should supply stable application, task, and
-idempotency IDs. `use finish` records an unverified outcome by default.
-Verified outcomes require both `--verified` and an explicit trustworthy
-`--verifier-type`. Instruction usage is not automatically observable: the
-agent or host that applied it must create and finish the receipt. A success
-associated with an artifact is evidence of a useful application, not proof
-that the artifact causally improved the result.
-
-Resource receipts are immutable and provider-neutral. They can record
-generation or application resources, explicit paired baselines, and optional
-host-reported monetary cost. Efficiency reporting is advisory and remains
-segmented by scope, artifact version, provider, model, and measurement quality.
-
-`use start --dry-run` and `use finish --dry-run` print complete planned events
-and projection file changes as JSON while remaining side-effect free.
-
-The compatibility vote command records a verified lesson outcome directly:
-
-```powershell
-sl-repo vote SL-LESSON-ID C:\path\to\repository --useful `
-  --task-run-id TASK-123 `
-  --application-id APPLY-123 `
-  --idempotency-key TASK-123-APPLY-123
-sl-repo usage SL-LESSON-ID C:\path\to\repository
-```
-
-Positive reuse votes raise a lesson from raw to distilled and then to a
-promotion candidate. A vote is evidence for promotion, not permission to
-generate broad guidance without reviewing its applicability.
-
-Votes and usage receipts are stored as immutable files in deterministic
-scope/artifact shards. Stable application and idempotency IDs make command
-retries safe, while separate files keep concurrent branch changes
-merge-friendly. Existing unscoped events and mutable counters are retained and
-imported without data loss; new votes do not increment those counters.
-See [SL usage events](SL-docs/SL-usage-events.md).
-For monorepo scope shards and post-merge regeneration, see
-[SL monorepo state layout](SL-docs/SL-state-layout.md).
-
-Evaluate a promoted artifact statically by ID or registered path:
-
-```powershell
-sl-repo evaluate SL-PROMOTED-ID C:\path\to\repository --json
-sl-repo promotion-evaluate SL-PROMOTED-ID C:\path\to\repository `
-  --target-scope SL-SCOPE-ROOT `
-  --approval-ref review:123
-sl-repo promotion-activate SL-PROMOTED-ID C:\path\to\repository
-```
-
-In monorepo mode, local promotion defaults to the source scope. Promotion to a
-shared/root scope is rebuilt from immutable verified-use evidence and requires
-the configured number of distinct non-root scopes plus target-owner approval.
-The registered artifact scope is immutable for evaluation and activation:
-callers cannot evaluate narrower governance and leave broader persisted
-guidance behind.
-An explicit narrower-scope override must name the broader artifact, scope, and
-declaration key and carry its own review reference. Peer conflicts and
-undeclared contradictions fail closed. Retrieval also compares legacy active
-contracts with governed active guidance and rejects contradictory overlaps.
-
-Executable contract checks remain disabled unless explicitly requested with
-`--execute-checks`; they are trusted commands from the reviewed repository,
-not untrusted input. Failures and timeouts produce a nonzero exit code.
-Process-tree cleanup is defense-in-depth for ordinary child processes, not an
-adversarial operating-system sandbox or a containment guarantee against
-deliberate escape.
-
-SL only rewrites files it owns. Existing `AGENTS.md` and
-`.github/copilot-instructions.md` content is preserved outside an identifiable
-managed block. `AGENTS.md` is the provider-neutral agent entry point; the
-Copilot-specific file is a compatibility mirror, not a hosting prerequisite.
-
-## Scope-aware architecture
-
-The hand-authored scope catalog and Markdown knowledge are intent. Immutable
-usage/lifecycle events are evidence. Per-scope registries, indexes, state
-catalog, and usage projections are deterministic generated state. After
-merging branches that add event shards, always run:
-
-```powershell
-sl-repo project .
-sl-repo validate .
-```
-
-Repository aggregation deliberately returns counts without a verified-success
-percentage. Compare success rates only within a scope; combining services with
-different workloads, verifiers, or sample sizes can produce a deceptive rate.
-
-See the complete operational references:
-
-- [Architecture and source-of-truth boundaries](SL-docs/SL-architecture.md)
-- [Optional Azure Pipelines adapter](SL-docs/SL-azure-pipelines.md)
-- [Resource receipts and advisory efficiency](SL-docs/SL-resource-efficiency.md)
-- [Release history](CHANGELOG.md)
-- [Scope catalog and precedence](SL-docs/SL-scopes.md)
-- [Sharded state and merge workflow](SL-docs/SL-state-layout.md)
-- [Monorepo operations and troubleshooting](SL-docs/SL-monorepo-operations.md)
-- [0.2 migration and rollback](SL-docs/SL-migration-0.2.md)
-
-## Automatic forgetting
-
-SL never auto-deletes hand-authored files, system assets, pinned knowledge, or
-artifacts with active dependents. Eligible SL-managed knowledge passes through
-stale and quarantine states before deletion. Use `sl-repo sweep --dry-run` to
-inspect every proposed transition. Fresh verified usage or `forget --undo`
-returns stale or quarantined promoted guidance to non-discoverable probation,
-not directly to active status; current activation gates and repository approval
-must pass again.
-
-See:
-
-- `SL-docs/SL-install.md`
-- `SL-docs/SL-architecture.md`
-- `SL-docs/SL-lifecycle.md`
-- `SL-docs/SL-forgetting.md`
-- `SL-docs/SL-security.md`
-- `SL-docs/SL-validation-contracts.md`
-- `SL-docs/SL-usage-events.md`
-- `SL-docs/SL-scopes.md`
-- `SL-docs/SL-state-layout.md`
-- `SL-docs/SL-monorepo-operations.md`
-- `SL-docs/SL-migration-0.2.md`
-- `SL-docs/SL-roadmap.md`
+Build generation keeps semantic decisions in skills and deterministic
+enforcement in the TypeScript CLI. `npm run build:runtime` regenerates the
+bundled PowerShell runtime, compound schema, system manifest, and runtime
+manifest.

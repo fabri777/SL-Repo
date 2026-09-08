@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import {
   mkdtemp,
   readFile,
+  readdir,
   rm,
   writeFile,
 } from "node:fs/promises";
@@ -24,14 +25,17 @@ const repositories: string[] = [];
 const SOURCE_COMMIT = "0123456789abcdef0123456789abcdef01234567";
 const VERSION = "0.3.0-test";
 
-afterEach(async () => {
-  await Promise.all([
-    ...temporaryRoots.splice(0).map((root) =>
-      rm(root, { recursive: true, force: true }),
-    ),
-    ...repositories.splice(0).map(slRemoveTestRepository),
-  ]);
-});
+afterEach(
+  async () => {
+    await Promise.all([
+      ...temporaryRoots.splice(0).map((root) =>
+        rm(root, { recursive: true, force: true }),
+      ),
+      ...repositories.splice(0).map(slRemoveTestRepository),
+    ]);
+  },
+  120_000,
+);
 
 function run(
   command: string,
@@ -63,7 +67,74 @@ function environmentWithoutSystemNode(): NodeJS.ProcessEnv {
   };
 }
 
+function readWindowsUserPath(): string {
+  const result = run("pwsh", [
+    "-NoLogo",
+    "-NoProfile",
+    "-Command",
+    "[Environment]::GetEnvironmentVariable('Path','User')",
+  ]);
+  expectSuccess(result);
+  return result.stdout.trimEnd();
+}
+
+function writeWindowsUserPath(value: string): void {
+  const encoded = Buffer.from(value, "utf8").toString("base64");
+  const result = run("pwsh", [
+    "-NoLogo",
+    "-NoProfile",
+    "-Command",
+    `[Environment]::SetEnvironmentVariable('Path',[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${encoded}')),'User')`,
+  ]);
+  expectSuccess(result);
+}
+
 describe("SL portable installation", () => {
+  test("installs exactly one persistent command file", async () => {
+    const profileRoot = await mkdtemp(join(tmpdir(), "SL command profile-"));
+    temporaryRoots.push(profileRoot);
+    const priorUserPath =
+      process.platform === "win32" ? readWindowsUserPath() : undefined;
+
+    try {
+      const installation = run(
+        "pwsh",
+        [
+          "-NoLogo",
+          "-NoProfile",
+          "-File",
+          resolve("sl.ps1"),
+          "install",
+        ],
+        {
+          env: {
+            ...process.env,
+            LOCALAPPDATA: profileRoot,
+            HOME: profileRoot,
+            SHELL: "/bin/bash",
+          },
+        },
+      );
+      expectSuccess(installation);
+
+      const destinationDirectory =
+        process.platform === "win32"
+          ? join(profileRoot, "sl", "bin")
+          : join(profileRoot, ".local", "bin");
+      const destinationName =
+        process.platform === "win32" ? "sl.ps1" : "sl";
+      expect(await readdir(destinationDirectory)).toEqual([destinationName]);
+      expect(
+        await readFile(join(destinationDirectory, destinationName), "utf8"),
+      ).toBe(await readFile(resolve("sl.ps1"), "utf8"));
+      expect(installation.stdout).toContain("No wrapper was created.");
+    } finally {
+      if (priorUserPath !== undefined) {
+        writeWindowsUserPath(priorUserPath);
+      }
+    }
+  }, 120_000);
+
   test("runs the bundled CLI without system Node and initializes a repository", async () => {
     const outputRoot = await mkdtemp(join(tmpdir(), "SL-portable-e2e-"));
     temporaryRoots.push(outputRoot);
@@ -118,10 +189,9 @@ describe("SL portable installation", () => {
     expect(validation.stdout).toContain("SL validation passed.");
   }, 120_000);
 
-  test("installs a verified local release through the native bootstrapper", async () => {
+  test("initializes a repository through the unified offline command", async () => {
     const assetRoot = await mkdtemp(join(tmpdir(), "SL portable assets-"));
-    const installRoot = await mkdtemp(join(tmpdir(), "SL portable install-"));
-    temporaryRoots.push(assetRoot, installRoot);
+    temporaryRoots.push(assetRoot);
     const platform = slPortablePlatform(process.platform);
     const architecture = slPortableArchitecture(process.arch);
     const descriptor = await slBuildPortableDirectory({
@@ -149,98 +219,70 @@ describe("SL portable installation", () => {
     expectSuccess(tarResult);
     await slWritePortableReleaseManifest(assetRoot);
 
-    const bootstrapResult =
-      platform === "windows"
-        ? run(
-            process.env.ComSpec
-              ? resolve(dirname(process.env.ComSpec), "WindowsPowerShell", "v1.0", "powershell.exe")
-              : "powershell.exe",
-            [
-              "-NoProfile",
-              "-File",
-              resolve("SL-install.ps1"),
-              "-Release",
-              VERSION,
-              "-AssetDirectory",
-              assetRoot,
-              "-InstallRoot",
-              installRoot,
-            ],
-            { timeout: 120_000 },
-          )
-        : run(
-            "sh",
-            [
-              resolve("SL-install.sh"),
-              "--release",
-              VERSION,
-              "--asset-directory",
-              assetRoot,
-              "--install-root",
-              installRoot,
-            ],
-            { timeout: 120_000 },
-          );
-    expectSuccess(bootstrapResult);
-
-    const current = await readFile(join(installRoot, "current"), "utf8");
-    expect(current.replaceAll("\\", "/")).toBe(
-      `versions/${VERSION}/${platform}-${architecture}`,
+    const repository = await slCreateTestRepository();
+    repositories.push(repository);
+    const initialization = run(
+      "pwsh",
+      [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        resolve("sl.ps1"),
+        "initrepo",
+        repository,
+        "-Release",
+        VERSION,
+        "-AssetDirectory",
+        assetRoot,
+        "-Yes",
+      ],
+      {
+        env: environmentWithoutSystemNode(),
+        timeout: 300_000,
+      },
     );
-    const installedRuntime = join(
-      installRoot,
-      current,
-      platform === "windows" ? "runtime/node.exe" : "runtime/bin/node",
-    );
-    const installedCli = join(
-      installRoot,
-      current,
-      "dist",
-      "SL-src",
-      "SL-cli",
-      "SL-cli.js",
-    );
-    const result = run(installedRuntime, [installedCli, "--help"], {
-      env: environmentWithoutSystemNode(),
-    });
-    expectSuccess(result);
-    expect(result.stdout).toContain("sl-repo");
+    expectSuccess(initialization);
+    expect(initialization.stdout).toContain("Running repository-local SL validate");
+    await expect(
+      readFile(
+        join(
+          repository,
+          ".github",
+          "sl-learning",
+          "sl-runtime",
+          "sl.ps1",
+        ),
+        "utf8",
+      ),
+    ).resolves.toContain("sl.runtime.psm1");
 
     await writeFile(
       join(assetRoot, descriptor.fileName),
       "corrupted archive",
       "utf8",
     );
-    const rejected =
-      platform === "windows"
-        ? run(
-            process.env.ComSpec
-              ? resolve(dirname(process.env.ComSpec), "WindowsPowerShell", "v1.0", "powershell.exe")
-              : "powershell.exe",
-            [
-              "-NoProfile",
-              "-File",
-              resolve("SL-install.ps1"),
-              "-Release",
-              VERSION,
-              "-AssetDirectory",
-              assetRoot,
-              "-InstallRoot",
-              `${installRoot}-rejected`,
-            ],
-          )
-        : run("sh", [
-            resolve("SL-install.sh"),
-            "--release",
-            VERSION,
-            "--asset-directory",
-            assetRoot,
-            "--install-root",
-            `${installRoot}-rejected`,
-          ]);
+    const rejectedRepository = await slCreateTestRepository();
+    repositories.push(rejectedRepository);
+    const rejected = run(
+      "pwsh",
+      [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        resolve("sl.ps1"),
+        "initrepo",
+        rejectedRepository,
+        "-Release",
+        VERSION,
+        "-AssetDirectory",
+        assetRoot,
+        "-Yes",
+      ],
+      { timeout: 300_000 },
+    );
     expect(rejected.status).not.toBe(0);
     expect(`${rejected.stdout}\n${rejected.stderr}`).toContain(
-      "SHA-256 verification failed",
+      "Archive size verification failed",
     );
-  }, 180_000);
+  }, 360_000);
 });

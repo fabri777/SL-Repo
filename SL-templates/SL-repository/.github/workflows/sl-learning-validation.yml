@@ -1,0 +1,21 @@
+name: SL learning validation
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # actions/checkout v4.4.0
+        with:
+          persist-credentials: false
+      - name: Validate contracts, events, projections, and index
+        shell: pwsh
+        run: pwsh .github/sl-learning/sl-runtime/sl.ps1 validate .

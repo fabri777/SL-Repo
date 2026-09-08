@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "timestamp": "2026-09-07T16:33:06.397Z",
+  "artifactId": "SL-20260907-GENERATE-EMBEDDED-POWERSHELL-ARTIFACTS-WITHOUT-SEM",
+  "action": "captured",
+  "toStatus": "raw",
+  "toPath": ".github/sl-learning/sl-lessons/2026-09/sl-2026-09-07-generate-embedded-powershell-artifacts-without-sem.md",
+  "eventId": "SL-EVENT-F26367EDBAEE0A9E5F6B03C5C20FA474",
+  "idempotencyKey": "sha256:f26367edbaee0a9e5f6b03c5c20fa474dc419db9efbdbf57a564ab44c168bb52"
+}

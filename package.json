@@ -1,11 +1,11 @@
 {
   "name": "@ffishkel_microsoft/sl",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": false,
   "description": "Repository-local self-learning lifecycle for GitHub Copilot agents",
   "type": "module",
   "bin": {
-    "sl-repo": "dist/SL-src/SL-cli/SL-cli.js"
+    "sl": "dist/SL-src/SL-cli/SL-cli.js"
   },
   "files": [
     "dist",
@@ -14,8 +14,7 @@
     "SL-templates",
     "SL-plugin",
     "SL-tests",
-    "SL-install.ps1",
-    "SL-install.sh",
+    "sl.ps1",
     "CHANGELOG.md",
     "README.md",
     "SECURITY.md"

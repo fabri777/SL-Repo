@@ -52,53 +52,8 @@ function slNormalizedRegistryArtifact(
   };
 }
 
-function slRegistryArtifactIdentity(
-  artifact: SLRegistryArtifact,
-): unknown {
-  return {
-    id: artifact.id,
-    artifactType: artifact.artifactType,
-    classification: artifact.classification,
-    managedBy: artifact.managedBy,
-    createdAt: artifact.createdAt,
-    scope: slNormalizeScope(artifact.scope ?? SL_DEFAULT_SCOPE),
-    ownedPath:
-      artifact.promotionTargetPath ??
-      artifact.originalPath ??
-      artifact.path,
-    dependsOn: [...(artifact.dependsOn ?? [])].sort(slCompareOrdinal),
-  };
-}
-
-function slRegistryArtifactsIdentityEquivalent(
-  left: SLRegistryArtifact,
-  right: SLRegistryArtifact,
-): boolean {
-  return (
-    slCanonicalJson(slRegistryArtifactIdentity(left)) ===
-    slCanonicalJson(slRegistryArtifactIdentity(right))
-  );
-}
-
 export async function slLoadRegistry(root: string): Promise<SLRegistry> {
-  const path = slResolveInside(root, SL_PATHS.registry);
-  const legacy = (await slExists(path))
-    ? await slReadJson<SLRegistry>(path)
-    : slEmptyRegistry();
   const artifacts = new Map<string, SLRegistryArtifact>();
-  const legacyIds = new Set<string>();
-  for (const artifact of legacy.artifacts) {
-    if (legacyIds.has(artifact.id)) {
-      throw new Error(
-        `Duplicate artifact ID ${artifact.id} in legacy registry ${SL_PATHS.registry}.`,
-      );
-    }
-    legacyIds.add(artifact.id);
-    artifacts.set(
-      artifact.id,
-      slNormalizedRegistryArtifact(artifact),
-    );
-  }
   const scopeRegistries = await slLoadScopeRegistries(root);
   for (const shard of scopeRegistries) {
     for (const artifact of shard.artifacts) {
@@ -106,17 +61,9 @@ export async function slLoadRegistry(root: string): Promise<SLRegistry> {
         artifact,
         shard.scope,
       );
-      const legacyArtifact = artifacts.get(artifact.id);
-      if (
-        legacyArtifact &&
-        legacyIds.has(artifact.id) &&
-        !slRegistryArtifactsIdentityEquivalent(
-          legacyArtifact,
-          normalized,
-        )
-      ) {
+      if (artifacts.has(artifact.id)) {
         throw new Error(
-          `Conflicting legacy registry/shard overlay for artifact ${artifact.id}.`,
+          `Duplicate artifact ID ${artifact.id} across scope registries.`,
         );
       }
       artifacts.set(artifact.id, normalized);
@@ -391,7 +338,7 @@ export function slCreateLifecycleEvent(event: SLEvent): SLLifecycleEvent {
 }
 
 export function slLifecycleEventPath(event: SLLifecycleEvent): string {
-  return `${SL_PATHS.lifecycleEvents}/${event.timestamp.slice(0, 7)}/SL-event-${event.eventId.slice("SL-EVENT-".length)}.json`;
+  return `${SL_PATHS.lifecycleEvents}/${event.timestamp.slice(0, 7)}/sl-event-${event.eventId.slice("SL-EVENT-".length)}.json`;
 }
 
 export function slValidateLifecycleEvent(event: SLLifecycleEvent): void {

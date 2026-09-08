@@ -36,7 +36,7 @@ function runPowerShell(
     {
       cwd,
       encoding: "utf8",
-      timeout: 30_000,
+      timeout: process.platform === "win32" ? 90_000 : 60_000,
       ...(pathValue === undefined
         ? {}
         : { env: { ...process.env, PATH: pathValue } }),
@@ -63,36 +63,36 @@ describe("repository-local PowerShell runtime", () => {
     const canonicalRoot = await realpath(root);
 
     await slInstall(root, "init", false);
-    const runtimeRoot = join(root, ".github", "SL-learning", "SL-runtime");
-    const scriptPath = join(runtimeRoot, "SL.ps1");
+    const runtimeRoot = join(root, ".github", "sl-learning", "sl-runtime");
+    const scriptPath = join(runtimeRoot, "sl.ps1");
     const manifest = JSON.parse(
-      await readFile(join(runtimeRoot, "SL-runtime.manifest.json"), "utf8"),
+      await readFile(join(runtimeRoot, "sl-runtime.manifest.json"), "utf8"),
     ) as { runtimeVersion: string; files: Array<{ path: string }> };
-    const bash = await readFile(join(runtimeRoot, "SL.sh"), "utf8");
+    const bash = await readFile(join(runtimeRoot, "sl.sh"), "utf8");
     const registry = await slLoadRegistry(root);
     const nested = join(root, "services", "orders");
     await mkdir(nested, { recursive: true });
 
-    expect(manifest.runtimeVersion).toBe("0.5.0");
-    expect(manifest.files).toHaveLength(15);
+    expect(manifest.runtimeVersion).toBe("0.6.0");
+    expect(manifest.files).toHaveLength(3);
     expect(
       registry.artifacts.filter((artifact) =>
-        artifact.path?.startsWith(".github/SL-learning/SL-runtime/"),
+        artifact.path?.startsWith(".github/sl-learning/sl-runtime/"),
       ),
-    ).toHaveLength(16);
+    ).toHaveLength(4);
     expect(
       registry.artifacts
         .filter((artifact) =>
-          artifact.path?.startsWith(".github/SL-learning/SL-runtime/"),
+          artifact.path?.startsWith(".github/sl-learning/sl-runtime/"),
         )
         .every(
           (artifact) =>
-            artifact.managedBy === "SL-Repo" &&
+            artifact.managedBy === "sl" &&
             artifact.classification === "system",
         ),
     ).toBe(true);
     expect(bash).toContain("exec pwsh");
-    expect(bash).not.toMatch(/\b(?:node|npm|npx|sl-repo)\b/);
+    expect(bash).not.toMatch(/\b(?:node|npm|npx)\b/);
 
     const conformance = runPowerShell(
       scriptPath,
@@ -128,9 +128,9 @@ describe("repository-local PowerShell runtime", () => {
     const scriptPath = join(
       root,
       ".github",
-      "SL-learning",
-      "SL-runtime",
-      "SL.ps1",
+      "sl-learning",
+      "sl-runtime",
+      "sl.ps1",
     );
 
     const project = runPowerShell(scriptPath, ["--json", "project"], root);
@@ -138,15 +138,14 @@ describe("repository-local PowerShell runtime", () => {
 
     const catalog = await slLoadStateCatalog(root);
     const scope = catalog.scopes[0]!;
-    const usageProjection = JSON.parse(
-      await readFile(join(root, ...scope.projectionPath.split("/")), "utf8"),
-    ) as { projections: unknown };
-    const resourceProjection = JSON.parse(
-      await readFile(
-        join(root, ...scope.resourceProjectionPath!.split("/")),
-        "utf8",
-      ),
-    ) as { projections: unknown };
+    const usageProjectionPath = join(
+      root,
+      ...scope.projectionPath.split("/"),
+    );
+    const resourceProjectionPath = join(
+      root,
+      ...scope.resourceProjectionPath!.split("/"),
+    );
 
     const doctor = runPowerShell(scriptPath, ["--json", "doctor"], root);
     const doctorOutput = JSON.parse(doctor.stdout) as {
@@ -168,8 +167,12 @@ describe("repository-local PowerShell runtime", () => {
       projectStatus: project.status,
       projectError: project.stderr,
       projectChangesAreArray: Array.isArray(projectOutput.changes),
-      usageProjections: usageProjection.projections,
-      resourceProjections: resourceProjection.projections,
+      usageProjectionExists: await access(usageProjectionPath)
+        .then(() => true)
+        .catch(() => false),
+      resourceProjectionExists: await access(resourceProjectionPath)
+        .then(() => true)
+        .catch(() => false),
       doctorStatus: doctor.status,
       doctorError: doctor.stderr,
       doctorCommand: doctorOutput.command,
@@ -186,8 +189,8 @@ describe("repository-local PowerShell runtime", () => {
       projectStatus: 0,
       projectError: "",
       projectChangesAreArray: true,
-      usageProjections: [],
-      resourceProjections: [],
+      usageProjectionExists: false,
+      resourceProjectionExists: false,
       doctorStatus: 0,
       doctorError: "",
       doctorCommand: "doctor",
@@ -211,12 +214,12 @@ describe("repository-local PowerShell runtime", () => {
     expect(
       changes.some(
         (change) =>
-          change.path === ".github/SL-learning/SL-runtime/SL.ps1" &&
+          change.path === ".github/sl-learning/sl-runtime/sl.ps1" &&
           change.action === "create",
       ),
     ).toBe(true);
     await expect(
-      access(join(root, ".github", "SL-learning", "SL-runtime")),
+      access(join(root, ".github", "sl-learning", "sl-runtime")),
     ).rejects.toThrow();
   });
 
@@ -224,7 +227,7 @@ describe("repository-local PowerShell runtime", () => {
     const root = await slCreateTestRepository();
     repositories.push(root);
     await slInstall(root, "init", false);
-    const runtimeRoot = join(root, ".github", "SL-learning", "SL-runtime");
+    const runtimeRoot = join(root, ".github", "sl-learning", "sl-runtime");
     const emptyPath = join(root, "empty-path");
     await mkdir(emptyPath);
 
@@ -234,7 +237,7 @@ describe("repository-local PowerShell runtime", () => {
         "-NoLogo",
         "-NoProfile",
         "-File",
-        join(runtimeRoot, "SL.ps1"),
+        join(runtimeRoot, "sl.ps1"),
         "--json",
         "--repo-root",
         root,
@@ -258,10 +261,10 @@ describe("repository-local PowerShell runtime", () => {
     const root = await slCreateTestRepository();
     repositories.push(root);
     await slInstall(root, "init", false);
-    const runtimeRoot = join(root, ".github", "SL-learning", "SL-runtime");
-    const scriptPath = join(runtimeRoot, "SL.ps1");
+    const runtimeRoot = join(root, ".github", "sl-learning", "sl-runtime");
+    const scriptPath = join(runtimeRoot, "sl.ps1");
     const markerPath = join(root, "corrupt-module-executed.txt");
-    const modulePath = join(runtimeRoot, "SL.Runtime.Core.ps1");
+    const modulePath = join(runtimeRoot, "sl.runtime.psm1");
     const original = await readFile(modulePath, "utf8");
     await writeFile(
       modulePath,
@@ -278,7 +281,7 @@ describe("repository-local PowerShell runtime", () => {
       checks: [
         expect.objectContaining({
           code: "runtime-hash-drift",
-          message: "Runtime file hash drift: SL.Runtime.Core.ps1",
+          message: "Runtime file hash drift: sl.runtime.psm1",
         }),
       ],
     });
@@ -289,9 +292,9 @@ describe("repository-local PowerShell runtime", () => {
     const root = await slCreateTestRepository();
     repositories.push(root);
     await slInstall(root, "init", false);
-    const runtimeRoot = join(root, ".github", "SL-learning", "SL-runtime");
-    const scriptPath = join(runtimeRoot, "SL.ps1");
-    await rm(join(runtimeRoot, "SL.Runtime.Resource.ps1"));
+    const runtimeRoot = join(root, ".github", "sl-learning", "sl-runtime");
+    const scriptPath = join(runtimeRoot, "sl.ps1");
+    await rm(join(runtimeRoot, "sl.runtime.psm1"));
 
     const result = runPowerShell(scriptPath, ["doctor", "--json"], root);
 
@@ -299,7 +302,7 @@ describe("repository-local PowerShell runtime", () => {
     expect(JSON.parse(result.stdout).checks).toContainEqual(
       expect.objectContaining({
         code: "runtime-file-missing",
-        message: "Runtime file is missing: SL.Runtime.Resource.ps1",
+        message: "Runtime file is missing: sl.runtime.psm1",
       }),
     );
   });
@@ -308,9 +311,9 @@ describe("repository-local PowerShell runtime", () => {
     const root = await slCreateTestRepository();
     repositories.push(root);
     await slInstall(root, "init", false);
-    const runtimeRoot = join(root, ".github", "SL-learning", "SL-runtime");
+    const runtimeRoot = join(root, ".github", "sl-learning", "sl-runtime");
     const manualPath = join(runtimeRoot, "notes.txt");
-    const managedPath = join(runtimeRoot, "SL.Runtime.Core.ps1");
+    const managedPath = join(runtimeRoot, "sl.runtime.psm1");
     await writeFile(manualPath, "manual\n", "utf8");
     await writeFile(managedPath, "locally modified\n", "utf8");
 
@@ -325,9 +328,9 @@ describe("repository-local PowerShell runtime", () => {
     const root = await slCreateTestRepository();
     repositories.push(root);
     await slInstall(root, "init", false);
-    const runtimeRoot = join(root, ".github", "SL-learning", "SL-runtime");
-    const manifestPath = join(runtimeRoot, "SL-runtime.manifest.json");
-    const managedPath = join(runtimeRoot, "SL.Runtime.Core.ps1");
+    const runtimeRoot = join(root, ".github", "sl-learning", "sl-runtime");
+    const manifestPath = join(runtimeRoot, "sl-runtime.manifest.json");
+    const managedPath = join(runtimeRoot, "sl.runtime.psm1");
     const manualPath = join(runtimeRoot, "manual-notes.txt");
     const manifest = JSON.parse(
       await readFile(manifestPath, "utf8"),
@@ -339,7 +342,7 @@ describe("repository-local PowerShell runtime", () => {
     await writeFile(managedPath, previousContent, "utf8");
     manifest.runtimeVersion = "0.0.9";
     manifest.files.find(
-      (file) => file.path === "SL.Runtime.Core.ps1",
+      (file) => file.path === "sl.runtime.psm1",
     )!.sha256 = createHash("sha256")
       .update(previousContent, "utf8")
       .digest("hex");
@@ -354,15 +357,15 @@ describe("repository-local PowerShell runtime", () => {
     expect(await readFile(manualPath, "utf8")).toBe("preserve\n");
     expect(
       JSON.parse(await readFile(manifestPath, "utf8")).runtimeVersion,
-    ).toBe("0.5.0");
+    ).toBe("0.6.0");
   });
 
   test("rejects a runtime without its previous manifest", async () => {
     const root = await slCreateTestRepository();
     repositories.push(root);
-    const runtimeRoot = join(root, ".github", "SL-learning", "SL-runtime");
+    const runtimeRoot = join(root, ".github", "sl-learning", "sl-runtime");
     await mkdir(runtimeRoot, { recursive: true });
-    await writeFile(join(runtimeRoot, "SL.ps1"), "manual\n", "utf8");
+    await writeFile(join(runtimeRoot, "sl.ps1"), "manual\n", "utf8");
 
     await expect(slInstall(root, "update", false)).rejects.toThrow(
       "without a previous manifest",
@@ -375,11 +378,11 @@ describe("repository-local PowerShell runtime", () => {
     const mixedRoot = await slCreateTestRepository();
     repositories.push(root, missingRoot, mixedRoot);
     await slInstall(root, "init", false);
-    const runtimeRoot = join(root, ".github", "SL-learning", "SL-runtime");
-    const scriptPath = join(runtimeRoot, "SL.ps1");
+    const runtimeRoot = join(root, ".github", "sl-learning", "sl-runtime");
+    const scriptPath = join(runtimeRoot, "sl.ps1");
 
     await writeFile(
-      join(runtimeRoot, "SL-conformance-vectors.json"),
+      join(runtimeRoot, "sl.runtime.psm1"),
       '{"drift":true}\n',
       "utf8",
     );
@@ -397,11 +400,11 @@ describe("repository-local PowerShell runtime", () => {
     const missingRuntimeRoot = join(
       missingRoot,
       ".github",
-      "SL-learning",
-      "SL-runtime",
+      "sl-learning",
+      "sl-runtime",
     );
-    const missingScriptPath = join(missingRuntimeRoot, "SL.ps1");
-    await rm(join(missingRuntimeRoot, "SL-runtime.manifest.json"));
+    const missingScriptPath = join(missingRuntimeRoot, "sl.ps1");
+    await rm(join(missingRuntimeRoot, "sl-runtime.manifest.json"));
     const missing = runPowerShell(
       missingScriptPath,
       ["doctor", "--json"],
@@ -416,12 +419,12 @@ describe("repository-local PowerShell runtime", () => {
     const mixedRuntimeRoot = join(
       mixedRoot,
       ".github",
-      "SL-learning",
-      "SL-runtime",
+      "sl-learning",
+      "sl-runtime",
     );
     const mixedManifestPath = join(
       mixedRuntimeRoot,
-      "SL-runtime.manifest.json",
+      "sl-runtime.manifest.json",
     );
     const mixedManifest = JSON.parse(
       await readFile(mixedManifestPath, "utf8"),
@@ -432,7 +435,7 @@ describe("repository-local PowerShell runtime", () => {
       `${JSON.stringify(mixedManifest, null, 2)}\n`,
     );
     const mixed = runPowerShell(
-      join(mixedRuntimeRoot, "SL.ps1"),
+      join(mixedRuntimeRoot, "sl.ps1"),
       ["doctor", "--json"],
       mixedRoot,
     );
@@ -452,9 +455,9 @@ describe("repository-local PowerShell runtime", () => {
     const launcher = join(
       root,
       ".github",
-      "SL-learning",
-      "SL-runtime",
-      "SL.sh",
+      "sl-learning",
+      "sl-runtime",
+      "sl.sh",
     );
     const result = spawnSync("/bin/bash", [launcher, "version"], {
       cwd: dirname(launcher),

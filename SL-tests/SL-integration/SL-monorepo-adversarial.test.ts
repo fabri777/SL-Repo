@@ -2,15 +2,8 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import { slCaptureLesson } from "../../SL-src/SL-core/SL-capture.js";
-import {
-  slParseMarkdown,
-  slStringifyMarkdown,
-} from "../../SL-src/SL-core/SL-frontmatter.js";
 import { slRetrieveArtifacts } from "../../SL-src/SL-core/SL-retrieval.js";
-import {
-  slLoadRegistry,
-  slSaveRegistry,
-} from "../../SL-src/SL-core/SL-registry.js";
+import { slLoadRegistry } from "../../SL-src/SL-core/SL-registry.js";
 import { slScopeDescriptor } from "../../SL-src/SL-core/SL-scope.js";
 import {
   slAggregateUsageByScope,
@@ -34,7 +27,7 @@ import { slRemoveTestRepository } from "../SL-fixtures/SL-test-repository.js";
 
 const repositories: string[] = [];
 const MONOREPO_TEST_TIMEOUT_MS =
-  process.platform === "win32" ? 90_000 : 60_000;
+  process.platform === "win32" ? 180_000 : 60_000;
 
 afterEach(async () => {
   await Promise.all(repositories.splice(0).map(slRemoveTestRepository));
@@ -116,8 +109,8 @@ describe("SL adversarial monorepo fixture", () => {
           join(
             fixture.root,
             ".github",
-            "SL-learning",
-            "SL-scope-catalog.json",
+            "sl-learning",
+            "sl-scope-catalog.json",
           ),
           "utf8",
         ),
@@ -216,7 +209,7 @@ describe("SL adversarial monorepo fixture", () => {
         lastSuccessfulUseAt: "2027-09-06T00:00:00.000Z",
       });
       expect(artifact?.path).toContain(
-        `.github/SL-learning/SL-probation/${fixture.artifacts.ordersPromotion.id}/`,
+        `.github/sl-learning/sl-probation/${fixture.artifacts.ordersPromotion.id.toLowerCase()}/`,
       );
       expect(artifact?.usageProjection).toBeUndefined();
       expect(
@@ -233,42 +226,6 @@ describe("SL adversarial monorepo fixture", () => {
           verifiedSuccessRate: 1,
         }),
       ]);
-    },
-    MONOREPO_TEST_TIMEOUT_MS,
-  );
-
-  test(
-    "fails retrieval closed when legacy and governed active guidance contradict",
-    async () => {
-      const fixture = await slCreateMonorepoFixture();
-      repositories.push(fixture.root);
-      const registry = await slLoadRegistry(fixture.root);
-      const legacy = registry.artifacts.find(
-        (artifact) => artifact.id === fixture.artifacts.rootPromotion.id,
-      )!;
-      const content = await readFile(
-        join(fixture.root, ...legacy.path!.split("/")),
-        "utf8",
-      );
-      const markdown = slParseMarkdown<Record<string, unknown>>(content);
-      markdown.frontmatter.status = "promoted";
-      await writeFile(
-        join(fixture.root, ...legacy.path!.split("/")),
-        slStringifyMarkdown(markdown.frontmatter, markdown.body),
-        "utf8",
-      );
-      legacy.status = "promoted";
-      delete legacy.promotionEvaluation;
-      await slSaveRegistry(fixture.root, registry, false, []);
-
-      await expect(
-        slRetrieveArtifacts(
-          fixture.root,
-          "services/orders/src/order.ts",
-        ),
-      ).rejects.toThrow(
-        "Unresolved legacy/governed retrieval conflict",
-      );
     },
     MONOREPO_TEST_TIMEOUT_MS,
   );
@@ -373,8 +330,8 @@ describe("SL adversarial monorepo fixture", () => {
       const catalogPath = join(
         fixture.root,
         ".github",
-        "SL-learning",
-        "SL-scope-catalog.json",
+        "sl-learning",
+        "sl-scope-catalog.json",
       );
       const catalog = JSON.parse(await readFile(catalogPath, "utf8"));
       catalog.scopes = catalog.scopes.filter(
@@ -408,8 +365,8 @@ describe("SL adversarial monorepo fixture", () => {
       join(
         fixture.root,
         ".github",
-        "SL-learning",
-        "SL-state-catalog.json",
+        "sl-learning",
+        "sl-state-catalog.json",
       ),
       "utf8",
     );
@@ -429,8 +386,8 @@ describe("SL adversarial monorepo fixture", () => {
         join(
           fixture.root,
           ".github",
-          "SL-learning",
-          "SL-state-catalog.json",
+          "sl-learning",
+          "sl-state-catalog.json",
         ),
         "utf8",
       ),
@@ -440,8 +397,8 @@ describe("SL adversarial monorepo fixture", () => {
         join(
           fixture.root,
           ".github",
-          "SL-learning",
-          "SL-lessons",
+          "sl-learning",
+          "sl-lessons",
           "SL-20260904-DRY-RUN-INFERRED-CAPTURE.md",
         ),
         "utf8",

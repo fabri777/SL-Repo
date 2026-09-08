@@ -98,16 +98,16 @@ describe("SL portable distribution", () => {
       nodeVersion: "v20.19.0",
       platform: "linux",
       architecture: "x64",
-      fileName: "sl-repo-0.3.0-test-linux-x64.tar.gz",
-      rootDirectory: "sl-repo-0.3.0-test-linux-x64",
+      fileName: "sl-0.3.0-test-linux-x64.tar.gz",
+      rootDirectory: "sl-0.3.0-test-linux-x64",
     });
     const releaseRoot = resolve(outputRoot, descriptor.rootDirectory);
     expect(await readFile(join(releaseRoot, "runtime", "bin", "node"), "utf8"))
       .toBe("node");
-    expect(await readFile(join(releaseRoot, "bin", "sl-repo"), "utf8"))
+    expect(await readFile(join(releaseRoot, "bin", "sl"), "utf8"))
       .toContain('../runtime/bin/node"');
     expect(
-      JSON.parse(await readFile(join(releaseRoot, "SL-release.json"), "utf8")),
+      JSON.parse(await readFile(join(releaseRoot, "sl-release.json"), "utf8")),
     ).toEqual(descriptor);
   });
 
@@ -123,7 +123,7 @@ describe("SL portable distribution", () => {
         platform: "windows" as const,
         architecture: "x64" as const,
         fileName: slPortableArchiveName("0.3.0", "windows", "x64"),
-        rootDirectory: "sl-repo-0.3.0-windows-x64",
+        rootDirectory: "sl-0.3.0-windows-x64",
       },
       {
         schemaVersion: 1 as const,
@@ -133,7 +133,7 @@ describe("SL portable distribution", () => {
         platform: "linux" as const,
         architecture: "x64" as const,
         fileName: slPortableArchiveName("0.3.0", "linux", "x64"),
-        rootDirectory: "sl-repo-0.3.0-linux-x64",
+        rootDirectory: "sl-0.3.0-linux-x64",
       },
     ];
     for (const descriptor of descriptors) {

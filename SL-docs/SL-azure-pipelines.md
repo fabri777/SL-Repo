@@ -7,8 +7,8 @@ retrieval, which already operate through the Node CLI, Git state, and
 
 Installation places SL-owned job templates at:
 
-- `.azure-pipelines/SL-learning/SL-validation.yml`
-- `.azure-pipelines/SL-learning/SL-retention.yml`
+- `.azure-pipelines/sl-learning/SL-validation.yml`
+- `.azure-pipelines/sl-learning/SL-retention.yml`
 
 The installer never overwrites or claims a pre-existing unregistered file,
 including files elsewhere under `.azure-pipelines/`.
@@ -72,7 +72,7 @@ resources:
       ref: e841414d13bfdcd1c534eb7e101f7f2330dc4709
 
 jobs:
-  - template: /.azure-pipelines/SL-learning/SL-validation.yml
+  - template: /.azure-pipelines/sl-learning/SL-validation.yml
     parameters:
       runtimeRepository: SLRuntime
       consumerInstallCommand: npm ci
@@ -88,7 +88,7 @@ Empty command parameters skip that phase. The template always:
 3. Installs and builds the runtime.
 4. Runs the configured consumer checks.
 5. Rebuilds SL projections and fails on repository drift.
-6. Runs `sl-repo validate`.
+6. Runs `sl validate`.
 
 For Azure Repos, configure the resulting pipeline as a build-validation branch
 policy on the target branch when PR validation or an automated merge gate is
@@ -128,7 +128,7 @@ resources:
       ref: e841414d13bfdcd1c534eb7e101f7f2330dc4709
 
 jobs:
-  - template: /.azure-pipelines/SL-learning/SL-retention.yml
+  - template: /.azure-pipelines/sl-learning/SL-retention.yml
     parameters:
       runtimeRepository: SLRuntime
       applySweep: ${{ parameters.applySweep }}
@@ -150,9 +150,9 @@ Without an Azure or GitHub adapter, run these commands locally or from the
 repository agent:
 
 ```powershell
-sl-repo project .
-sl-repo validate .
-sl-repo sweep . --dry-run
+sl project .
+sl validate .
+sl sweep . --dry-run
 ```
 
 Knowledge capture and retrieval continue normally. The missing automation is

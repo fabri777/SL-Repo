@@ -107,8 +107,8 @@ export async function slRetrieveArtifacts(
     }
     if (
       artifact.classification === "promoted" &&
-      artifact.status === "active" &&
-      !(await slPromotionEvaluationIsCurrent(root, artifact))
+      (artifact.status !== "active" ||
+        !(await slPromotionEvaluationIsCurrent(root, artifact)))
     ) {
       continue;
     }
@@ -125,7 +125,6 @@ export async function slRetrieveArtifacts(
 
   const scopedGuidance: SLScopedGuidance[] = [];
   const governedContracts: SLActiveValidationContract[] = [];
-  const legacyContracts: SLActiveValidationContract[] = [];
   for (const { artifact } of selected) {
     const artifactPath = artifact.path;
     if (!artifactPath) {
@@ -146,43 +145,19 @@ export async function slRetrieveArtifacts(
     }
     const governedScope =
       artifact.promotionEvaluation?.governance?.targetScope;
-    if (governedScope) {
-      governedContracts.push({
-        artifactId: artifact.id,
-        contract: evaluation.contract,
-      });
-      scopedGuidance.push({
-        artifactId: artifact.id,
-        scope: governedScope,
-        applicability: evaluation.contract.scope,
-        declarations: evaluation.contract.declarations ?? [],
-      });
-    } else {
-      legacyContracts.push({
-        artifactId: artifact.id,
-        contract: evaluation.contract,
-      });
+    if (!governedScope) {
+      continue;
     }
-  }
-  if (
-    legacyContracts.length > 1 &&
-    slFindValidationContractConflicts(legacyContracts).length > 0
-  ) {
-    throw new Error(
-      "Unresolved active guidance conflict exists at retrieval time.",
-    );
-  }
-  const legacyGovernedConflicts = legacyContracts.flatMap((legacy) =>
-    governedContracts.flatMap((governed) =>
-      slFindValidationContractConflicts([legacy, governed]),
-    ),
-  );
-  if (legacyGovernedConflicts.length > 0) {
-    throw new Error(
-      `Unresolved legacy/governed retrieval conflict: ${legacyGovernedConflicts
-        .map((conflict) => conflict.message)
-        .join("; ")}`,
-    );
+    governedContracts.push({
+      artifactId: artifact.id,
+      contract: evaluation.contract,
+    });
+    scopedGuidance.push({
+      artifactId: artifact.id,
+      scope: governedScope,
+      applicability: evaluation.contract.scope,
+      declarations: evaluation.contract.declarations ?? [],
+    });
   }
   if (scopedGuidance.length > 1) {
     const conflicts = slEvaluateScopedGuidanceConflicts(

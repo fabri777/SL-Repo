@@ -104,7 +104,7 @@ export function slPortableRootDirectory(
   platform: SLPortablePlatform,
   architecture: SLPortableArchitecture,
 ): string {
-  return `sl-repo-${version}-${platform}-${architecture}`;
+  return `sl-${version}-${platform}-${architecture}`;
 }
 
 export function slPortableArchiveName(
@@ -128,7 +128,7 @@ function slPortableLauncher(
 ): { path: string; content: string } {
   if (platform === "windows") {
     return {
-      path: "bin/sl-repo.cmd",
+      path: "bin/sl.cmd",
       content: [
         "@echo off",
         "setlocal",
@@ -138,7 +138,7 @@ function slPortableLauncher(
     };
   }
   return {
-    path: "bin/sl-repo",
+    path: "bin/sl",
     content: [
       "#!/bin/sh",
       "set -eu",
@@ -250,7 +250,7 @@ export async function slBuildPortableDirectory(
     rootDirectory,
   };
   await writeFile(
-    resolve(destinationRoot, "SL-release.json"),
+    resolve(destinationRoot, "sl-release.json"),
     `${JSON.stringify(descriptor, null, 2)}\n`,
     "utf8",
   );
@@ -346,12 +346,12 @@ export async function slCreatePortableReleaseManifest(
 
 export async function slWritePortableReleaseManifest(
   assetDirectory: string,
-  outputPath = join(assetDirectory, "SL-release-manifest.json"),
+  outputPath = join(assetDirectory, "sl-release-manifest.json"),
 ): Promise<SLPortableReleaseManifest> {
   const manifest = await slCreatePortableReleaseManifest(assetDirectory);
   await writeFile(outputPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
   await writeFile(
-    join(assetDirectory, "SL-checksums.txt"),
+    join(assetDirectory, "sl-checksums.txt"),
     `${manifest.assets
       .map((asset) => `${asset.sha256}  ${asset.fileName}`)
       .join("\n")}\n`,

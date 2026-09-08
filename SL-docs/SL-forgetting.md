@@ -46,9 +46,8 @@ instruction was unused. Likewise, an associated verified success is a
 revalidation signal, not proof of causal improvement.
 
 Lifecycle transitions are written as separate immutable files under
-`.github/SL-learning/SL-lifecycle-events/`. Legacy `SL-events.jsonl` files are
-validated as read-only compatibility data and are never appended to. Deleted
-content remains recoverable from Git history.
+`.github/sl-learning/sl-lifecycle-events/`. Deleted content remains
+recoverable from Git history.
 
 The optional GitHub retention workflow schedules read-only previews only. A
 maintainer can manually request an apply run, but the checked-out,
@@ -58,11 +57,11 @@ command cannot mask a failure. It produces a binary patch artifact that a
 separate trusted job applies before opening an unmerged, review-required pull
 request. This repository's own workflow uses the bundled template runtime with
 an explicit repository root; installed consumer workflows use their committed
-runtime at `.github/SL-learning/SL-runtime/SL.ps1`.
+runtime at `.github/sl-learning/sl-runtime/sl.ps1`.
 
 The optional Azure Pipelines adapter also defaults scheduled runs to preview.
 A manual sweep mutates only the disposable pipeline workspace and publishes a
 binary patch artifact. It does not push, open or merge a pull request, or
 bypass branch protections. Without either adapter, maintainers can run
-`sl-repo sweep . --dry-run` locally; the retention policy and safety gates are
+`sl sweep . --dry-run` locally; the retention policy and safety gates are
 unchanged.

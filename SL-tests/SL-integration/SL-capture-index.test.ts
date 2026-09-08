@@ -31,7 +31,7 @@ describe("SL capture and index", () => {
 
     expect(result.id).toBe("SL-20260903-COMMAND-TIMEOUT-MUST-MATCH-BUSY-TIMEOUT");
     expect(result.path).toBe(
-      ".github/SL-learning/SL-lessons/2026-09/SL-2026-09-03-command-timeout-must-match-busy-timeout.md",
+      ".github/sl-learning/sl-lessons/2026-09/sl-2026-09-03-command-timeout-must-match-busy-timeout.md",
     );
     const registry = await slLoadRegistry(root);
     const lesson = registry.artifacts.find((artifact) => artifact.id === result.id);

@@ -76,6 +76,14 @@ function createEvent(
   });
 }
 
+function rootStatePaths(root: string) {
+  const entry = slScopeCatalogEntry(SL_DEFAULT_SCOPE);
+  return {
+    registryPath: join(root, ...entry.registryPath.split("/")),
+    indexPath: join(root, ...entry.indexPath.split("/")),
+  };
+}
+
 describe("SL usage events", () => {
   test("generates safe correlated IDs and records selected and applied stages", async () => {
     const root = await slCreateTestRepository();
@@ -158,21 +166,25 @@ describe("SL usage events", () => {
     });
 
     expect(
-      firstStart.changes.filter((change) => change.action === "create"),
+      firstStart.changes.filter(
+        (change) =>
+          change.action === "create" &&
+          change.path.includes("sl-usage-events"),
+      ),
     ).toEqual([
-      expect.objectContaining({ path: expect.stringContaining("SL-usage-events") }),
-      expect.objectContaining({ path: expect.stringContaining("SL-usage-events") }),
+      expect.objectContaining({ path: expect.stringContaining("sl-usage-events") }),
+      expect.objectContaining({ path: expect.stringContaining("sl-usage-events") }),
     ]);
     expect(firstStart.changes).toContainEqual(
       expect.objectContaining({
         action: "update",
-        path: expect.stringContaining("SL-registry.json"),
+        path: expect.stringContaining("sl-registry.json"),
       }),
     );
     expect(firstStart.changes).toContainEqual(
       expect.objectContaining({
-        action: "update",
-        path: expect.stringContaining("SL-usage-projection.json"),
+        action: "create",
+        path: expect.stringContaining("sl-usage-projection.json"),
       }),
     );
     expect(retryStart.changes.every((change) => change.action === "skip")).toBe(
@@ -225,7 +237,7 @@ describe("SL usage events", () => {
     expect(result.changes).toContainEqual(
       expect.objectContaining({
         action: "update",
-        path: expect.stringContaining("SL-registry.json"),
+        path: expect.stringContaining("sl-registry.json"),
       }),
     );
     expect(await readFile(selectedPath, "utf8")).toBe(selectedBeforeRetry);
@@ -304,13 +316,7 @@ describe("SL usage events", () => {
       idempotencyKey: "duplicate-start-first",
       now: FIXED_NOW,
     });
-    const registryPath = join(
-      root,
-      ".github",
-      "SL-learning",
-      "SL-registry.json",
-    );
-    const indexPath = join(root, ".github", "SL-learning", "SL-index.json");
+    const { registryPath, indexPath } = rootStatePaths(root);
     const beforeRegistry = await readFile(registryPath, "utf8");
     const beforeIndex = await readFile(indexPath, "utf8");
 
@@ -409,13 +415,7 @@ describe("SL usage events", () => {
         now: FIXED_NOW,
       });
       await mutateLessonFrontmatter(root, lesson.path, mutate);
-      const registryPath = join(
-        root,
-        ".github",
-        "SL-learning",
-        "SL-registry.json",
-      );
-      const indexPath = join(root, ".github", "SL-learning", "SL-index.json");
+      const { registryPath, indexPath } = rootStatePaths(root);
       const beforeLesson = await readFile(join(root, lesson.path), "utf8");
       const beforeRegistry = await readFile(registryPath, "utf8");
       const beforeIndex = await readFile(indexPath, "utf8");
@@ -472,13 +472,7 @@ describe("SL usage events", () => {
       },
     );
     const beforeEvents = await slLoadUsageEvents(root);
-    const registryPath = join(
-      root,
-      ".github",
-      "SL-learning",
-      "SL-registry.json",
-    );
-    const indexPath = join(root, ".github", "SL-learning", "SL-index.json");
+    const { registryPath, indexPath } = rootStatePaths(root);
     const beforeRegistry = await readFile(registryPath, "utf8");
     const beforeIndex = await readFile(indexPath, "utf8");
 
@@ -492,48 +486,6 @@ describe("SL usage events", () => {
     ).rejects.toThrow("file ownership does not match the registry");
 
     expect(await slLoadUsageEvents(root)).toEqual(beforeEvents);
-    expect(await readFile(registryPath, "utf8")).toBe(beforeRegistry);
-    expect(await readFile(indexPath, "utf8")).toBe(beforeIndex);
-  });
-
-  test("rejects an unowned legacy baseline before creating its event", async () => {
-    const root = await slCreateTestRepository();
-    repositories.push(root);
-    await slInstall(root, "init", false);
-    const lesson = await slCaptureLesson(root, {
-      title: "Unowned legacy baseline",
-      kind: "win",
-      scope: "usage",
-      triggers: ["unowned legacy baseline"],
-      dryRun: false,
-      now: FIXED_NOW,
-    });
-    await mutateLessonFrontmatter(
-      root,
-      lesson.path,
-      (frontmatter) => {
-        frontmatter.hits = 1;
-        frontmatter.retrievals = 1;
-        frontmatter.managedBy = "Other";
-      },
-    );
-    const registryPath = join(
-      root,
-      ".github",
-      "SL-learning",
-      "SL-registry.json",
-    );
-    const indexPath = join(root, ".github", "SL-learning", "SL-index.json");
-    const beforeLesson = await readFile(join(root, lesson.path), "utf8");
-    const beforeRegistry = await readFile(registryPath, "utf8");
-    const beforeIndex = await readFile(indexPath, "utf8");
-
-    await expect(
-      slSynchronizeUsageProjection(root, false),
-    ).rejects.toThrow("file ownership does not match the registry");
-
-    expect(await slLoadUsageEvents(root)).toEqual([]);
-    expect(await readFile(join(root, lesson.path), "utf8")).toBe(beforeLesson);
     expect(await readFile(registryPath, "utf8")).toBe(beforeRegistry);
     expect(await readFile(indexPath, "utf8")).toBe(beforeIndex);
   });
@@ -576,17 +528,17 @@ describe("SL usage events", () => {
       expect.arrayContaining([
         {
           action: "create",
-          path: expect.stringContaining("SL-usage-events"),
+          path: expect.stringContaining("sl-usage-events"),
           detail: "planned",
         },
         {
           action: "update",
-          path: expect.stringContaining("SL-registry.json"),
+          path: expect.stringContaining("sl-registry.json"),
           detail: "planned",
         },
         {
-          action: "update",
-          path: expect.stringContaining("SL-usage-projection.json"),
+          action: "create",
+          path: expect.stringContaining("sl-usage-projection.json"),
           detail: "planned",
         },
       ]),
@@ -595,7 +547,7 @@ describe("SL usage events", () => {
       plannedStart.changes.filter(
         (change) =>
           change.action === "create" &&
-          change.path.includes("SL-usage-events"),
+          change.path.includes("sl-usage-events"),
       ),
     ).toHaveLength(2);
     expect(await slLoadUsageEvents(root)).toEqual([]);
@@ -628,17 +580,17 @@ describe("SL usage events", () => {
       expect.arrayContaining([
         {
           action: "create",
-          path: expect.stringContaining("SL-usage-events"),
+          path: expect.stringContaining("sl-usage-events"),
           detail: "planned",
         },
         {
           action: "update",
-          path: expect.stringContaining("SL-registry.json"),
+          path: expect.stringContaining("sl-registry.json"),
           detail: "planned",
         },
         {
           action: "update",
-          path: expect.stringContaining("SL-usage-projection.json"),
+          path: expect.stringContaining("sl-usage-projection.json"),
           detail: "planned",
         },
       ]),

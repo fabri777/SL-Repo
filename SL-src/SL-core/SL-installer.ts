@@ -3,8 +3,10 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   chmod as fsChmod,
   mkdir,
+  lstat,
   open,
   readFile,
+  readdir,
   rename,
   rm,
   rmdir,
@@ -32,6 +34,12 @@ import type {
 } from "./SL-types.js";
 import { SL_DEFAULT_SCOPE } from "./SL-state.js";
 import {
+  SL_SYSTEM_MANIFEST_PATH,
+  slLoadSystemManifest,
+  slSystemTextHash,
+  type SLSystemArtifactCategory,
+} from "./SL-system.js";
+import {
   slAssertRealPathInside,
   slExists,
   slCompareOrdinal,
@@ -43,7 +51,6 @@ import {
   slWriteText,
 } from "./SL-utils.js";
 import { slWriteIndex } from "../SL-index/SL-index.js";
-import { slSynchronizeResourceProjectionUnlocked } from "./SL-resource.js";
 import {
   slLoadRuntimeManifest,
   slVerifyRuntimeDirectory,
@@ -53,6 +60,12 @@ export interface SLInstallerFileOperations {
   writeText: typeof slWriteText;
   remove: (path: string) => Promise<void>;
   chmod: (path: string, mode: number) => Promise<void>;
+}
+
+export type SLAutomationMode = "none" | "github" | "azure" | "all";
+
+export interface SLInstallOptions {
+  automation?: SLAutomationMode;
 }
 
 interface SLInstallFileSnapshot {
@@ -65,6 +78,56 @@ const SL_DEFAULT_INSTALLER_FILE_OPERATIONS: SLInstallerFileOperations = {
   remove: async (path) => rm(path),
   chmod: fsChmod,
 };
+
+async function slAssertSupportedLayout(root: string): Promise<void> {
+  const githubRoot = resolve(root, ".github");
+  if (!(await slExists(githubRoot))) {
+    return;
+  }
+  const githubEntries = await readdir(githubRoot, { withFileTypes: true });
+  const learningEntries = githubEntries.filter(
+    (entry) => entry.name.toLowerCase() === "sl-learning",
+  );
+  if (
+    learningEntries.some(
+      (entry) => entry.name !== "sl-learning" || !entry.isDirectory(),
+    )
+  ) {
+    throw new Error(
+      "Unsupported SL layout: expected only the lowercase '.github/sl-learning' directory.",
+    );
+  }
+  const learningRoot = learningEntries.find(
+    (entry) => entry.name === "sl-learning",
+  );
+  if (!learningRoot) {
+    return;
+  }
+  const directEntries = await readdir(
+    resolve(githubRoot, learningRoot.name),
+    { withFileTypes: true },
+  );
+  const unsupportedNames = new Set([
+    "SL-config.yml",
+    "SL-index.json",
+    "SL-registry.json",
+    "SL-runtime",
+    "SL-scope-catalog.json",
+    "SL-scope-catalog.yaml",
+    "SL-scope-catalog.yml",
+    "SL-scopes",
+    "SL-state-catalog.json",
+  ]);
+  const unsupported = directEntries
+    .map((entry) => entry.name)
+    .filter((name) => unsupportedNames.has(name))
+    .sort(slCompareOrdinal);
+  if (unsupported.length > 0) {
+    throw new Error(
+      `Unsupported SL layout: uppercase or legacy paths are present (${unsupported.join(", ")}).`,
+    );
+  }
+}
 
 class SLInstallTransaction {
   readonly writeText: typeof slWriteText;
@@ -240,7 +303,7 @@ class SLInstallTransaction {
   ): Promise<void> {
     await mkdir(dirname(absolutePath), { recursive: true });
     const temporaryPath =
-      `${absolutePath}.SL-rollback-${randomUUID()}`;
+      `${absolutePath}.sl-rollback-${randomUUID()}`;
     let handle: Awaited<ReturnType<typeof open>> | undefined;
     try {
       handle = await open(temporaryPath, "wx");
@@ -449,10 +512,12 @@ export async function slInstall(
   mode: "init" | "update",
   dryRun: boolean,
   fileOperations: Partial<SLInstallerFileOperations> = {},
+  options: SLInstallOptions = {},
 ): Promise<SLChange[]> {
   if (!(await slExists(resolve(root, ".git")))) {
     throw new Error(`Target is not a Git repository: ${root}`);
   }
+  await slAssertSupportedLayout(root);
   const transaction = new SLInstallTransaction(root, dryRun, {
     ...SL_DEFAULT_INSTALLER_FILE_OPERATIONS,
     ...fileOperations,
@@ -464,7 +529,13 @@ export async function slInstall(
       root,
       async () => {
         try {
-          return await slInstallUnlocked(root, mode, dryRun, transaction);
+          return await slInstallUnlocked(
+            root,
+            mode,
+            dryRun,
+            transaction,
+            options,
+          );
         } catch (error) {
           if (!dryRun) {
             try {
@@ -494,21 +565,106 @@ async function slInstallUnlocked(
   mode: "init" | "update",
   dryRun: boolean,
   transaction: SLInstallTransaction,
+  options: SLInstallOptions,
 ): Promise<SLChange[]> {
   const packageRoot = await slFindPackageRoot(import.meta.url);
   const templateRoot = resolve(packageRoot, "SL-templates/SL-repository");
-  const schemaRoot = resolve(packageRoot, "SL-schemas");
   const templateFiles = await fg("**/*", {
     cwd: templateRoot,
     dot: true,
     onlyFiles: true,
   });
-  const schemaFiles = await fg("*.schema.json", {
-    cwd: schemaRoot,
-    onlyFiles: true,
-  });
   const changes: SLChange[] = [];
   const existingRegistry = await slLoadRegistry(root);
+  const systemManifest = await slLoadSystemManifest(
+    resolve(templateRoot, SL_SYSTEM_MANIFEST_PATH),
+  );
+  for (const file of systemManifest.files) {
+    const content = await readFile(resolve(templateRoot, file.path));
+    if (slSystemTextHash(content) !== file.sha256) {
+      throw new Error(
+        `Bundled SL system artifact differs from its manifest: ${file.path}`,
+      );
+    }
+  }
+  const hasManagedCategory = (category: SLSystemArtifactCategory): boolean =>
+    systemManifest.files.some(
+      (file) =>
+        file.category === category &&
+        existingRegistry.artifacts.some(
+          (artifact) =>
+            artifact.path === file.path &&
+            artifact.classification === "system" &&
+            artifact.managedBy === "sl",
+        ),
+    );
+  const automation = options.automation;
+  const includeGithub =
+    automation === "github" ||
+    automation === "all" ||
+    (mode === "update" &&
+      automation === undefined &&
+      hasManagedCategory("github"));
+  const includeAzure =
+    automation === "azure" ||
+    automation === "all" ||
+    (mode === "update" &&
+      automation === undefined &&
+      hasManagedCategory("azure"));
+  const enabledCategory = (
+    category: SLSystemArtifactCategory,
+  ): boolean =>
+    category === "core" ||
+    (category === "github" && includeGithub) ||
+    (category === "azure" && includeAzure);
+  const removalPaths = new Set<string>();
+  const assertRemovableSystemFile = async (
+    path: string,
+    expectedHash: string,
+  ): Promise<boolean> => {
+    const absolutePath = slResolveInside(root, path);
+    if (!(await slExists(absolutePath))) {
+      return false;
+    }
+    const artifact = existingRegistry.artifacts.find(
+      (candidate) => candidate.path === path,
+    );
+    if (
+      artifact?.classification !== "system" ||
+      artifact.managedBy !== "sl" ||
+      artifact.pinned !== true
+    ) {
+      changes.push({
+        action: "skip",
+        path,
+        detail: "obsolete path preserved because SL system ownership is not proven",
+      });
+      return false;
+    }
+    await slAssertRealPathInside(root, path);
+    if ((await lstat(absolutePath)).isSymbolicLink()) {
+      throw new Error(
+        `Refusing to remove an obsolete SL system artifact through a symbolic link: ${path}`,
+      );
+    }
+    if (slSystemTextHash(await readFile(absolutePath)) !== expectedHash) {
+      throw new Error(
+        `Refusing to remove a locally modified obsolete SL system artifact: ${path}`,
+      );
+    }
+    removalPaths.add(path);
+    return true;
+  };
+  if (mode === "update" && automation !== undefined) {
+    for (const file of systemManifest.files) {
+      if (
+        file.category !== "core" &&
+        !enabledCategory(file.category)
+      ) {
+        await assertRemovableSystemFile(file.path, file.sha256);
+      }
+    }
+  }
   const existingScopeCatalogPaths: string[] = [];
   for (const scopeCatalogPath of SL_PATHS.scopeCatalogCandidates) {
     if (await slExists(slResolveInside(root, scopeCatalogPath))) {
@@ -519,7 +675,7 @@ async function slInstallUnlocked(
   const changedTemplatePaths = new Set<string>();
   const runtimeTemplateRoot = resolve(
     templateRoot,
-    ".github/SL-learning/SL-runtime",
+    ".github/sl-learning/sl-runtime",
   );
   const runtime = await slInstallRuntime(
     root,
@@ -539,9 +695,15 @@ async function slInstallUnlocked(
   for (const templatePathValue of templateFiles.sort(slCompareOrdinal)) {
     const templatePath = slNormalizePath(templatePathValue);
     if (
-      templatePath === "SL-copilot-block.md" ||
+      templatePath === "sl-copilot-block.md" ||
       templatePath.startsWith(`${SL_PATHS.runtimeRoot}/`)
     ) {
+      continue;
+    }
+    const systemFile = systemManifest.files.find(
+      (file) => file.path === templatePath,
+    );
+    if (systemFile && !enabledCategory(systemFile.category)) {
       continue;
     }
 
@@ -565,7 +727,7 @@ async function slInstallUnlocked(
     const canUpdate =
       mode === "update" &&
       existingEntry?.classification === "system" &&
-      existingEntry.managedBy === "SL-Repo";
+      existingEntry.managedBy === "sl";
     if ((await slExists(targetAbsolutePath)) && !canUpdate) {
       changes.push({
         action: "skip",
@@ -587,38 +749,20 @@ async function slInstallUnlocked(
     }
   }
 
-  for (const schemaFile of schemaFiles.sort(slCompareOrdinal)) {
-    const targetPath = `${SL_PATHS.learningRoot}/SL-schemas/${schemaFile}`;
-    const targetAbsolutePath = slResolveInside(root, targetPath);
-    const existingEntry = existingRegistry.artifacts.find(
-      (artifact) => artifact.path === targetPath,
-    );
-    const canUpdate =
-      mode === "update" &&
-      existingEntry?.classification === "system" &&
-      existingEntry.managedBy === "SL-Repo";
-    if ((await slExists(targetAbsolutePath)) && !canUpdate) {
-      changes.push({
-        action: "skip",
-        path: targetPath,
-        detail: "existing unowned schema preserved",
-      });
-      continue;
-    }
-    const content = await slReadText(resolve(schemaRoot, schemaFile));
-    const changeCount = changes.length;
-    await transaction.writeText(root, targetPath, content, dryRun, changes);
-    managedTemplatePaths.add(targetPath);
-    if (
-      changes
-        .slice(changeCount)
-        .some((change) => change.action === "create" || change.action === "update")
-    ) {
-      changedTemplatePaths.add(targetPath);
+  for (const path of [...removalPaths].sort(slCompareOrdinal)) {
+    changes.push({
+      action: "delete",
+      path,
+      detail: dryRun
+        ? "obsolete managed system artifact planned"
+        : "obsolete managed system artifact removed",
+    });
+    if (!dryRun) {
+      await transaction.remove(path);
     }
   }
 
-  const block = await slReadText(resolve(templateRoot, "SL-copilot-block.md"));
+  const block = await slReadText(resolve(templateRoot, "sl-copilot-block.md"));
   for (const instructionsPath of [
     SL_PATHS.agentInstructions,
     SL_PATHS.copilotInstructions,
@@ -637,33 +781,38 @@ async function slInstallUnlocked(
   }
 
   const registry = await slLoadRegistry(root);
-  if (runtime.removedPaths.size > 0) {
+  const removedSystemPaths = new Set([
+    ...runtime.removedPaths,
+    ...removalPaths,
+  ]);
+  if (removedSystemPaths.size > 0) {
     registry.artifacts = registry.artifacts.filter(
       (artifact) =>
         artifact.path === null ||
-        !runtime.removedPaths.has(artifact.path) ||
+        !removedSystemPaths.has(artifact.path) ||
         artifact.classification !== "system" ||
-        artifact.managedBy !== "SL-Repo",
+        artifact.managedBy !== "sl",
     );
   }
   const timestamp = new Date().toISOString();
   const managedSystemPaths = [
     ...templateFiles.map(slNormalizePath),
-    ...schemaFiles.map(
-      (schemaFile) => `${SL_PATHS.learningRoot}/SL-schemas/${schemaFile}`,
-    ),
   ].sort(slCompareOrdinal);
   for (const templatePath of managedSystemPaths) {
     if (
-      templatePath === "SL-copilot-block.md" ||
-      templatePath === SL_PATHS.registry ||
-      templatePath === SL_PATHS.index ||
-      templatePath === SL_PATHS.legacyEvents ||
+      removalPaths.has(templatePath) ||
+      templatePath === "sl-copilot-block.md" ||
       templatePath === SL_PATHS.config ||
       SL_PATHS.scopeCatalogCandidates.includes(
         templatePath as (typeof SL_PATHS.scopeCatalogCandidates)[number],
       )
     ) {
+      continue;
+    }
+    const systemFile = systemManifest.files.find(
+      (file) => file.path === templatePath,
+    );
+    if (systemFile && !enabledCategory(systemFile.category)) {
       continue;
     }
     const existingEntry = registry.artifacts.find(
@@ -682,7 +831,7 @@ async function slInstallUnlocked(
         ? "skill"
         : "system",
       classification: "system",
-      managedBy: "SL-Repo",
+      managedBy: "sl",
       status: "active",
       createdAt: existingEntry?.createdAt ?? timestamp,
       lastVerifiedAt:
@@ -711,13 +860,6 @@ async function slInstallUnlocked(
   await slWriteIndex(
     root,
     registry,
-    dryRun,
-    changes,
-    undefined,
-    transaction.writeJson,
-  );
-  await slSynchronizeResourceProjectionUnlocked(
-    root,
     dryRun,
     changes,
     undefined,

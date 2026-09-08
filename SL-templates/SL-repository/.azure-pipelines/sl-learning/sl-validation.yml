@@ -1,0 +1,48 @@
+parameters:
+  - name: vmImage
+    type: string
+    default: ubuntu-latest
+  - name: consumerInstallCommand
+    type: string
+    default: ""
+  - name: consumerCheckCommand
+    type: string
+    default: ""
+
+jobs:
+  - job: SLValidation
+    displayName: SL repository validation
+    pool:
+      vmImage: ${{ parameters.vmImage }}
+    steps:
+      - checkout: self
+        clean: true
+        path: s
+        persistCredentials: false
+      - ${{ if ne(parameters.consumerInstallCommand, '') }}:
+          - pwsh: |
+              Set-Location "$(Build.SourcesDirectory)"
+              ${{ parameters.consumerInstallCommand }}
+              if ($LASTEXITCODE -ne 0) { throw "Consumer install command failed." }
+            displayName: Install consumer dependencies
+      - ${{ if ne(parameters.consumerCheckCommand, '') }}:
+          - pwsh: |
+              Set-Location "$(Build.SourcesDirectory)"
+              ${{ parameters.consumerCheckCommand }}
+              if ($LASTEXITCODE -ne 0) { throw "Consumer check command failed." }
+            displayName: Run consumer checks
+      - pwsh: |
+          $runtime = Join-Path "$(Build.SourcesDirectory)" ".github/sl-learning/sl-runtime/sl.ps1"
+          pwsh $runtime project "$(Build.SourcesDirectory)"
+          if ($LASTEXITCODE -ne 0) { throw "SL project failed." }
+          $drift = git -C "$(Build.SourcesDirectory)" status --porcelain=v1 --untracked-files=all -- .github/sl-learning
+          if ($drift) {
+            $drift | Write-Host
+            throw "SL project drift detected. Run 'pwsh .github/sl-learning/sl-runtime/sl.ps1 project .' and commit the generated state."
+          }
+        displayName: Check SL projection and index drift
+      - pwsh: |
+          $runtime = Join-Path "$(Build.SourcesDirectory)" ".github/sl-learning/sl-runtime/sl.ps1"
+          pwsh $runtime validate "$(Build.SourcesDirectory)"
+          if ($LASTEXITCODE -ne 0) { throw "SL validation failed." }
+        displayName: Validate SL repository state

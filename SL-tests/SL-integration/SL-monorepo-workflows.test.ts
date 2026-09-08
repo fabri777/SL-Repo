@@ -227,7 +227,7 @@ describe("SL integrated monorepo workflows", () => {
 
     const artifactId = "SL-MONOREPO-GUIDANCE";
     const artifactPath =
-      ".github/instructions/SL-MONOREPO-GUIDANCE.instructions.md";
+      ".github/instructions/sl-monorepo-guidance.instructions.md";
     const contractPath = slTestContractPath(artifactId);
     await slWriteTestJson(
       root,
@@ -298,7 +298,7 @@ async function createMonorepo(monorepoPromotion = false): Promise<string> {
     BILLING_SCOPE,
   ]);
   if (monorepoPromotion) {
-    const configPath = join(root, ".github", "SL-learning", "SL-config.yml");
+    const configPath = join(root, ".github", "sl-learning", "sl-config.yml");
     const config = parse(await readFile(configPath, "utf8"));
     config.promotion.mode = "monorepo";
     await writeFile(configPath, stringify(config), "utf8");
@@ -310,10 +310,10 @@ async function writeScopeCatalog(
   root: string,
   scopes: readonly unknown[],
 ): Promise<void> {
-  const learningRoot = join(root, ".github", "SL-learning");
-  await rm(join(learningRoot, "SL-scope-catalog.yml"), { force: true });
+  const learningRoot = join(root, ".github", "sl-learning");
+  await rm(join(learningRoot, "sl-scope-catalog.yml"), { force: true });
   await writeFile(
-    join(learningRoot, "SL-scope-catalog.json"),
+    join(learningRoot, "sl-scope-catalog.json"),
     `${JSON.stringify({ schemaVersion: 1, scopes }, null, 2)}\n`,
     "utf8",
   );

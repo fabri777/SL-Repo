@@ -13,7 +13,6 @@ import type {
   SLChange,
   SLIndex,
   SLRegistry,
-  SLScopeResourceProjection,
   SLScopeUsageProjection,
   SLUsageProjection,
 } from "../SL-core/SL-types.js";
@@ -160,25 +159,13 @@ export async function slWriteIndex(
               ),
           ),
       };
-      await writeJson(
-        root,
-        entry.projectionPath,
-        shard,
-        dryRun,
-        changes,
-      );
-    }
-  } else {
-    for (const entry of catalog.scopes) {
-      if (await slExists(slResolveInside(root, entry.projectionPath))) {
+      if (
+        shard.projections.length === 0 &&
+        Object.keys(shard.currentArtifactVersions).length === 0 &&
+        !(await slExists(slResolveInside(root, entry.projectionPath)))
+      ) {
         continue;
       }
-      const shard: SLScopeUsageProjection = {
-        schemaVersion: 1,
-        scope: entry.scope,
-        currentArtifactVersions: {},
-        projections: [],
-      };
       await writeJson(
         root,
         entry.projectionPath,
@@ -187,26 +174,6 @@ export async function slWriteIndex(
         changes,
       );
     }
-  }
-  for (const entry of catalog.scopes) {
-    if (
-      !entry.resourceProjectionPath ||
-      (await slExists(slResolveInside(root, entry.resourceProjectionPath)))
-    ) {
-      continue;
-    }
-    const shard: SLScopeResourceProjection = {
-      schemaVersion: 1,
-      scope: entry.scope,
-      projections: [],
-    };
-    await writeJson(
-      root,
-      entry.resourceProjectionPath,
-      shard,
-      dryRun,
-      changes,
-    );
   }
   return indexes;
 }

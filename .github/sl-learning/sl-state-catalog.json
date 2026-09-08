@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "scopes": [
+    {
+      "scope": {
+        "id": "SL-SCOPE-ROOT",
+        "path": "."
+      },
+      "shard": "sl-sl-scope-root-47ab59b49ac7",
+      "registryPath": ".github/sl-learning/sl-scopes/sl-sl-scope-root-47ab59b49ac7/sl-registry.json",
+      "indexPath": ".github/sl-learning/sl-scopes/sl-sl-scope-root-47ab59b49ac7/sl-index.json",
+      "projectionPath": ".github/sl-learning/sl-scopes/sl-sl-scope-root-47ab59b49ac7/sl-usage-projection.json",
+      "usageEventsPath": ".github/sl-learning/sl-scopes/sl-sl-scope-root-47ab59b49ac7/sl-usage-events",
+      "resourceReceiptsPath": ".github/sl-learning/sl-scopes/sl-sl-scope-root-47ab59b49ac7/sl-resource-receipts",
+      "resourceProjectionPath": ".github/sl-learning/sl-scopes/sl-sl-scope-root-47ab59b49ac7/sl-resource-projection.json"
+    }
+  ]
+}

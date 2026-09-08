@@ -932,7 +932,7 @@ export function slValidateRuntimeManifest(
     const normalizedPath = slNormalizeRuntimePath(file.path);
     if (
       normalizedPath !== file.path ||
-      file.path === "SL-runtime.manifest.json"
+      file.path === "sl-runtime.manifest.json"
     ) {
       return slContractError(
         "manifest-file-path",
@@ -1041,7 +1041,7 @@ export function slRunRuntimeVector(
             ? input.id
             : `${input.id}-${slNormalizeRuntimePath(input.path)}`,
         ).slice(0, 40) || "scope";
-      return `SL-${slug}-${slRuntimeSha256(key).slice(0, 12)}`;
+      return `sl-${slug}-${slRuntimeSha256(key).slice(0, 12)}`;
     }
     case "usage-event-id":
       if (typeof vector.input !== "string" || vector.input.trim().length === 0) {

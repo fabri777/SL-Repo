@@ -31,7 +31,7 @@ import {
 
 const require = createRequire(import.meta.url);
 const addFormats = require("ajv-formats") as FormatsPlugin;
-const SL_CONTRACT_ROOT = ".github/SL-learning/SL-validation-contracts/";
+const SL_CONTRACT_ROOT = ".github/sl-learning/sl-validation-contracts/";
 const SL_SAFE_NPM_SCRIPT = /^[A-Za-z0-9][A-Za-z0-9:_-]*$/;
 const SL_CONTROL_CHARACTER = /[\u0000-\u001F\u007F]/;
 const SL_SHELL_META_CHARACTER = /[&|;<>`"'$^%]/;
@@ -125,7 +125,7 @@ export interface SLValidationContractTarget {
   sourceIds: string[];
   contractPath?: string;
   frontmatter?: Record<string, unknown>;
-  expectedStatus?: "probation" | "active" | "promoted";
+  expectedStatus?: "probation" | "active";
 }
 
 export interface SLEvaluationCheckResult {
@@ -189,7 +189,7 @@ async function slContractValidator(): Promise<
   slCachedContractValidator ??= (async () => {
     const packageRoot = await slFindPackageRoot(import.meta.url);
     const schema = await slReadJson<object>(
-      resolve(packageRoot, "SL-schemas/SL-validation-contract.schema.json"),
+      resolve(packageRoot, "SL-schemas/sl-validation-contract.schema.json"),
     );
     const ajv = new Ajv2020({ allErrors: true, strict: false });
     addFormats(ajv);
@@ -1337,7 +1337,7 @@ export async function slEvaluateValidationContract(
   if (
     !contractPath ||
     !contractPath.startsWith(SL_CONTRACT_ROOT) ||
-    !basename(contractPath).startsWith("SL-") ||
+    !basename(contractPath).startsWith("sl-") ||
     !contractPath.endsWith(".validation.json") ||
     !slSafeRepositoryPath(contractPath)
   ) {
@@ -1345,7 +1345,7 @@ export async function slEvaluateValidationContract(
       slStaticResult(
         "contract-path",
         "failed",
-        "validationContract must reference an SL-*.validation.json file under .github/SL-learning/SL-validation-contracts/.",
+        "validationContract must reference an sl-*.validation.json file under .github/sl-learning/sl-validation-contracts/.",
       ),
     );
   } else {
@@ -1447,7 +1447,7 @@ export async function slEvaluateValidationContract(
     const ownershipValid =
       frontmatter.id === target.artifactId &&
       frontmatter.schemaVersion === 1 &&
-      frontmatter.managedBy === "SL-Repo" &&
+      frontmatter.managedBy === "sl" &&
       frontmatter.status === (target.expectedStatus ?? "promoted") &&
       frontmatter.pinned === false &&
       Array.isArray(frontmatter.sourceIds) &&
@@ -1655,7 +1655,7 @@ export async function slEvaluate(
   const artifact = slFindArtifact(registry, artifactId);
   if (
     artifact.classification !== "promoted" ||
-    !["probation", "active", "promoted"].includes(artifact.status) ||
+    !["probation", "active"].includes(artifact.status) ||
     (artifact.artifactType !== "instruction" &&
       artifact.artifactType !== "skill") ||
     !artifact.path
@@ -1680,7 +1680,7 @@ export async function slEvaluate(
         ? { contractPath: frontmatter.validationContract }
         : {}),
       frontmatter,
-      expectedStatus: artifact.status as "probation" | "active" | "promoted",
+      expectedStatus: artifact.status as "probation" | "active",
     },
     options,
   );
@@ -1692,16 +1692,10 @@ export function slPromotedContractTarget(
 ): SLValidationContractTarget | undefined {
   if (
     artifact.classification !== "promoted" ||
-    !["probation", "active", "promoted"].includes(artifact.status) ||
+    !["probation", "active"].includes(artifact.status) ||
     (artifact.artifactType !== "instruction" &&
       artifact.artifactType !== "skill") ||
     !artifact.path
-  ) {
-    return undefined;
-  }
-  if (
-    artifact.status === "promoted" &&
-    typeof frontmatter.validationContract !== "string"
   ) {
     return undefined;
   }
@@ -1715,6 +1709,6 @@ export function slPromotedContractTarget(
       ? { contractPath: frontmatter.validationContract }
       : {}),
     frontmatter,
-    expectedStatus: artifact.status as "probation" | "active" | "promoted",
+    expectedStatus: artifact.status as "probation" | "active",
   };
 }

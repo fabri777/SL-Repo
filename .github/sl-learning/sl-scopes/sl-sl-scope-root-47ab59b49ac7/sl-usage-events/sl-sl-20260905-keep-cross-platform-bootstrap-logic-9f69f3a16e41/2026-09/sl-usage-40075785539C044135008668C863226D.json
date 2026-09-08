@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "eventType": "usage",
+  "eventId": "SL-USE-40075785539C044135008668C863226D",
+  "idempotencyKey": "sha256:40075785539c044135008668c863226d2081459e10963dd53e800870d03b4133",
+  "artifactId": "SL-20260905-KEEP-CROSS-PLATFORM-BOOTSTRAP-LOGIC-THIN",
+  "artifactVersion": "sha256:63f256c2b939a9207f6e971ab865ea02c323fdda19882f55ed7d2611b7338945",
+  "artifactContentHash": "63f256c2b939a9207f6e971ab865ea02c323fdda19882f55ed7d2611b7338945",
+  "taskRunId": "greenfield-release-validation",
+  "applicationId": "greenfield-release-smoke",
+  "stage": "verified",
+  "outcome": "success",
+  "verifierType": "local-ci",
+  "timestamp": "2026-09-08T14:11:00.000Z",
+  "scope": {
+    "id": "SL-SCOPE-ROOT",
+    "path": "."
+  }
+}

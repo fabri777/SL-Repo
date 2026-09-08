@@ -39,13 +39,13 @@ describe("SL validation", () => {
     const lessonDirectory = join(
       root,
       ".github",
-      "SL-learning",
-      "SL-lessons",
+      "sl-learning",
+      "sl-lessons",
       "2026-09",
     );
     await mkdir(lessonDirectory, { recursive: true });
     await writeFile(
-      join(lessonDirectory, "SL-2026-09-03-unregistered.md"),
+      join(lessonDirectory, "sl-2026-09-03-unregistered.md"),
       "---\nid: SL-UNREGISTERED\n---\n",
       "utf8",
     );
@@ -62,7 +62,7 @@ describe("SL validation", () => {
     repositories.push(root);
     await slInstall(root, "init", false);
     await writeFile(
-      join(root, ".github", "SL-learning", "SL-scope-catalog.yml"),
+      join(root, ".github", "sl-learning", "sl-scope-catalog.yml"),
       [
         "schemaVersion: 1",
         "scopes:",

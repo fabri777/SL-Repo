@@ -108,9 +108,27 @@ async function pathExists(path: string): Promise<boolean> {
   }
 }
 
-describe("sl-repo CLI", () => {
-  test("reports the 0.5.0 release version", () => {
-    expect(runCli(["--version"]).trim()).toBe("0.5.0");
+describe("sl CLI", () => {
+  test("reports the 0.6.0 release version", () => {
+    expect(runCli(["--version"]).trim()).toBe("0.6.0");
+  });
+
+  test("rejects invalid automation before mutating the repository", async () => {
+    const root = await slCreateTestRepository();
+    repositories.push(root);
+
+    const result = runCliResult([
+      "init",
+      root,
+      "--automation",
+      "invalid",
+    ]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain(
+      "Allowed choices are none, github, azure, all",
+    );
+    expect(await pathExists(join(root, ".github"))).toBe(false);
   });
 
   test(
@@ -148,7 +166,7 @@ describe("sl-repo CLI", () => {
       repositories.push(root);
       await slInstall(root, "init", false);
       await writeFile(
-        join(root, ".github", "SL-learning", "SL-scope-catalog.json"),
+        join(root, ".github", "sl-learning", "sl-scope-catalog.json"),
         JSON.stringify({
           schemaVersion: 1,
           scopes: [
@@ -185,7 +203,10 @@ describe("sl-repo CLI", () => {
         }),
         "utf8",
       );
-      await rm(join(root, ".github", "SL-learning", "SL-scope-catalog.yml"));
+      await rm(
+        join(root, ".github", "sl-learning", "sl-scope-catalog.yml"),
+        { force: true },
+      );
 
       expect(runCli(["scope", "validate", root])).toContain(
         "SL scope catalog valid",
@@ -289,7 +310,7 @@ describe("sl-repo CLI", () => {
     repositories.push(root);
     await slInstall(root, "init", false);
     await writeFile(
-      join(root, ".github", "SL-learning", "SL-scope-catalog.json"),
+      join(root, ".github", "sl-learning", "sl-scope-catalog.json"),
       JSON.stringify({
         schemaVersion: 1,
         scopes: [
@@ -316,7 +337,10 @@ describe("sl-repo CLI", () => {
       }),
       "utf8",
     );
-    await rm(join(root, ".github", "SL-learning", "SL-scope-catalog.yml"));
+    await rm(
+      join(root, ".github", "sl-learning", "sl-scope-catalog.yml"),
+      { force: true },
+    );
 
     const result = JSON.parse(
       runCli([
@@ -341,7 +365,7 @@ describe("sl-repo CLI", () => {
       repositories.push(root);
 
       expect(runCli(["init", root])).toContain(
-        ".github/SL-learning/SL-config.yml",
+        ".github/sl-learning/sl-config.yml",
       );
       const captureOutput = runCli([
           "capture",
@@ -375,7 +399,7 @@ describe("sl-repo CLI", () => {
           "--idempotency-key",
           "cli-vote",
         ]),
-      ).toContain("/SL-usage-events/");
+      ).toContain("/sl-usage-events/");
       expect(runCli(["usage", lessonId, root])).toContain(
         '"verifiedSuccessCount": 1',
       );
@@ -539,15 +563,15 @@ describe("sl-repo CLI", () => {
       });
       expect(plannedStart.changes.map((change) => change.path)).toEqual(
         expect.arrayContaining([
-          expect.stringContaining("SL-usage-events"),
-          expect.stringContaining("SL-registry.json"),
-          expect.stringContaining("SL-index.json"),
-          expect.stringContaining("SL-usage-projection.json"),
+          expect.stringContaining("sl-usage-events"),
+          expect.stringContaining("sl-registry.json"),
+          expect.stringContaining("sl-index.json"),
+          expect.stringContaining("sl-usage-projection.json"),
         ]),
       );
       expect(
         plannedStart.changes.filter((change) =>
-          change.path.includes("SL-usage-events"),
+          change.path.includes("sl-usage-events"),
         ),
       ).toHaveLength(2);
 
@@ -598,10 +622,10 @@ describe("sl-repo CLI", () => {
       });
       expect(plannedFinish.changes.map((change) => change.path)).toEqual(
         expect.arrayContaining([
-          expect.stringContaining("SL-usage-events"),
-          expect.stringContaining("SL-registry.json"),
-          expect.stringContaining("SL-index.json"),
-          expect.stringContaining("SL-usage-projection.json"),
+          expect.stringContaining("sl-usage-events"),
+          expect.stringContaining("sl-registry.json"),
+          expect.stringContaining("sl-index.json"),
+          expect.stringContaining("sl-usage-projection.json"),
         ]),
       );
       const unfinishedStats = JSON.parse(
@@ -634,7 +658,7 @@ describe("sl-repo CLI", () => {
         join(root, ...lesson.path.split("/")),
         "utf8",
       );
-      const resourceInputPath = join(root, "SL-resource-input.json");
+      const resourceInputPath = join(root, "sl-resource-input.json");
       await writeFile(
         resourceInputPath,
         `${JSON.stringify({
@@ -865,10 +889,10 @@ describe("sl-repo CLI", () => {
       const root = await slCreateTestRepository();
       repositories.push(root);
       runCli(["init", root]);
-      const learningRoot = join(root, ".github", "SL-learning");
-      await rm(join(learningRoot, "SL-scope-catalog.yml"));
+      const learningRoot = join(root, ".github", "sl-learning");
+      await rm(join(learningRoot, "sl-scope-catalog.yml"), { force: true });
       await writeFile(
-        join(learningRoot, "SL-scope-catalog.json"),
+        join(learningRoot, "sl-scope-catalog.json"),
         `${JSON.stringify(
           {
             schemaVersion: 1,
@@ -899,7 +923,7 @@ describe("sl-repo CLI", () => {
         )}\n`,
         "utf8",
       );
-      const configPath = join(learningRoot, "SL-config.yml");
+      const configPath = join(learningRoot, "sl-config.yml");
       const config = parse(await readFile(configPath, "utf8"));
       config.promotion.mode = "monorepo";
       await writeFile(configPath, stringify(config), "utf8");
@@ -974,7 +998,7 @@ describe("sl-repo CLI", () => {
 
       const artifactId = "SL-CLI-MONOREPO-PROMOTION";
       const artifactPath =
-        `.github/instructions/${artifactId}.instructions.md`;
+        `.github/instructions/${artifactId.toLowerCase()}.instructions.md`;
       const contractPath = slTestContractPath(artifactId);
       await slWriteTestJson(
         root,

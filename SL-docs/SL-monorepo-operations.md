@@ -3,16 +3,16 @@
 ## Daily flow
 
 ```powershell
-sl-repo scope resolve . --current-directory $PWD --json
-sl-repo capture . --title "Observed behavior" --target-path services/orders/src/order.ts
-sl-repo retrieve . --path services/orders/src/order.ts --json
-sl-repo use start SL-LESSON-ID . --target-path services/orders/src/order.ts `
+sl scope resolve . --current-directory $PWD --json
+sl capture . --title "Observed behavior" --target-path services/orders/src/order.ts
+sl retrieve . --path services/orders/src/order.ts --json
+sl use start SL-LESSON-ID . --target-path services/orders/src/order.ts `
   --application-id task-123-apply-1 --task-run-id task-123
-sl-repo use finish task-123-apply-1 . --outcome success --verified `
+sl use finish task-123-apply-1 . --outcome success --verified `
   --verifier-type test-suite --evidence-ref ci:run-123
-sl-repo stats SL-LESSON-ID . --scope SL-SCOPE-ORDERS --json
-sl-repo project .
-sl-repo validate .
+sl stats SL-LESSON-ID . --scope SL-SCOPE-ORDERS --json
+sl project .
+sl validate .
 ```
 
 These commands are the primary operating mode and work in any Git repository,
@@ -30,14 +30,14 @@ thresholds alone never activate shared guidance.
 ## Promotion and forgetting
 
 ```powershell
-sl-repo promote SL-LESSON-ID .github/instructions/SL-RULE.instructions.md . `
+sl promote SL-LESSON-ID .github/instructions/sl-rule.instructions.md . `
   --target-scope SL-SCOPE-ORDERS
-sl-repo promotion-evaluate SL-RULE . --target-scope SL-SCOPE-ORDERS `
+sl promotion-evaluate SL-RULE . --target-scope SL-SCOPE-ORDERS `
   --approval-ref review:orders-owners --json
-sl-repo promotion-activate SL-RULE .
-sl-repo forget SL-RULE . --reason superseded --dry-run
-sl-repo forget SL-RULE . --reason superseded
-sl-repo forget SL-RULE . --undo
+sl promotion-activate SL-RULE .
+sl forget SL-RULE . --reason superseded --dry-run
+sl forget SL-RULE . --reason superseded
+sl forget SL-RULE . --undo
 ```
 
 Undo or fresh verified use of stale or quarantined promoted guidance returns
@@ -58,7 +58,7 @@ Scope IDs are persisted ownership identities. A rename is a migration:
 
 1. Add the replacement scope without creating ambiguous overlap.
 2. Move or recapture owned artifacts and emit future usage in the new scope.
-3. Migrate immutable shard references in a reviewed compatibility change.
+3. Migrate immutable shard references in a reviewed state transition.
 4. Rebuild and validate.
 5. Remove the old catalog entry only after no registry, event, projection, or
    dependent references remain.
@@ -90,7 +90,7 @@ bounded, reviewed repository commands rather than a sandbox.
 ## Optional automation
 
 Use the GitHub Actions adapter when the consumer is hosted on GitHub. Use the
-Azure Pipelines templates in `.azure-pipelines/SL-learning/` when the
+Azure Pipelines templates in `.azure-pipelines/sl-learning/` when the
 consumer uses Azure Repos or already standardizes on Azure Pipelines. Both
 adapters execute the same CLI and immutable runtime.
 

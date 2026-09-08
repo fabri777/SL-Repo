@@ -8,8 +8,8 @@ description: Validate and review stale, contradictory, unsafe, or deletion-eligi
 Run through PowerShell 7:
 
 ```powershell
-pwsh -NoProfile -File .github/SL-learning/SL-runtime/SL.ps1 validate .
-pwsh -NoProfile -File .github/SL-learning/SL-runtime/SL.ps1 sweep . --dry-run
+pwsh -NoProfile -File .github/sl-learning/sl-runtime/sl.ps1 validate .
+pwsh -NoProfile -File .github/sl-learning/sl-runtime/sl.ps1 sweep . --dry-run
 ```
 
 Never bypass ownership, pinning, dependency, or quarantine checks.

@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.6.0 - 2026-09-08
+
+### Added
+
+- A deterministic compound JSON Schema document that preserves every source
+  schema's canonical `$id` and cross-schema references.
+- One cross-platform `sl.ps1` that installs itself as the persistent `sl`
+  command and implements secure self-update and `initrepo`.
+- An integrity-hashed system artifact manifest for the lowercase current
+  layout and optional provider-adapter selection.
+- `-Automation none|github|azure|all` selection for `sl initrepo`.
+
+### Changed
+
+- Establish a greenfield lowercase public contract with no installed-layout
+  migration support.
+- Reduce a clean destination installation to exactly 15 files.
+- Generate the installed PowerShell implementation as one bundled module with
+  embedded conformance vectors, reducing the runtime from 16 files to four.
+- Install no GitHub Actions or Azure Pipelines adapters by default; omitted
+  refresh selection preserves currently managed adapters.
+- Create usage and resource projections only after corresponding immutable
+  source records exist.
+- Use an implicit root scope until a custom scope catalog is added.
+
+### Removed
+
+- The bootstrap skill, eager empty projections, root compatibility
+  registry/index files, and default scope catalog.
+- Legacy layout readers, aliases, counter baselines, migration fixtures, and
+  old installer entry points.
+
 ## 0.5.0 - 2026-09-07
 
 ### Added

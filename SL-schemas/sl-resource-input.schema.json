@@ -1,0 +1,171 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ffishkel_microsoft/SL/sl-resource-input.schema.json",
+  "title": "SL provider-neutral resource receipt input",
+  "oneOf": [
+    { "$ref": "#/$defs/input" },
+    {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/input" }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "receipts"],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "receipts": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/input" }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "opaqueId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$"
+    },
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "idempotencyKey",
+        "phase",
+        "source",
+        "quality",
+        "provider",
+        "modelId",
+        "tokens",
+        "wallClockDurationMs",
+        "timestamp"
+      ],
+      "properties": {
+        "idempotencyKey": { "type": "string", "minLength": 1 },
+        "phase": { "enum": ["generation", "application", "baseline"] },
+        "source": { "enum": ["host", "ci", "manual"] },
+        "quality": { "enum": ["measured", "estimated"] },
+        "provider": { "$ref": "#/$defs/opaqueId" },
+        "modelId": { "$ref": "#/$defs/opaqueId" },
+        "tokens": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["input", "output"],
+          "properties": {
+            "input": { "type": "integer", "minimum": 0 },
+            "output": { "type": "integer", "minimum": 0 },
+            "cacheRead": { "type": "integer", "minimum": 0 },
+            "cacheWrite": { "type": "integer", "minimum": 0 },
+            "reasoning": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "wallClockDurationMs": { "type": "integer", "minimum": 1 },
+        "modelDurationMs": { "type": "integer", "minimum": 0 },
+        "toolDurationMs": { "type": "integer", "minimum": 0 },
+        "attemptCount": { "type": "integer", "minimum": 1 },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "evidenceRef": { "type": "string", "minLength": 2, "maxLength": 256 },
+        "scope": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "path"],
+          "properties": {
+            "id": { "type": "string", "minLength": 1 },
+            "path": { "type": "string", "minLength": 1 }
+          }
+        },
+        "reportedCost": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["amount", "currency", "basis"],
+          "properties": {
+            "amount": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]{1,12})?$"
+            },
+            "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+            "basis": { "const": "host-reported" }
+          }
+        },
+        "artifactId": {
+          "type": "string",
+          "pattern": "^SL-[A-Z0-9][A-Z0-9-]*$"
+        },
+        "artifactContentHash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "generationRunId": { "$ref": "#/$defs/opaqueId" },
+        "taskRunId": { "$ref": "#/$defs/opaqueId" },
+        "applicationId": { "$ref": "#/$defs/opaqueId" },
+        "comparison": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["comparisonId", "scenarioKey", "role"],
+          "properties": {
+            "comparisonId": { "$ref": "#/$defs/opaqueId" },
+            "scenarioKey": { "$ref": "#/$defs/opaqueId" },
+            "role": { "enum": ["baseline", "treatment"] }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "phase": { "const": "generation" } } },
+          "then": {
+            "required": [
+              "artifactId",
+              "artifactContentHash",
+              "generationRunId"
+            ],
+            "not": {
+              "anyOf": [
+                { "required": ["taskRunId"] },
+                { "required": ["applicationId"] },
+                { "required": ["comparison"] }
+              ]
+            }
+          }
+        },
+        {
+          "if": { "properties": { "phase": { "const": "application" } } },
+          "then": {
+            "required": [
+              "artifactId",
+              "artifactContentHash",
+              "taskRunId",
+              "applicationId"
+            ],
+            "not": { "required": ["generationRunId"] },
+            "properties": {
+              "comparison": {
+                "properties": { "role": { "const": "treatment" } }
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "phase": { "const": "baseline" } } },
+          "then": {
+            "required": ["taskRunId", "comparison"],
+            "not": {
+              "anyOf": [
+                { "required": ["artifactId"] },
+                { "required": ["artifactContentHash"] },
+                { "required": ["generationRunId"] },
+                { "required": ["applicationId"] }
+              ]
+            },
+            "properties": {
+              "comparison": {
+                "properties": { "role": { "const": "baseline" } }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -109,7 +109,7 @@ async function slPreparePromotion(options: {
   const artifactType = options.artifactType ?? "instruction";
   const artifactPath =
     artifactType === "instruction"
-      ? `.github/instructions/${options.artifactId}.instructions.md`
+      ? `.github/instructions/${options.artifactId.toLowerCase()}.instructions.md`
       : `.github/skills/${options.artifactId.toLowerCase()}/SKILL.md`;
   const contractPath = slTestContractPath(options.artifactId);
   await slWriteTestPromotedArtifact({
@@ -370,7 +370,7 @@ describe("SL promotion", () => {
       classification: "promoted",
     });
     expect(artifact.path).toBe(
-      `.github/SL-learning/SL-probation/${artifactId}/${artifactId}.instructions.md`,
+      `.github/sl-learning/sl-probation/${artifactId.toLowerCase()}/${artifactId.toLowerCase()}.instructions.md`,
     );
     expect(
       await slPathExists(join(root, ...prepared.artifactPath.split("/"))),
@@ -732,7 +732,7 @@ describe("SL promotion", () => {
     });
 
     const probationPath =
-      `.github/SL-learning/SL-probation/${firstId}/${firstId}.instructions.md`;
+      `.github/sl-learning/sl-probation/${firstId.toLowerCase()}/${firstId.toLowerCase()}.instructions.md`;
     expect(await slArtifact(root, firstId)).toMatchObject({
       status: "probation",
       path: probationPath,
@@ -855,7 +855,7 @@ describe("SL promotion", () => {
     const sourcePath = join(root, ...beforeArtifact.path!.split("/"));
     const beforeSource = await readFile(sourcePath, "utf8");
     const probationPath =
-      `.github/SL-learning/SL-probation/${artifactId}/${artifactId}.instructions.md`;
+      `.github/sl-learning/sl-probation/${artifactId.toLowerCase()}/${artifactId.toLowerCase()}.instructions.md`;
     const occupiedPath = join(root, ...probationPath.split("/"));
     await mkdir(dirname(occupiedPath), { recursive: true });
     await writeFile(occupiedPath, "occupied probation destination\n", "utf8");
@@ -925,7 +925,7 @@ describe("SL promotion", () => {
     const quarantinePath = join(root, ...beforeArtifact.path!.split("/"));
     const beforeQuarantine = await readFile(quarantinePath, "utf8");
     const probationPath =
-      `.github/SL-learning/SL-probation/${artifactId}/${artifactId}.instructions.md`;
+      `.github/sl-learning/sl-probation/${artifactId.toLowerCase()}/${artifactId.toLowerCase()}.instructions.md`;
     const occupiedPath = join(root, ...probationPath.split("/"));
     await mkdir(dirname(occupiedPath), { recursive: true });
     await writeFile(occupiedPath, "occupied probation destination\n", "utf8");
@@ -1009,7 +1009,7 @@ describe("SL promotion", () => {
     expect(restored).toMatchObject({
       status: "probation",
       path:
-        `.github/SL-learning/SL-probation/${artifactId}/${artifactId}.instructions.md`,
+        `.github/sl-learning/sl-probation/${artifactId.toLowerCase()}/${artifactId.toLowerCase()}.instructions.md`,
       promotionTargetPath: prepared.artifactPath,
     });
     expect(restored.promotionEvaluation).toBeUndefined();
@@ -1208,11 +1208,11 @@ describe("SL promotion", () => {
       expect.arrayContaining([
         expect.objectContaining({
           action: "move",
-          path: expect.stringContaining("SL-probation"),
+          path: expect.stringContaining("sl-probation"),
         }),
         expect.objectContaining({
           action: "update",
-          path: expect.stringContaining("SL-registry.json"),
+          path: expect.stringContaining("sl-registry.json"),
           detail: "planned",
         }),
       ]),
@@ -1682,7 +1682,7 @@ describe("SL promotion", () => {
       {
         severity: "error",
         code: "promotion-evaluation-stale",
-        path: `.github/SL-learning/SL-probation/${artifactId}/${artifactId}.instructions.md`,
+        path: `.github/sl-learning/sl-probation/${artifactId.toLowerCase()}/${artifactId.toLowerCase()}.instructions.md`,
         message:
           "Probation promotion content changed after its passing evaluation.",
       },
@@ -1826,71 +1826,6 @@ describe("SL promotion", () => {
     });
   });
 
-  test("treats legacy promoted artifacts as active without stranding discovery", async () => {
-    const root = await slCreateTestRepository();
-    repositories.push(root);
-    await slInstall(root, "init", false);
-    const source = await slCreateSource(root, "Legacy compatibility");
-    const artifactId = "SL-LEGACY-PROMOTED";
-    const artifactPath =
-      ".github/instructions/SL-LEGACY-PROMOTED.instructions.md";
-    await mkdir(join(root, ".github", "instructions"), { recursive: true });
-    await writeFile(
-      join(root, ...artifactPath.split("/")),
-      [
-        "---",
-        `id: ${artifactId}`,
-        "schemaVersion: 1",
-        "managedBy: SL-Repo",
-        "status: promoted",
-        "pinned: false",
-        `sourceIds: [${source.id}]`,
-        'applyTo: "**/*"',
-        "---",
-        "",
-        "# Legacy promoted guidance",
-        "",
-      ].join("\n"),
-      "utf8",
-    );
-    const registry = await slLoadRegistry(root);
-    registry.artifacts.push({
-      id: artifactId,
-      path: artifactPath,
-      artifactType: "instruction",
-      classification: "promoted",
-      managedBy: "SL-Repo",
-      status: "promoted",
-      createdAt: "2026-01-01T00:00:00.000Z",
-      lastVerifiedAt: "2026-01-01T00:00:00.000Z",
-      pinned: false,
-      relatedTo: [source.id],
-      dependsOn: [source.id],
-    });
-    const changes: SLChange[] = [];
-    await slSaveRegistry(root, registry, false, changes);
-    await slWriteIndex(root, registry, false, changes);
-
-    const issues = await slValidateRepository(root);
-    const index = JSON.parse(
-      await readFile(
-        slDefaultIndexPath(root),
-        "utf8",
-      ),
-    ) as { artifacts: Array<{ id: string }> };
-    expect(index.artifacts).toContainEqual(
-      expect.objectContaining({ id: artifactId }),
-    );
-    expect(issues).toContainEqual(
-      expect.objectContaining({
-        severity: "warning",
-        code: "legacy-promoted-compatibility",
-        path: artifactPath,
-      }),
-    );
-    expect(issues.filter((issue) => issue.severity === "error")).toEqual([]);
-  });
-
   test("applies promoted retention stages to probation without direct deletion", async () => {
     const root = await slCreateTestRepository();
     repositories.push(root);
@@ -1955,7 +1890,7 @@ describe("SL promotion", () => {
       slRegisterPromotion(
         root,
         source.id,
-        ".github/instructions/SL-collision.instructions.md",
+        ".github/instructions/sl-collision.instructions.md",
         false,
       ),
     ).rejects.toThrow("must differ");
@@ -2033,7 +1968,7 @@ describe("SL promotion", () => {
     });
     const instructionDirectory = join(root, ".github", "instructions");
     await mkdir(instructionDirectory, { recursive: true });
-    const promotedPath = ".github/instructions/SL-shared.instructions.md";
+    const promotedPath = ".github/instructions/sl-shared.instructions.md";
     const contractPath = slTestContractPath("SL-SHARED-PROMOTION");
     await slWriteTestPromotedArtifact({
       root,

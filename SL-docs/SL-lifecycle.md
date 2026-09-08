@@ -28,7 +28,7 @@ Positive reuse votes drive evidence maturity:
 
 Maturity is recomputed from immutable verified-success events for the current
 semantic artifact version. Independent branch events combine deterministically;
-run `sl-repo project` after a merge when the generated registry projection or
+run `sl project` after a merge when the generated registry projection or
 index needs reconciliation. Content changes segment prior results and can
 demote the revised lesson until the new version is verified.
 
@@ -64,9 +64,9 @@ Probationary guidance cannot be selected and remains excluded from normal
 discovery.
 
 `forget --undo` follows the same fail-closed rule for promoted instructions
-and skills: it restores them to probation, never directly to `active` or the
-legacy `promoted` status. Evidence lessons retain their previous safe status
-restore behavior. Missing or inactive source evidence and guidance that became
+and skills: it restores them to probation, never directly to `active`.
+Evidence lessons retain their previous safe status restore behavior. Missing
+or inactive source evidence and guidance that became
 active while the artifact was stale or quarantined are evaluated as current
 activation blockers.
 
@@ -75,10 +75,3 @@ automatic execution hook, so an agent or host must create and finish a receipt
 when it actually applies instruction content. The resulting success/failure
 association is operational evidence, not causal proof that the guidance
 improved or harmed the task.
-
-Repositories created before probation used status `promoted`. That legacy
-status remains a compatibility alias for active guidance, so existing
-artifacts stay discoverable. Repository validation emits a migration warning
-when a legacy promoted artifact has no validation contract. To adopt governed
-activation evidence, regenerate or update its contract, register a new
-probationary version, evaluate it, and activate it through repository review.

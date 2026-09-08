@@ -25,8 +25,8 @@ const runtimeRoot = resolve(
   "SL-templates",
   "SL-repository",
   ".github",
-  "SL-learning",
-  "SL-runtime",
+  "sl-learning",
+  "sl-runtime",
 );
 
 describe("SL PowerShell runtime contract", () => {
@@ -44,17 +44,23 @@ describe("SL PowerShell runtime contract", () => {
   test("parses the supported nested config and scope catalog YAML", async () => {
     const config = slParseRuntimeYaml(
       await readFile(
-        resolve("SL-templates/SL-repository/.github/SL-learning/SL-config.yml"),
+        resolve("SL-templates/SL-repository/.github/sl-learning/sl-config.yml"),
         "utf8",
       ),
     ) as Record<string, unknown>;
     const catalog = slParseRuntimeYaml(
-      await readFile(
-        resolve(
-          "SL-templates/SL-repository/.github/SL-learning/SL-scope-catalog.yml",
-        ),
-        "utf8",
-      ),
+      [
+        "schemaVersion: 1",
+        "scopes:",
+        "  - id: SL-SCOPE-ROOT",
+        "    displayName: Repository",
+        "    kind: repository",
+        '    includePaths: ["**"]',
+        "    excludePaths: []",
+        "    dependencyScopeIds: []",
+        "    ownerAliases: []",
+        "",
+      ].join("\n"),
     ) as Record<string, unknown>;
 
     expect(config).toMatchObject({
@@ -100,12 +106,12 @@ describe("SL PowerShell runtime contract", () => {
   test("generates a deterministic manifest covering every payload file", async () => {
     const first = await slBuildRuntimeManifest();
     const firstBytes = await readFile(
-      resolve(runtimeRoot, "SL-runtime.manifest.json"),
+      resolve(runtimeRoot, "sl-runtime.manifest.json"),
       "utf8",
     );
     const second = await slBuildRuntimeManifest();
     const secondBytes = await readFile(
-      resolve(runtimeRoot, "SL-runtime.manifest.json"),
+      resolve(runtimeRoot, "sl-runtime.manifest.json"),
       "utf8",
     );
 
@@ -123,7 +129,7 @@ describe("SL PowerShell runtime contract", () => {
       slValidateRuntimeManifest({
         ...first,
         files: first.files.filter(
-          (file) => file.path !== "SL.Runtime.Resource.ps1",
+          (file) => file.path !== "sl.runtime.psm1",
         ),
       }),
     ).toThrow("payload inventory does not match");
@@ -140,42 +146,40 @@ describe("SL PowerShell runtime contract", () => {
       "SL-templates",
       "SL-repository",
       ".github",
-      "SL-learning",
-      "SL-runtime",
+      "sl-learning",
+      "sl-runtime",
     );
-    const isolatedSchemaRoot = resolve(packageRoot, "SL-schemas");
+    const isolatedSourceRoot = resolve(packageRoot, "SL-runtime-source");
     await rm(packageRoot, { recursive: true, force: true });
-    await mkdir(isolatedSchemaRoot, { recursive: true });
     await cp(runtimeRoot, isolatedRuntimeRoot, { recursive: true });
-    await cp(
-      resolve("SL-schemas", "SL-runtime-manifest.schema.json"),
-      resolve(isolatedSchemaRoot, "SL-runtime-manifest.schema.json"),
-    );
-    const schemaPath = resolve(
-      isolatedRuntimeRoot,
-      "SL-runtime-manifest.schema.json",
-    );
+    await cp(resolve("SL-runtime-source"), isolatedSourceRoot, {
+      recursive: true,
+    });
+    const modulePath = resolve(isolatedRuntimeRoot, "sl.runtime.psm1");
     const manifestPath = resolve(
       isolatedRuntimeRoot,
-      "SL-runtime.manifest.json",
+      "sl-runtime.manifest.json",
     );
+    const originalModule = await readFile(modulePath, "utf8");
     const originalManifest = await readFile(manifestPath, "utf8");
-    const staleSchema = '{"stale":true}\n';
+    const staleModule = "# stale generated module\n";
 
     try {
-      await writeFile(schemaPath, staleSchema, "utf8");
+      await writeFile(modulePath, staleModule, "utf8");
       await expect(
         slBuildRuntimeManifest({
+          buildSystemArtifacts: false,
           injectFailureAfterSchemaWrite: true,
           packageRoot,
         }),
       ).rejects.toThrow("Injected runtime build failure");
-      expect(await readFile(schemaPath, "utf8")).toBe(staleSchema);
+      expect(await readFile(modulePath, "utf8")).toBe(staleModule);
       expect(await readFile(manifestPath, "utf8")).toBe(originalManifest);
+      expect(originalModule).not.toBe(staleModule);
     } finally {
       await rm(packageRoot, { recursive: true, force: true });
     }
-  });
+  }, process.platform === "win32" ? 60_000 : 30_000);
 
   test("classifies missing and unsupported PowerShell probes", () => {
     expect(

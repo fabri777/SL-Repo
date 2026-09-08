@@ -145,10 +145,10 @@ export async function slVerifyRuntimeDirectory(
       !managedPaths.has(entry.name) &&
       (/^SL\.Runtime\..+\.(?:ps1|psm1)$/.test(entry.name) ||
         [
-          "SL.ps1",
-          "SL.sh",
+          "sl.ps1",
+          "sl.sh",
           "SL-conformance-vectors.json",
-          "SL-runtime-manifest.schema.json",
+          "sl-runtime-manifest.schema.json",
         ].includes(entry.name))
     ) {
       issues.push({
@@ -160,19 +160,19 @@ export async function slVerifyRuntimeDirectory(
       });
     }
   }
-  const bashPath = resolve(runtimeRoot, "SL.sh");
+  const bashPath = resolve(runtimeRoot, "sl.sh");
   if (await slExists(bashPath)) {
     const bash = await readFile(bashPath, "utf8");
     if (
       !bash.includes("exec pwsh") ||
-      /\b(?:node|npm|npx|sl-repo)\b/.test(bash)
+      /\b(?:node|npm|npx)\b/.test(bash)
     ) {
       issues.push({
         severity: "error",
         code: "runtime-bash-launcher",
-        path: "SL.sh",
+        path: "sl.sh",
         message:
-          "Bash launcher must delegate only to repository-local SL.ps1 through pwsh.",
+          "Bash launcher must delegate only to repository-local sl.ps1 through pwsh.",
       });
     }
   }

@@ -162,9 +162,10 @@ export function slPromotedProbationPath(
   artifact: SLRegistryArtifact,
   targetPath: string,
 ): string {
+  const directoryName = artifact.id.toLowerCase();
   return artifact.artifactType === "instruction"
-    ? `${SL_PATHS.probation}/${artifact.id}/${basename(targetPath)}`
-    : `${SL_PATHS.probation}/${artifact.id}/SKILL.md`;
+    ? `${SL_PATHS.probation}/${directoryName}/${basename(targetPath)}`
+    : `${SL_PATHS.probation}/${directoryName}/SKILL.md`;
 }
 
 async function slPreflightOwnedArtifactDestination(

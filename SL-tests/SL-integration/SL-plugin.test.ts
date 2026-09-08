@@ -101,19 +101,15 @@ describe("SL plugin package", () => {
     ) as { name: string; version: string };
 
     expect(manifest).toEqual({
-      name: "sl-repo",
-      version: "0.5.0",
+      name: "sl",
+      version: "0.6.0",
       description:
         "Repository-local capture, promotion, validation, and forgetting for GitHub Copilot agents",
       author: {
         name: "Fabrizio Fishkel",
       },
     });
-    const skills = [
-      "sl-bootstrap",
-      "sl-learning-audit",
-      "sl-lesson-curator",
-    ];
+    const skills = ["sl-learning-audit", "sl-lesson-curator"];
     expect(
       (await readdir(resolve("SL-plugin", "skills"))).sort(),
     ).toEqual(skills);
@@ -139,8 +135,7 @@ describe("SL plugin package", () => {
       "SL-templates",
       "SL-plugin",
       "SL-tests",
-      "SL-install.ps1",
-      "SL-install.sh",
+      "sl.ps1",
       "CHANGELOG.md",
       "README.md",
       "SECURITY.md",
@@ -149,34 +144,30 @@ describe("SL plugin package", () => {
     const requiredFiles = [
       "CHANGELOG.md",
       "SECURITY.md",
-      "SL-install.ps1",
-      "SL-install.sh",
+      "sl.ps1",
       "SL-docs/SL-azure-pipelines.md",
       "SL-docs/SL-install.md",
-      "SL-docs/SL-migration-0.2.md",
       "SL-docs/SL-monorepo-operations.md",
       "SL-docs/SL-security.md",
       "SL-docs/SL-usage-events.md",
       "SL-docs/SL-validation-contracts.md",
-      "SL-schemas/SL-lifecycle-event.schema.json",
-      "SL-schemas/SL-usage-event.schema.json",
-      "SL-schemas/SL-scope-catalog.schema.json",
-      "SL-schemas/SL-scope-registry.schema.json",
-      "SL-schemas/SL-state-catalog.schema.json",
-      "SL-schemas/SL-usage-projection.schema.json",
-      "SL-schemas/SL-validation-contract.schema.json",
-      "SL-plugin/skills/sl-bootstrap/SKILL.md",
+      "SL-schemas/sl-lifecycle-event.schema.json",
+      "SL-schemas/sl-usage-event.schema.json",
+      "SL-schemas/sl-scope-catalog.schema.json",
+      "SL-schemas/sl-scope-registry.schema.json",
+      "SL-schemas/sl-state-catalog.schema.json",
+      "SL-schemas/sl-usage-projection.schema.json",
+      "SL-schemas/sl-validation-contract.schema.json",
       "SL-plugin/skills/sl-learning-audit/SKILL.md",
       "SL-plugin/skills/sl-lesson-curator/SKILL.md",
       "SL-tests/SL-fixtures/SL-monorepo-fixture.ts",
-      "SL-templates/SL-repository/.github/SL-learning/.gitattributes",
-      "SL-templates/SL-repository/.github/skills/sl-bootstrap/SKILL.md",
+      "SL-templates/SL-repository/.github/sl-learning/.gitattributes",
       "SL-templates/SL-repository/.github/skills/sl-learning-audit/SKILL.md",
       "SL-templates/SL-repository/.github/skills/sl-lesson-curator/SKILL.md",
-      "SL-templates/SL-repository/.github/workflows/SL-learning-validation.yml",
-      "SL-templates/SL-repository/.github/workflows/SL-learning-forget.yml",
-      "SL-templates/SL-repository/.azure-pipelines/SL-learning/SL-validation.yml",
-      "SL-templates/SL-repository/.azure-pipelines/SL-learning/SL-retention.yml",
+      "SL-templates/SL-repository/.github/workflows/sl-learning-validation.yml",
+      "SL-templates/SL-repository/.github/workflows/sl-learning-forget.yml",
+      "SL-templates/SL-repository/.azure-pipelines/sl-learning/sl-validation.yml",
+      "SL-templates/SL-repository/.azure-pipelines/sl-learning/sl-retention.yml",
       "dist/SL-src/SL-core/SL-promotion-lifecycle.js",
       "dist/SL-src/SL-core/SL-usage.js",
       "dist/SL-src/SL-validation/SL-validation-contract.js",
@@ -191,19 +182,15 @@ describe("SL plugin package", () => {
       ),
     );
     for (const path of requiredFiles) {
-      expect(packedPaths.has(path)).toBe(true);
+      expect(packedPaths.has(path), path).toBe(true);
     }
 
     const sourceInstallExamples = [
       await readFile(resolve("README.md"), "utf8"),
       await readFile(resolve("SL-docs/SL-install.md"), "utf8"),
     ].join("\n");
-    expect(sourceInstallExamples).toContain(
-      "github:ffishkel_microsoft/SL#e841414d13bfdcd1c534eb7e101f7f2330dc4709",
-    );
-    expect(sourceInstallExamples).not.toMatch(
-      /github:ffishkel_microsoft\/SL(?!#[0-9a-f]{40})/,
-    );
+    expect(sourceInstallExamples).toContain("pwsh .\\sl.ps1 install");
+    expect(sourceInstallExamples).toContain("sl initrepo");
   }, SL_PACKAGE_AUDIT_TIMEOUT_MS);
 
   test("compiles every schema and validates canonical clean-install templates", async () => {
@@ -232,37 +219,20 @@ describe("SL plugin package", () => {
     const config = parse(
       await readFile(
         resolve(
-          "SL-templates/SL-repository/.github/SL-learning/SL-config.yml",
+          "SL-templates/SL-repository/.github/sl-learning/sl-config.yml",
         ),
         "utf8",
       ),
     );
-    const scopeCatalog = parse(
-      await readFile(
-        resolve(
-          "SL-templates/SL-repository/.github/SL-learning/SL-scope-catalog.yml",
-        ),
-        "utf8",
-      ),
-    );
-    const registry = JSON.parse(
-      await readFile(
-        resolve(
-          "SL-templates/SL-repository/.github/SL-learning/SL-registry.json",
-        ),
-        "utf8",
-      ),
-    );
-    expect(validators.get("SL-config.schema.json")!(config)).toBe(true);
+    expect(validators.get("sl-config.schema.json")!(config)).toBe(true);
     expect(
-      validators.get("SL-scope-catalog.schema.json")!(scopeCatalog),
+      schemaNames.every((schemaName) => schemaName.startsWith("sl-")),
     ).toBe(true);
-    expect(validators.get("SL-registry.schema.json")!(registry)).toBe(true);
   });
 
   test("keeps source workflow write credentials isolated from execution", async () => {
     const ciWorkflow = parse(
-      await readFile(resolve(".github/workflows/SL-ci.yml"), "utf8"),
+      await readFile(resolve(".github/workflows/sl-ci.yml"), "utf8"),
     ) as {
       permissions: { contents: string };
       jobs: {
@@ -276,7 +246,7 @@ describe("SL plugin package", () => {
       };
     };
     const forgettingWorkflow = parse(
-      await readFile(resolve(".github/workflows/SL-forget.yml"), "utf8"),
+      await readFile(resolve(".github/workflows/sl-forget.yml"), "utf8"),
     ) as {
       permissions: { contents: string };
       jobs: {
@@ -351,10 +321,10 @@ describe("SL plugin package", () => {
 
   test("pins every action in source and consumer workflows", async () => {
     const workflowPaths = [
-      ".github/workflows/SL-ci.yml",
-      ".github/workflows/SL-forget.yml",
-      "SL-templates/SL-repository/.github/workflows/SL-learning-validation.yml",
-      "SL-templates/SL-repository/.github/workflows/SL-learning-forget.yml",
+      ".github/workflows/sl-ci.yml",
+      ".github/workflows/sl-forget.yml",
+      "SL-templates/SL-repository/.github/workflows/sl-learning-validation.yml",
+      "SL-templates/SL-repository/.github/workflows/sl-learning-forget.yml",
     ];
 
     for (const workflowPath of workflowPaths) {
@@ -391,22 +361,22 @@ describe("SL plugin package", () => {
 
   test("retention workflows use trusted local runtimes and guard every PowerShell exit", async () => {
     const rootWorkflow = await readFile(
-      resolve(".github/workflows/SL-forget.yml"),
+      resolve(".github/workflows/sl-forget.yml"),
       "utf8",
     );
     const templateWorkflow = await readFile(
       resolve(
-        "SL-templates/SL-repository/.github/workflows/SL-learning-forget.yml",
+        "SL-templates/SL-repository/.github/workflows/sl-learning-forget.yml",
       ),
       "utf8",
     );
 
     expect(rootWorkflow).toContain(
-      "SL-templates/SL-repository/.github/SL-learning/SL-runtime/SL.ps1",
+      "SL-templates/SL-repository/.github/sl-learning/sl-runtime/sl.ps1",
     );
     expect(rootWorkflow).toContain("--repo-root $env:GITHUB_WORKSPACE");
     expect(rootWorkflow).not.toContain(
-      "pwsh .github/SL-learning/SL-runtime/SL.ps1",
+      "pwsh .github/sl-learning/sl-runtime/sl.ps1",
     );
     for (const workflow of [rootWorkflow, templateWorkflow]) {
       const invocationCount = workflow.match(/& pwsh\b/g)?.length ?? 0;
@@ -420,8 +390,8 @@ describe("SL plugin package", () => {
 
   test("uses the committed local runtime in Azure Pipelines without embedded credentials", async () => {
     const templatePaths = [
-      "SL-templates/SL-repository/.azure-pipelines/SL-learning/SL-validation.yml",
-      "SL-templates/SL-repository/.azure-pipelines/SL-learning/SL-retention.yml",
+      "SL-templates/SL-repository/.azure-pipelines/sl-learning/SL-validation.yml",
+      "SL-templates/SL-repository/.azure-pipelines/sl-learning/SL-retention.yml",
     ];
 
     for (const templatePath of templatePaths) {
@@ -431,7 +401,7 @@ describe("SL plugin package", () => {
         jobs: Array<{ steps: Array<Record<string, unknown>> }>;
       };
       expect(content).toContain(
-        ".github/SL-learning/SL-runtime/SL.ps1",
+        ".github/sl-learning/sl-runtime/sl.ps1",
       );
       expect(content).not.toMatch(/\b(?:pat|password|token)\s*:/i);
       expect(content).not.toMatch(

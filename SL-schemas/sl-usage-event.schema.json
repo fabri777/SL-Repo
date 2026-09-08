@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ffishkel_microsoft/SL/sl-usage-event.schema.json",
+  "title": "SL immutable usage event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "eventType",
+    "eventId",
+    "idempotencyKey",
+    "artifactId",
+    "artifactVersion",
+    "artifactContentHash",
+    "taskRunId",
+    "applicationId",
+    "stage",
+    "outcome",
+    "verifierType",
+    "timestamp",
+    "scope"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "eventType": {
+      "const": "usage"
+    },
+    "eventId": {
+      "type": "string",
+      "pattern": "^SL-USE-[A-F0-9]{32}$"
+    },
+    "idempotencyKey": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "artifactId": {
+      "type": "string",
+      "pattern": "^SL-[A-Z0-9][A-Z0-9-]*$"
+    },
+    "artifactVersion": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "artifactContentHash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "taskRunId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$"
+    },
+    "applicationId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$"
+    },
+    "stage": {
+      "enum": [
+        "selected",
+        "applied",
+        "outcome",
+        "verified"
+      ]
+    },
+    "outcome": {
+      "enum": [
+        "success",
+        "failure",
+        "partial",
+        "unknown"
+      ]
+    },
+    "verifierType": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "evidenceRef": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 256
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "path"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

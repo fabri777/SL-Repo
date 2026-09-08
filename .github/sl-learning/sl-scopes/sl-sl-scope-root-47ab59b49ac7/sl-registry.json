@@ -1,0 +1,164 @@
+{
+  "schemaVersion": 1,
+  "scope": {
+    "id": "SL-SCOPE-ROOT",
+    "path": "."
+  },
+  "artifacts": [
+    {
+      "id": "SL-20260905-KEEP-CROSS-PLATFORM-BOOTSTRAP-LOGIC-THIN",
+      "path": ".github/sl-learning/sl-lessons/2026-09/sl-2026-09-05-keep-cross-platform-bootstrap-logic-thin.md",
+      "artifactType": "lesson",
+      "classification": "evidence",
+      "managedBy": "sl",
+      "status": "raw",
+      "createdAt": "2026-09-05T07:43:26.492Z",
+      "lastVerifiedAt": "2026-09-05T07:43:26.492Z",
+      "pinned": false,
+      "relatedTo": [],
+      "trigger": [
+        "portable installer",
+        "cross-platform distribution"
+      ],
+      "scope": {
+        "id": "SL-SCOPE-ROOT",
+        "path": "."
+      },
+      "lastRetrievedAt": "2026-09-08T14:10:00Z",
+      "lastSuccessfulUseAt": "2026-09-08T14:11:00Z"
+    },
+    {
+      "id": "SL-20260907-GENERATE-EMBEDDED-POWERSHELL-ARTIFACTS-WITHOUT-SEM",
+      "path": ".github/sl-learning/sl-lessons/2026-09/sl-2026-09-07-generate-embedded-powershell-artifacts-without-sem.md",
+      "artifactType": "lesson",
+      "classification": "evidence",
+      "managedBy": "sl",
+      "status": "raw",
+      "createdAt": "2026-09-07T16:33:06.397Z",
+      "lastVerifiedAt": "2026-09-07T16:33:06.397Z",
+      "pinned": false,
+      "relatedTo": [],
+      "trigger": [
+        "bundle PowerShell runtime",
+        "embed JSON in PowerShell",
+        "generate scripts containing dollar signs"
+      ],
+      "scope": {
+        "id": "SL-SCOPE-ROOT",
+        "path": "."
+      }
+    },
+    {
+      "id": "SL-SYSTEM-GITHUBSL-LEARNINGGITATTRIBUTES-981CB1874F4F",
+      "path": ".github/sl-learning/.gitattributes",
+      "artifactType": "system",
+      "classification": "system",
+      "managedBy": "sl",
+      "status": "active",
+      "createdAt": "2026-09-08T09:59:51.613Z",
+      "lastVerifiedAt": "2026-09-08T09:59:51.613Z",
+      "pinned": true,
+      "relatedTo": [],
+      "scope": {
+        "id": "SL-SCOPE-ROOT",
+        "path": "."
+      }
+    },
+    {
+      "id": "SL-SYSTEM-GITHUBSL-LEARNINGSL-RUNTIMESL--13E6E649139B",
+      "path": ".github/sl-learning/sl-runtime/sl-runtime.manifest.json",
+      "artifactType": "system",
+      "classification": "system",
+      "managedBy": "sl",
+      "status": "active",
+      "createdAt": "2026-09-08T09:59:51.613Z",
+      "lastVerifiedAt": "2026-09-08T11:18:14.117Z",
+      "pinned": true,
+      "relatedTo": [],
+      "scope": {
+        "id": "SL-SCOPE-ROOT",
+        "path": "."
+      }
+    },
+    {
+      "id": "SL-SYSTEM-GITHUBSL-LEARNINGSL-RUNTIMESLP-286D49B33A04",
+      "path": ".github/sl-learning/sl-runtime/sl.ps1",
+      "artifactType": "system",
+      "classification": "system",
+      "managedBy": "sl",
+      "status": "active",
+      "createdAt": "2026-09-08T09:59:51.613Z",
+      "lastVerifiedAt": "2026-09-08T09:59:51.613Z",
+      "pinned": true,
+      "relatedTo": [],
+      "scope": {
+        "id": "SL-SCOPE-ROOT",
+        "path": "."
+      }
+    },
+    {
+      "id": "SL-SYSTEM-GITHUBSL-LEARNINGSL-RUNTIMESLR-32758A2E30FF",
+      "path": ".github/sl-learning/sl-runtime/sl.runtime.psm1",
+      "artifactType": "system",
+      "classification": "system",
+      "managedBy": "sl",
+      "status": "active",
+      "createdAt": "2026-09-08T09:59:51.613Z",
+      "lastVerifiedAt": "2026-09-08T11:18:14.117Z",
+      "pinned": true,
+      "relatedTo": [],
+      "scope": {
+        "id": "SL-SCOPE-ROOT",
+        "path": "."
+      }
+    },
+    {
+      "id": "SL-SYSTEM-GITHUBSL-LEARNINGSL-RUNTIMESLS-2415FFAB8C29",
+      "path": ".github/sl-learning/sl-runtime/sl.sh",
+      "artifactType": "system",
+      "classification": "system",
+      "managedBy": "sl",
+      "status": "active",
+      "createdAt": "2026-09-08T09:59:51.613Z",
+      "lastVerifiedAt": "2026-09-08T09:59:51.613Z",
+      "pinned": true,
+      "relatedTo": [],
+      "scope": {
+        "id": "SL-SCOPE-ROOT",
+        "path": "."
+      }
+    },
+    {
+      "id": "SL-SYSTEM-GITHUBSL-LEARNINGSL-SCHEMA-BUN-A5E98A8E4D69",
+      "path": ".github/sl-learning/sl-schema-bundle.schema.json",
+      "artifactType": "system",
+      "classification": "system",
+      "managedBy": "sl",
+      "status": "active",
+      "createdAt": "2026-09-08T09:59:51.613Z",
+      "lastVerifiedAt": "2026-09-08T11:18:14.117Z",
+      "pinned": true,
+      "relatedTo": [],
+      "scope": {
+        "id": "SL-SCOPE-ROOT",
+        "path": "."
+      }
+    },
+    {
+      "id": "SL-SYSTEM-GITHUBSL-LEARNINGSL-SYSTEMMANI-2AD6E03F7D25",
+      "path": ".github/sl-learning/sl-system.manifest.json",
+      "artifactType": "system",
+      "classification": "system",
+      "managedBy": "sl",
+      "status": "active",
+      "createdAt": "2026-09-08T09:59:51.613Z",
+      "lastVerifiedAt": "2026-09-08T11:18:14.117Z",
+      "pinned": true,
+      "relatedTo": [],
+      "scope": {
+        "id": "SL-SCOPE-ROOT",
+        "path": "."
+      }
+    }
+  ]
+}

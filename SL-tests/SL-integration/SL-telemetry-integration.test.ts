@@ -196,7 +196,8 @@ describe("SL telemetry integration", () => {
     repositories.push(root);
     const source = await prepareLesson(root, "Activated usage source");
     const artifactId = "SL-ACTIVATED-USAGE";
-    const artifactPath = `.github/instructions/${artifactId}.instructions.md`;
+    const artifactPath =
+      `.github/instructions/${artifactId.toLowerCase()}.instructions.md`;
     const contractPath = slTestContractPath(artifactId);
     await slWriteTestPromotedArtifact({
       root,
@@ -354,11 +355,7 @@ describe("SL telemetry integration", () => {
     });
     const validChange = await slWriteUsageEvent(root, validEvent, false);
     const duplicatePath = join(
-      root,
-      ".github",
-      "SL-learning",
-      "SL-usage-events",
-      "2026-02",
+      dirname(join(root, ...validChange.path.split("/"))),
       "SL-usage-DUPLICATE.json",
     );
     await mkdir(dirname(duplicatePath), { recursive: true });
@@ -394,19 +391,18 @@ describe("SL telemetry integration", () => {
     };
     const invalidVersionPath = join(
       root,
-      ".github",
-      "SL-learning",
-      "SL-usage-events",
+      ...slScopeCatalogEntry(SL_DEFAULT_SCOPE).usageEventsPath.split("/"),
       "2026-02",
       `SL-usage-${invalidVersion.eventId.slice("SL-USE-".length)}.json`,
     );
+    await mkdir(dirname(invalidVersionPath), { recursive: true });
     await writeFile(
       invalidVersionPath,
       `${JSON.stringify(invalidVersion, null, 2)}\n`,
       "utf8",
     );
     const lifecycleFiles = await fg(
-      ".github/SL-learning/SL-lifecycle-events/**/*.json",
+      ".github/sl-learning/sl-lifecycle-events/**/*.json",
       { cwd: root },
     );
     const lifecyclePath = lifecycleFiles[0];
@@ -416,12 +412,8 @@ describe("SL telemetry integration", () => {
     await copyFile(
       join(root, ...lifecyclePath.split("/")),
       join(
-        root,
-        ".github",
-        "SL-learning",
-        "SL-lifecycle-events",
-        "2026-01",
-        "SL-event-DUPLICATE.json",
+        dirname(join(root, ...lifecyclePath.split("/"))),
+        "sl-event-duplicate.json",
       ),
     );
 
@@ -534,13 +526,9 @@ describe("SL telemetry integration", () => {
     const root = await slCreateTestRepository();
     repositories.push(root);
     const source = await prepareLesson(root, "Dry run source");
-    const registryPath = join(
-      root,
-      ".github",
-      "SL-learning",
-      "SL-registry.json",
-    );
-    const indexPath = join(root, ".github", "SL-learning", "SL-index.json");
+    const scopeEntry = slScopeCatalogEntry(SL_DEFAULT_SCOPE);
+    const registryPath = join(root, ...scopeEntry.registryPath.split("/"));
+    const indexPath = join(root, ...scopeEntry.indexPath.split("/"));
     const beforeUsageRegistry = await readFile(registryPath, "utf8");
     const beforeUsageIndex = await readFile(indexPath, "utf8");
 
@@ -555,7 +543,7 @@ describe("SL telemetry integration", () => {
     expect(await readFile(indexPath, "utf8")).toBe(beforeUsageIndex);
     expect(
       await pathExists(
-        join(root, ".github", "SL-learning", "SL-usage-events"),
+        join(root, ...scopeEntry.usageEventsPath.split("/")),
       ),
     ).toBe(false);
 
@@ -568,7 +556,7 @@ describe("SL telemetry integration", () => {
     const beforeFinishRegistry = await readFile(registryPath, "utf8");
     const beforeFinishIndex = await readFile(indexPath, "utf8");
     const beforeFinishEvents = await fg(
-      ".github/SL-learning/SL-usage-events/**/*.json",
+      ".github/sl-learning/sl-scopes/**/sl-usage-events/**/*.json",
       { cwd: root },
     );
     await slFinishUsage(root, actualStart.applicationId, {
@@ -583,7 +571,7 @@ describe("SL telemetry integration", () => {
     expect(await readFile(registryPath, "utf8")).toBe(beforeFinishRegistry);
     expect(await readFile(indexPath, "utf8")).toBe(beforeFinishIndex);
     expect(
-      await fg(".github/SL-learning/SL-usage-events/**/*.json", {
+      await fg(".github/sl-learning/sl-scopes/**/sl-usage-events/**/*.json", {
         cwd: root,
       }),
     ).toEqual(beforeFinishEvents);
@@ -673,14 +661,14 @@ describe("SL telemetry integration", () => {
   test("installs validation and integrated forgetting workflows", async () => {
     const root = await slCreateTestRepository();
     repositories.push(root);
-    await slInstall(root, "init", false);
+    await slInstall(root, "init", false, {}, { automation: "github" });
 
     const validationWorkflow = await readFile(
-      join(root, ".github", "workflows", "SL-learning-validation.yml"),
+      join(root, ".github", "workflows", "sl-learning-validation.yml"),
       "utf8",
     );
     const forgettingWorkflow = await readFile(
-      join(root, ".github", "workflows", "SL-learning-forget.yml"),
+      join(root, ".github", "workflows", "sl-learning-forget.yml"),
       "utf8",
     );
     type WorkflowStep = {
@@ -771,14 +759,14 @@ describe("SL telemetry integration", () => {
     ).toEqual({
       name: "Validate contracts, events, projections, and index",
       shell: "pwsh",
-      run: "pwsh .github/SL-learning/SL-runtime/SL.ps1 validate .",
+      run: "pwsh .github/sl-learning/sl-runtime/sl.ps1 validate .",
     });
     expect(planningSteps.get("Preview")).toEqual({
       name: "Preview",
       shell: "pwsh",
       run:
         '$ErrorActionPreference = "Stop"\n' +
-        '$runtime = Join-Path $env:GITHUB_WORKSPACE ".github/SL-learning/SL-runtime/SL.ps1"\n' +
+        '$runtime = Join-Path $env:GITHUB_WORKSPACE ".github/sl-learning/sl-runtime/sl.ps1"\n' +
         "& pwsh -NoLogo -NoProfile -File $runtime --repo-root $env:GITHUB_WORKSPACE sweep $env:GITHUB_WORKSPACE --dry-run\n" +
         "if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }\n",
     });
@@ -788,7 +776,7 @@ describe("SL telemetry integration", () => {
       shell: "pwsh",
       run:
         '$ErrorActionPreference = "Stop"\n' +
-        '$runtime = Join-Path $env:GITHUB_WORKSPACE ".github/SL-learning/SL-runtime/SL.ps1"\n' +
+        '$runtime = Join-Path $env:GITHUB_WORKSPACE ".github/sl-learning/sl-runtime/sl.ps1"\n' +
         "& pwsh -NoLogo -NoProfile -File $runtime --repo-root $env:GITHUB_WORKSPACE sweep $env:GITHUB_WORKSPACE\n" +
         "if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }\n" +
         "& pwsh -NoLogo -NoProfile -File $runtime --repo-root $env:GITHUB_WORKSPACE project $env:GITHUB_WORKSPACE\n" +
@@ -823,19 +811,19 @@ describe("SL telemetry integration", () => {
   test("installs provider-specific automation as optional SL-managed adapters", async () => {
     const root = await slCreateTestRepository();
     repositories.push(root);
-    await slInstall(root, "init", false);
+    await slInstall(root, "init", false, {}, { automation: "all" });
 
     const azureValidationPath = join(
       root,
       ".azure-pipelines",
-      "SL-learning",
-      "SL-validation.yml",
+      "sl-learning",
+      "sl-validation.yml",
     );
     const azureRetentionPath = join(
       root,
       ".azure-pipelines",
-      "SL-learning",
-      "SL-retention.yml",
+      "sl-learning",
+      "sl-retention.yml",
     );
     const [azureValidation, azureRetention] = await Promise.all([
       readFile(azureValidationPath, "utf8"),
@@ -844,14 +832,14 @@ describe("SL telemetry integration", () => {
     const registry = await slLoadRegistry(root);
 
     expect(azureValidation).toContain(
-      ".github/SL-learning/SL-runtime/SL.ps1",
+      ".github/sl-learning/sl-runtime/sl.ps1",
     );
     expect(azureValidation).toContain(
       "pwsh $runtime project \"$(Build.SourcesDirectory)\"",
     );
     expect(azureValidation).toContain("Validate SL repository state");
     expect(azureRetention).toContain(
-      ".github/SL-learning/SL-runtime/SL.ps1",
+      ".github/sl-learning/sl-runtime/sl.ps1",
     );
     expect(azureRetention).toContain("default: false");
     expect(azureRetention).toContain("Publish retention patch for review");
@@ -862,16 +850,16 @@ describe("SL telemetry integration", () => {
     );
     expect(
       registry.artifacts.filter((artifact) =>
-        artifact.path?.startsWith(".azure-pipelines/SL-learning/"),
+        artifact.path?.startsWith(".azure-pipelines/sl-learning/"),
       ),
     ).toHaveLength(2);
 
     const githubValidation = await readFile(
-      join(root, ".github", "workflows", "SL-learning-validation.yml"),
+      join(root, ".github", "workflows", "sl-learning-validation.yml"),
       "utf8",
     );
     const githubForgetting = await readFile(
-      join(root, ".github", "workflows", "SL-learning-forget.yml"),
+      join(root, ".github", "workflows", "sl-learning-forget.yml"),
       "utf8",
     );
     expect(githubValidation).toContain(

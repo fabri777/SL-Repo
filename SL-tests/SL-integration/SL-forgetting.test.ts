@@ -37,6 +37,13 @@ function slDefaultIndexPath(root: string): string {
   return join(root, ...slScopeCatalogEntry(SL_DEFAULT_SCOPE).indexPath.split("/"));
 }
 
+function slDefaultRegistryPath(root: string): string {
+  return join(
+    root,
+    ...slScopeCatalogEntry(SL_DEFAULT_SCOPE).registryPath.split("/"),
+  );
+}
+
 afterEach(async () => {
   await Promise.all(repositories.splice(0).map(slRemoveTestRepository));
 });
@@ -188,13 +195,8 @@ describe("SL forgetting", () => {
     const quarantined = await getArtifact(root, id);
     const quarantinePath = join(root, ...quarantined.path!.split("/"));
     const originalPath = join(root, ...quarantined.originalPath!.split("/"));
-    const registryPath = join(
-      root,
-      ".github",
-      "SL-learning",
-      "SL-registry.json",
-    );
-    const indexPath = join(root, ".github", "SL-learning", "SL-index.json");
+    const registryPath = slDefaultRegistryPath(root);
+    const indexPath = slDefaultIndexPath(root);
     const originalQuarantineContent = await readFile(quarantinePath, "utf8");
     const originalRegistryContent = await readFile(registryPath, "utf8");
     const originalIndexContent = await readFile(indexPath, "utf8");
@@ -273,13 +275,8 @@ describe("SL forgetting", () => {
     await slSaveRegistry(root, registry, false, changes);
 
     const quarantinePath = join(root, ...artifact.path!.split("/"));
-    const registryPath = join(
-      root,
-      ".github",
-      "SL-learning",
-      "SL-registry.json",
-    );
-    const indexPath = join(root, ".github", "SL-learning", "SL-index.json");
+    const registryPath = slDefaultRegistryPath(root);
+    const indexPath = slDefaultIndexPath(root);
     const originalQuarantineContent = await readFile(quarantinePath, "utf8");
     const originalRegistryContent = await readFile(registryPath, "utf8");
     const originalIndexContent = await readFile(indexPath, "utf8");
@@ -331,13 +328,8 @@ describe("SL forgetting", () => {
       const quarantined = await getArtifact(root, id);
       const quarantinePath = join(root, ...quarantined.path!.split("/"));
       const originalPath = join(root, ...quarantined.originalPath!.split("/"));
-      const registryPath = join(
-        root,
-        ".github",
-        "SL-learning",
-        "SL-registry.json",
-      );
-      const indexPath = join(root, ".github", "SL-learning", "SL-index.json");
+      const registryPath = slDefaultRegistryPath(root);
+      const indexPath = slDefaultIndexPath(root);
       if (indexContent) {
         await writeFile(indexPath, indexContent);
       } else {
@@ -399,8 +391,8 @@ describe("SL forgetting", () => {
       const stateCatalogPath = join(
         fixture.root,
         ".github",
-        "SL-learning",
-        "SL-state-catalog.json",
+        "sl-learning",
+        "sl-state-catalog.json",
       );
       const stateCatalog = JSON.parse(
         await readFile(stateCatalogPath, "utf8"),
@@ -443,9 +435,9 @@ describe("SL forgetting", () => {
       await rm(secondIndexPath, { force: true });
 
       const relativeStatePaths = [
-        ".github/SL-learning/SL-registry.json",
-        ".github/SL-learning/SL-index.json",
-        ".github/SL-learning/SL-state-catalog.json",
+        ".github/sl-learning/sl-registry.json",
+        ".github/sl-learning/sl-index.json",
+        ".github/sl-learning/sl-state-catalog.json",
         ...stateCatalog.scopes.flatMap((scope) => [
           scope.registryPath,
           scope.indexPath,
@@ -550,10 +542,10 @@ describe("SL forgetting", () => {
     const registry = await slLoadRegistry(root);
     registry.artifacts.push({
       id: "SL-ACTIVE-DEPENDENT",
-      path: ".github/instructions/SL-dependent.instructions.md",
+      path: ".github/instructions/sl-dependent.instructions.md",
       artifactType: "instruction",
       classification: "promoted",
-      managedBy: "SL-Repo",
+      managedBy: "sl",
       status: "promoted",
       createdAt: "2026-01-02T00:00:00.000Z",
       lastVerifiedAt: "2026-01-02T00:00:00.000Z",
@@ -584,10 +576,10 @@ describe("SL forgetting", () => {
     const registry = await slLoadRegistry(root);
     registry.artifacts.push({
       id: "SL-ACTIVE-REFERENCE",
-      path: ".github/instructions/SL-active-reference.instructions.md",
+      path: ".github/instructions/sl-active-reference.instructions.md",
       artifactType: "instruction",
       classification: "promoted",
-      managedBy: "SL-Repo",
+      managedBy: "sl",
       status: "promoted",
       createdAt: "2026-01-02T00:00:00.000Z",
       lastVerifiedAt: "2026-01-02T00:00:00.000Z",
@@ -631,7 +623,7 @@ describe("SL forgetting", () => {
       path: "README.md",
       artifactType: "lesson",
       classification: "evidence",
-      managedBy: "SL-Repo",
+      managedBy: "sl",
       status: "quarantined",
       createdAt: "2026-01-01T00:00:00.000Z",
       lastVerifiedAt: "2026-01-01T00:00:00.000Z",
@@ -686,7 +678,7 @@ describe("SL forgetting", () => {
     repositories.push(root);
     await slInstall(root, "init", false);
     await writeFile(
-      join(root, ".github", "SL-learning", "SL-config.yml"),
+      join(root, ".github", "sl-learning", "sl-config.yml"),
       [
         "schemaVersion: 1",
         "scope: repo",

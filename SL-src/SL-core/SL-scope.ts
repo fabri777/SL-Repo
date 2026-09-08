@@ -654,7 +654,7 @@ export async function slLoadScopeCatalog(root: string): Promise<SLScopeCatalog> 
   const source = await slReadScopeCatalogSource(root);
   const packageRoot = await slFindPackageRoot(import.meta.url);
   const schema = await slReadJson<object>(
-    slResolveInside(packageRoot, "SL-schemas/SL-scope-catalog.schema.json"),
+    slResolveInside(packageRoot, "SL-schemas/sl-scope-catalog.schema.json"),
   );
   const ajv = new Ajv2020({ allErrors: true, strict: false });
   const validate = ajv.compile<SLScopeCatalog>(schema);

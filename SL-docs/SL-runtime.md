@@ -1,8 +1,8 @@
 # Repository-local PowerShell runtime contract
 
 SL installs a self-contained PowerShell 7 runtime under
-`.github/SL-learning/SL-runtime/`. The runtime never invokes Node,
-npm, npx, or a globally installed `sl-repo` command. Node remains an
+`.github/sl-learning/sl-runtime/`. The runtime never invokes Node,
+npm, npx, or a globally installed `sl` command. Node remains an
 installer/build dependency until a later release provides a non-Node
 bootstrap path.
 
@@ -14,49 +14,41 @@ promotion governance, validation, forgetting, and diagnostics.
 
 | Path | Contract |
 |---|---|
-| `SL.ps1` | PowerShell 7 entry point, minimal integrity bootstrap, and version gate |
-| `SL.sh` | Thin Bash launcher that only locates `pwsh` and invokes `SL.ps1` |
-| `SL.Runtime.psm1` | Root module and structured command dispatcher |
-| `SL.Runtime.Core.ps1` | Canonical JSON, SHA-256, path containment, and safe file I/O |
-| `SL.Runtime.Syntax.ps1` | YAML/frontmatter parser, typed validator, and glob matcher |
-| `SL.Runtime.State.ps1` | Scope resolution, sharded registry/state catalog, immutable lifecycle events, and indexes |
-| `SL.Runtime.Artifacts.ps1` | Capture, ownership checks, immutable usage events, votes, receipts, and projections |
-| `SL.Runtime.Promotion.ps1` | Validation contracts, probation, evidence/approval gates, conflicts, and activation |
-| `SL.Runtime.Resource.ps1` | Immutable resource receipts, deterministic projections, advisory efficiency, baseline pairing, and lineage |
-| `SL.Runtime.Lifecycle.ps1` | Retrieval, quarantine, sweep, restore, and rollback |
-| `SL.Runtime.Validation.ps1` | Repository validation, projection drift detection, and doctor aggregation |
-| `SL.Runtime.Conformance.ps1` | PowerShell golden-vector runner |
-| `SL.Runtime.Doctor.ps1` | Manifest, hash, version, and launcher checks |
-| `SL-conformance-vectors.json` | Shared TypeScript/PowerShell golden vectors |
-| `SL-runtime-manifest.schema.json` | Reviewable manifest JSON Schema |
-| `SL-runtime.manifest.json` | Runtime identity and SHA-256 inventory |
+| `sl.ps1` | PowerShell 7 entry point, minimal integrity bootstrap, and version gate |
+| `sl.sh` | Thin Bash launcher that only locates `pwsh` and invokes `sl.ps1` |
+| `sl.runtime.psm1` | Deterministically generated lifecycle implementation and embedded conformance vectors |
+| `sl-runtime.manifest.json` | Runtime identity and SHA-256 inventory |
 
-Only files listed in `SL-runtime.manifest.json`, plus the manifest itself, are
-SL-managed runtime files. Unknown files below `SL-runtime/` are preserved.
+Only files listed in `sl-runtime.manifest.json`, plus the manifest itself, are
+SL-managed runtime files. Unknown files below `sl-runtime/` are preserved.
+The source repository keeps the implementation in reviewed
+`SL-runtime-source/` fragments and keeps all JSON Schemas in `SL-schemas/`.
+Destination repositories receive the generated module and
+`.github/sl-learning/sl-schema-bundle.schema.json`.
 
 ## Integrity bootstrap and trust boundary
 
-`SL.ps1` parses the runtime manifest and verifies the LF-normalized SHA-256 of
-every declared payload before it imports `SL.Runtime.psm1`. The bootstrap also
+`sl.ps1` parses the runtime manifest and verifies the LF-normalized SHA-256 of
+every declared payload before it imports `sl.runtime.psm1`. The bootstrap also
 requires the complete, ordinally ordered payload inventory, so removing a
 module from the manifest cannot make that module execute without verification.
 Missing manifests fail with exit `5`; invalid manifests, missing payloads, and
 hash drift fail with the documented manifest/integrity/mixed-version codes
 before any runtime module is dot-sourced.
 
-The repository commit, workflow definition, `SL.ps1` bootstrap, and
-`SL-runtime.manifest.json` are the trust boundary. Payload hashes detect
+The repository commit, workflow definition, `sl.ps1` bootstrap, and
+`sl-runtime.manifest.json` are the trust boundary. Payload hashes detect
 accidental corruption or an unreviewed payload-only change; they cannot defend
 against a malicious change that rewrites both the trusted bootstrap/manifest
 and payload in the same commit. Workflows therefore execute only the runtime
 from their checked-out, reviewed repository commit and do not download a
-runtime or invoke Node. Directly importing `SL.Runtime.psm1` is unsupported
+runtime or invoke Node. Directly importing `sl.runtime.psm1` is unsupported
 because it bypasses the entry-point bootstrap.
 
 ## Command and exit contract
 
 ```text
-SL.ps1 [--json] [--dry-run] [--repo-root <path>] <command>
+sl.ps1 [--json] [--dry-run] [--repo-root <path>] <command>
 ```
 
 Implemented commands are:
@@ -68,11 +60,9 @@ Implemented commands are:
 - `validate`, `doctor`, `forget`, `undo`, and `sweep`;
 - `help`, `version`, `validate-runtime`, and `conformance`.
 
-Legacy command spellings `promote`, `promotion-evaluate`,
-`promotion-activate`, `usage`, and `index` remain accepted. Options may appear
-before or after the command. Commands resolve the repository root by walking
-upward for a `.git` file or directory unless `--repo-root` supplies the
-starting path.
+Options may appear before or after the command. Commands resolve the
+repository root by walking upward for a `.git` file or directory unless
+`--repo-root` supplies the starting path.
 
 `--json` emits one canonical JSON value to standard output. Diagnostics go to
 standard error. Every mutating command accepts `--dry-run`; dry runs acquire

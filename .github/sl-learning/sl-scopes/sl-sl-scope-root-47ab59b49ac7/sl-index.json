@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 2,
+  "scope": {
+    "id": "SL-SCOPE-ROOT",
+    "path": "."
+  },
+  "artifacts": [
+    {
+      "id": "SL-20260905-KEEP-CROSS-PLATFORM-BOOTSTRAP-LOGIC-THIN",
+      "path": ".github/sl-learning/sl-lessons/2026-09/sl-2026-09-05-keep-cross-platform-bootstrap-logic-thin.md",
+      "artifactType": "lesson",
+      "status": "raw",
+      "trigger": [
+        "cross-platform distribution",
+        "portable installer"
+      ],
+      "relatedTo": []
+    },
+    {
+      "id": "SL-20260907-GENERATE-EMBEDDED-POWERSHELL-ARTIFACTS-WITHOUT-SEM",
+      "path": ".github/sl-learning/sl-lessons/2026-09/sl-2026-09-07-generate-embedded-powershell-artifacts-without-sem.md",
+      "artifactType": "lesson",
+      "status": "raw",
+      "trigger": [
+        "bundle PowerShell runtime",
+        "embed JSON in PowerShell",
+        "generate scripts containing dollar signs"
+      ],
+      "relatedTo": []
+    }
+  ]
+}

@@ -15,7 +15,7 @@ After initialization, every command below is also available without Node or a
 global CLI through:
 
 ```powershell
-$sl = ".github/SL-learning/SL-runtime/SL.ps1"
+$sl = ".github/sl-learning/sl-runtime/sl.ps1"
 pwsh -NoLogo -NoProfile -File $sl resource stats --json
 pwsh -NoLogo -NoProfile -File $sl efficiency --json
 ```
@@ -23,11 +23,11 @@ pwsh -NoLogo -NoProfile -File $sl efficiency --json
 Import a single input, an array, or a versioned envelope from a JSON file:
 
 ```powershell
-sl-repo resource import .\SL-resource-input.json . --json
+sl resource import .\SL-resource-input.json . --json
 ```
 
 Pass `-` as the input path to read at most 1 MiB from stdin. The input contract
-is published as `SL-schemas/SL-resource-input.schema.json`. Import rejects
+is published as `SL-schemas/resource-input.schema.json`. Import rejects
 unknown fields at every object level, enforces phase-specific required and
 forbidden fields plus exact baseline/treatment roles, and recursively scans
 all strings for secrets, PII, and user paths before persistence. Provider
@@ -37,7 +37,7 @@ metadata cannot be silently normalized or stored.
 Record generation resources using the current immutable artifact identity:
 
 ```powershell
-sl-repo resource record SL-EXAMPLE . `
+sl resource record SL-EXAMPLE . `
   --phase generation `
   --generation-run-id build-123 `
   --idempotency-key build-123-resource `
@@ -51,7 +51,7 @@ Record application resources after `use start`. The command derives the task,
 artifact version, content hash, and scope from the existing usage lifecycle:
 
 ```powershell
-sl-repo resource record SL-EXAMPLE . `
+sl resource record SL-EXAMPLE . `
   --phase application `
   --application-id apply-123 `
   --idempotency-key apply-123-resource `
@@ -65,7 +65,7 @@ sl-repo resource record SL-EXAMPLE . `
 Record the paired baseline separately:
 
 ```powershell
-sl-repo resource baseline . `
+sl resource baseline . `
   --task-run-id baseline-123 `
   --comparison-id comparison-123 `
   --scenario-key fix-same-defect `
@@ -85,7 +85,7 @@ Writes use exclusive creation and never overwrite a receipt.
 ## Efficiency report
 
 ```powershell
-sl-repo resource stats [artifact-id] . --json
+sl resource stats [artifact-id] . --json
 ```
 
 Optional filters are `--scope`, `--provider`, `--model`, and `--quality`.
@@ -136,9 +136,9 @@ not treated as zero.
 ## Source of truth and privacy
 
 Receipts under
-`.github/SL-learning/SL-scopes/<scope>/SL-resource-receipts/` are authoritative.
-`SL-resource-projection.json` files are deterministic, rebuildable summaries.
-Run `sl-repo project .` after merging branches that add receipt shards.
+`.github/sl-learning/sl-scopes/<scope>/sl-resource-receipts/` are authoritative.
+`sl-resource-projection.json` files are deterministic, rebuildable summaries.
+Run `sl project .` after merging branches that add receipt shards.
 
 Persist only aggregate counts, durations, opaque IDs, and opaque evidence
 references. Do not put prompts, responses, file contents, email addresses,

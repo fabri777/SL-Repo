@@ -4,7 +4,10 @@ import { resolve } from "node:path";
 import { Command, Option } from "commander";
 import { slCaptureLesson } from "../SL-core/SL-capture.js";
 import { slCalculateEfficiencyReport } from "../SL-core/SL-efficiency.js";
-import { slInstall } from "../SL-core/SL-installer.js";
+import {
+  slInstall,
+  type SLAutomationMode,
+} from "../SL-core/SL-installer.js";
 import { slLoadConfig } from "../SL-core/SL-config.js";
 import { slBuildPromotionGovernanceContext } from "../SL-core/SL-promotion-context.js";
 import {
@@ -61,6 +64,10 @@ import { slValidateInstalledRuntime } from "../SL-runtime/SL-runtime-validation.
 
 interface SLDryRunOptions {
   dryRun?: boolean;
+}
+
+interface SLInstallCliOptions extends SLDryRunOptions {
+  automation?: SLAutomationMode;
 }
 
 interface SLJsonOptions {
@@ -328,9 +335,9 @@ async function slEvaluationArtifactId(
 }
 
 const program = new Command()
-  .name("sl-repo")
+  .name("sl")
   .description("Repository-local self-learning lifecycle")
-  .version("0.5.0");
+  .version("0.6.0");
 
 for (const mode of ["init", "update"] as const) {
   program
@@ -341,12 +348,24 @@ for (const mode of ["init", "update"] as const) {
         : "Update registered SL system templates",
     )
     .option("--dry-run", "Show changes without writing")
-    .action((pathValue = ".", options: SLDryRunOptions) =>
+    .addOption(
+      new Option(
+        "--automation <mode>",
+        mode === "init"
+          ? "Install optional provider automation"
+          : "Set optional provider automation; omitted preserves current adapters",
+      ).choices(["none", "github", "azure", "all"]),
+    )
+    .action((pathValue = ".", options: SLInstallCliOptions) =>
       slRun(async () => {
         const changes = await slInstall(
           slRoot(pathValue),
           mode,
           options.dryRun ?? false,
+          {},
+          options.automation === undefined
+            ? {}
+            : { automation: options.automation },
         );
         slPrintChanges(changes);
       }),
@@ -534,7 +553,7 @@ program
   .option("--state-scope-id <id>", "Stable state scope identifier")
   .option(
     "--scope <scope>",
-    "SL-SCOPE-* control-plane scope, or legacy lesson scope text",
+    "SL-SCOPE-* control-plane scope",
   )
   .option("--lesson-scope <scope>", "Human-readable lesson scope metadata")
   .option("--target-path <path>", "Infer the control-plane scope from a target path")

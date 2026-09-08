@@ -1,4 +1,5 @@
 import {
+  access,
   copyFile,
   mkdir,
   readFile,
@@ -142,78 +143,6 @@ describe("SL scope-sharded state", () => {
     await expect(slLoadRegistry(root)).rejects.toThrow(message);
   });
 
-  test("accepts an identity-equivalent legacy registry overlay", async () => {
-    const root = await slCreateTestRepository();
-    repositories.push(root);
-    await slInstall(root, "init", false);
-    const lesson = await slCaptureLesson(root, {
-      title: "Equivalent legacy overlay",
-      kind: "win",
-      scope: "legacy",
-      triggers: ["equivalent overlay"],
-      dryRun: false,
-      now: FIXED_NOW,
-    });
-    const artifact = (await slLoadRegistry(root)).artifacts.find(
-      (candidate) => candidate.id === lesson.id,
-    )!;
-    const legacyArtifact = structuredClone(artifact);
-    delete legacyArtifact.scope;
-    legacyArtifact.status = "stale";
-    legacyArtifact.staleAt = "2026-09-04T09:00:00.000Z";
-    await writeFile(
-      repositoryPath(root, ".github/SL-learning/SL-registry.json"),
-      `${JSON.stringify(
-        { schemaVersion: 1, artifacts: [legacyArtifact] },
-        null,
-        2,
-      )}\n`,
-      "utf8",
-    );
-
-    expect(
-      (await slLoadRegistry(root)).artifacts.find(
-        (candidate) => candidate.id === lesson.id,
-      ),
-    ).toMatchObject({
-      status: "raw",
-      scope: { id: "SL-SCOPE-ROOT", path: "." },
-    });
-  });
-
-  test("rejects a conflicting legacy registry overlay", async () => {
-    const root = await slCreateTestRepository();
-    repositories.push(root);
-    await slInstall(root, "init", false);
-    const lesson = await slCaptureLesson(root, {
-      title: "Conflicting legacy overlay",
-      kind: "win",
-      scope: "legacy",
-      triggers: ["conflicting overlay"],
-      dryRun: false,
-      now: FIXED_NOW,
-    });
-    const artifact = (await slLoadRegistry(root)).artifacts.find(
-      (candidate) => candidate.id === lesson.id,
-    )!;
-    const legacyArtifact = structuredClone(artifact);
-    delete legacyArtifact.scope;
-    legacyArtifact.artifactType = "skill";
-    await writeFile(
-      repositoryPath(root, ".github/SL-learning/SL-registry.json"),
-      `${JSON.stringify(
-        { schemaVersion: 1, artifacts: [legacyArtifact] },
-        null,
-        2,
-      )}\n`,
-      "utf8",
-    );
-
-    await expect(slLoadRegistry(root)).rejects.toThrow(
-      `Conflicting legacy registry/shard overlay for artifact ${lesson.id}.`,
-    );
-  });
-
   test("updates one service shard without rewriting another service or the root catalog", async () => {
     const root = await slCreateTestRepository();
     repositories.push(root);
@@ -239,13 +168,12 @@ describe("SL scope-sharded state", () => {
     const billingEntry = slScopeCatalogEntry(SERVICE_B);
     const catalogPath = repositoryPath(
       root,
-      ".github/SL-learning/SL-state-catalog.json",
+      ".github/sl-learning/sl-state-catalog.json",
     );
     const before = await Promise.all([
       readFile(catalogPath, "utf8"),
       readFile(repositoryPath(root, billingEntry.registryPath), "utf8"),
       readFile(repositoryPath(root, billingEntry.indexPath), "utf8"),
-      readFile(repositoryPath(root, billingEntry.projectionPath), "utf8"),
     ]);
 
     const registry = await slLoadRegistry(root);
@@ -273,95 +201,14 @@ describe("SL scope-sharded state", () => {
       readFile(catalogPath, "utf8"),
       readFile(repositoryPath(root, billingEntry.registryPath), "utf8"),
       readFile(repositoryPath(root, billingEntry.indexPath), "utf8"),
-      readFile(repositoryPath(root, billingEntry.projectionPath), "utf8"),
     ]);
     expect(after).toEqual(before);
+    await expect(
+      access(repositoryPath(root, billingEntry.projectionPath)),
+    ).rejects.toThrow();
     expect(slUsageEventPath(event)).toContain(
-      `${slScopeCatalogEntry(SERVICE_A).usageEventsPath}/SL-`,
+      `${slScopeCatalogEntry(SERVICE_A).usageEventsPath}/sl-`,
     );
-  });
-
-  test("reads legacy state and migrates counters and unscoped events without loss", async () => {
-    const root = await slCreateTestRepository();
-    repositories.push(root);
-    await slInstall(root, "init", false);
-    const lesson = await slCaptureLesson(root, {
-      title: "Legacy state migration",
-      kind: "win",
-      scope: "legacy",
-      triggers: ["legacy state"],
-      dryRun: false,
-      now: FIXED_NOW,
-    });
-    const registry = await slLoadRegistry(root);
-    const legacyRegistry = structuredClone(registry);
-    const artifact = legacyRegistry.artifacts.find(
-      (candidate) => candidate.id === lesson.id,
-    );
-    expect(artifact).toBeDefined();
-    if (!artifact) {
-      return;
-    }
-    delete artifact.scope;
-    artifact.hits = 2;
-    artifact.retrievals = 3;
-    artifact.notUsefulVotes = 1;
-    const legacyRegistryPath = repositoryPath(
-      root,
-      ".github/SL-learning/SL-registry.json",
-    );
-    await writeFile(
-      legacyRegistryPath,
-      `${JSON.stringify(legacyRegistry, null, 2)}\n`,
-      "utf8",
-    );
-    await rm(repositoryPath(root, ".github/SL-learning/SL-scopes"), {
-      recursive: true,
-      force: true,
-    });
-    await rm(
-      repositoryPath(root, ".github/SL-learning/SL-state-catalog.json"),
-      { force: true },
-    );
-    const legacyBefore = await readFile(legacyRegistryPath, "utf8");
-    const lessonContent = await readFile(
-      repositoryPath(root, lesson.path),
-      "utf8",
-    );
-    const legacyEvent = slCreateUsageEvent({
-      artifactId: lesson.id,
-      artifactContentHash: slArtifactUsageContentHash(lessonContent),
-      taskRunId: "legacy-unscoped-task",
-      applicationId: "legacy-unscoped-application",
-      stage: "verified",
-      outcome: "success",
-      verifierType: "test-suite",
-      timestamp: "2026-09-04T09:00:00.000Z",
-      idempotencyKey: "legacy-unscoped-event",
-    });
-    delete legacyEvent.scope;
-    await slWriteUsageEvent(root, legacyEvent, false);
-    expect(slUsageEventPath(legacyEvent)).toMatch(
-      /^\.github\/SL-learning\/SL-usage-events\//,
-    );
-
-    await slSynchronizeUsageProjection(root, false);
-
-    expect(await readFile(legacyRegistryPath, "utf8")).toBe(legacyBefore);
-    expect(await slProjectUsage(root, lesson.id)).toEqual([
-      expect.objectContaining({
-        scope: { id: "SL-SCOPE-ROOT", path: "." },
-        retrievalCount: 4,
-        applicationCount: 4,
-        verifiedSuccessCount: 3,
-        verifiedFailureCount: 1,
-      }),
-    ]);
-    expect(
-      (await slLoadUsageEvents(root)).some(
-        (event) => event.eventType === "legacy-baseline",
-      ),
-    ).toBe(true);
   });
 
   test("projects per-scope rates and exposes repository aggregates as counts only", () => {
@@ -646,7 +493,7 @@ describe("SL scope-sharded state", () => {
     const sourcePath = repositoryPath(root, slUsageEventPath(correct));
     const duplicatePath = repositoryPath(
       root,
-      `${slScopeCatalogEntry(SERVICE_B).usageEventsPath}/SL-duplicate/2026-09/SL-usage-${correct.eventId.slice("SL-USE-".length)}.json`,
+      `${slScopeCatalogEntry(SERVICE_B).usageEventsPath}/sl-duplicate/2026-09/sl-usage-${correct.eventId.slice("SL-USE-".length)}.json`,
     );
     await mkdir(join(duplicatePath, ".."), { recursive: true });
     await copyFile(sourcePath, duplicatePath);
@@ -682,7 +529,7 @@ describe("SL scope-sharded state", () => {
     await slInstall(root, "init", false);
     const catalogPath = repositoryPath(
       root,
-      ".github/SL-learning/SL-state-catalog.json",
+      ".github/sl-learning/sl-state-catalog.json",
     );
     const catalog = JSON.parse(
       await readFile(catalogPath, "utf8"),

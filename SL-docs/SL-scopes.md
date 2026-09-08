@@ -2,12 +2,12 @@
 
 SL Repo has one repository control plane and can divide a monorepo into
 repository, shared, service, solution, library, and package scopes. The
-versioned catalog is `.github/SL-learning/SL-scope-catalog.yml`. Equivalent
+versioned catalog is `.github/sl-learning/sl-scope-catalog.yml`. Equivalent
 `.yaml` and `.json` files are supported, but exactly one catalog file may
 exist.
 
-Repositories without a catalog remain backward compatible. They resolve every
-path to the built-in `SL-SCOPE-ROOT` repository scope.
+Repositories without a catalog resolve every path to the built-in
+`SL-SCOPE-ROOT` repository scope.
 
 ## Catalog contract
 
@@ -115,12 +115,12 @@ Typed APIs are exported from `SL-src/SL-core/SL-scope.ts`, including
 `slResolveRepositoryScopes`. The CLI exposes the same behavior:
 
 ```powershell
-sl-repo scope list C:\repo
-sl-repo scope validate C:\repo
-sl-repo scope resolve C:\repo --file services\orders\src\handler.ts --json
-sl-repo scope resolve C:\repo --changed-path services/orders/a.ts `
+sl scope list C:\repo
+sl scope validate C:\repo
+sl scope resolve C:\repo --file services\orders\src\handler.ts --json
+sl scope resolve C:\repo --changed-path services/orders/a.ts `
   --changed-path libraries/common/b.ts --json
-sl-repo retrieve C:\repo --path services/orders/src/handler.ts --json
+sl retrieve C:\repo --path services/orders/src/handler.ts --json
 ```
 
 Capture and usage accept explicit `SL-SCOPE-*` IDs or infer from

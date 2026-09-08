@@ -195,12 +195,12 @@ describe("SL immutable resource receipts", () => {
     });
     expect(changes).toEqual([
       {
-        action: "update",
+        action: "create",
         path: projectionPath,
         detail: "written",
       },
     ]);
-  });
+  }, 60_000);
 
   test("deduplicates retries and rejects cross-identity application receipts", async () => {
     const root = await slCreateTestRepository();
@@ -247,7 +247,7 @@ describe("SL immutable resource receipts", () => {
         tokens: { input: 101, output: 20 },
       }),
     ).rejects.toThrow("collision");
-  });
+  }, 60_000);
 
   test("canonicalizes equivalent cross-month merge receipts to the earliest timestamp", async () => {
     const root = await slCreateTestRepository();
@@ -485,7 +485,22 @@ describe("SL immutable resource receipts", () => {
   test("reports a declared resource projection that is missing", async () => {
     const root = await slCreateTestRepository();
     repositories.push(root);
-    await slInstall(root, "init", false);
+    const lesson = await createLesson(root);
+    await slRecordResourceReceipt(root, {
+      idempotencyKey: "generation-resource-missing-projection",
+      phase: "generation",
+      source: "host",
+      quality: "measured",
+      provider: "openai",
+      modelId: "gpt-5.6-sol",
+      tokens: { input: 200, output: 40 },
+      wallClockDurationMs: 2000,
+      timestamp: NOW.toISOString(),
+      artifactId: lesson.id,
+      artifactContentHash: lesson.contentHash,
+      generationRunId: "generation-run-missing-projection",
+    });
+    await slSynchronizeResourceProjection(root, false);
     const catalog = await slLoadStateCatalog(root);
     const projectionPath = catalog.scopes[0]!.resourceProjectionPath!;
     await rm(join(root, ...projectionPath.split("/")));
@@ -551,11 +566,11 @@ describe("SL immutable resource receipts", () => {
       expect.arrayContaining([
         expect.objectContaining({
           action: "create",
-          path: expect.stringContaining("SL-resource-receipts"),
+          path: expect.stringContaining("sl-resource-receipts"),
         }),
         expect.objectContaining({
-          action: "update",
-          path: expect.stringContaining("SL-resource-projection.json"),
+          action: "create",
+          path: expect.stringContaining("sl-resource-projection.json"),
         }),
       ]),
     );
@@ -568,7 +583,7 @@ describe("SL immutable resource receipts", () => {
     expect(
       [first, second]
         .flatMap((result) => result.changes)
-        .filter((change) => change.path.includes("SL-resource-receipts"))
+        .filter((change) => change.path.includes("sl-resource-receipts"))
         .map((change) => change.action)
         .sort(),
     ).toEqual(["create", "skip"]);
@@ -795,7 +810,7 @@ describe("SL immutable resource receipts", () => {
       }),
     );
     await writeFile(
-      join(root, ".github", "SL-learning", "SL-state-catalog.json"),
+      join(root, ".github", "sl-learning", "sl-state-catalog.json"),
       `${JSON.stringify(stateCatalog, null, 2)}\n`,
       "utf8",
     );

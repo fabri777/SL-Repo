@@ -126,11 +126,7 @@ async function slRestoreStatePaths(
     scopes.set(slScopeKey(scope), scope);
   }
   const plannedCatalog = slBuildStateCatalog(scopes.values());
-  const paths = new Set<string>([
-    SL_PATHS.registry,
-    SL_PATHS.index,
-    SL_PATHS.stateCatalog,
-  ]);
+  const paths = new Set<string>([SL_PATHS.stateCatalog]);
   for (const entry of plannedCatalog.scopes) {
     paths.add(entry.registryPath);
     paths.add(entry.indexPath);
@@ -204,7 +200,7 @@ async function slAssertArtifactFileOwnership(
   }
   if (
     markdown.frontmatter.id !== artifact.id ||
-    markdown.frontmatter.managedBy !== "SL-Repo" ||
+    markdown.frontmatter.managedBy !== "sl" ||
     markdown.frontmatter.status !== artifact.status ||
     markdown.frontmatter.pinned !== artifact.pinned
   ) {
@@ -286,7 +282,7 @@ async function slCanDelete(
   artifact: SLRegistryArtifact,
   now: Date,
 ): Promise<string | null> {
-  if (artifact.managedBy !== "SL-Repo") {
+  if (artifact.managedBy !== "sl") {
     return "artifact is not SL-managed";
   }
   if (artifact.classification === "system") {

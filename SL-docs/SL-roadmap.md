@@ -6,7 +6,7 @@ Repository-local capture, reuse, promotion, validation, installation, and
 forgetting.
 
 Implemented lifecycle capabilities include immutable usage and lifecycle
-events, version-specific projections, legacy counter migration, governed
+events, version-specific projections, governed
 probation and activation, validation contracts, bounded executable checks,
 deterministic projection repair, and retention integration.
 

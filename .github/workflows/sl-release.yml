@@ -1,0 +1,135 @@
+name: SL portable release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            platform: windows
+            architecture: x64
+          - runner: ubuntu-latest
+            platform: linux
+            architecture: x64
+          - runner: macos-15-intel
+            platform: darwin
+            architecture: x64
+          - runner: macos-15
+            platform: darwin
+            architecture: arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # actions/checkout v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # actions/setup-node v4.4.0
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run ci
+      - name: Build and smoke-test portable archive
+        id: portable
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          if ($env:GITHUB_REF_NAME -ne "v$version") {
+            throw "Tag $env:GITHUB_REF_NAME does not match package version $version."
+          }
+          New-Item -ItemType Directory -Path artifacts -Force | Out-Null
+          node dist/SL-src/SL-distribution/SL-package-portable.js `
+            --package-root . `
+            --output artifacts `
+            --version $version `
+            --source-commit $env:GITHUB_SHA
+          $descriptorPath = Get-ChildItem artifacts -Filter *.asset.json |
+            Select-Object -ExpandProperty FullName -First 1
+          $descriptor = Get-Content $descriptorPath | ConvertFrom-Json
+          if (
+            $descriptor.platform -ne "${{ matrix.platform }}" -or
+            $descriptor.architecture -ne "${{ matrix.architecture }}"
+          ) {
+            throw "Runner architecture does not match the release matrix."
+          }
+          tar -czf (Join-Path artifacts $descriptor.fileName) `
+            -C artifacts `
+            $descriptor.rootDirectory
+          $runtime = if ($descriptor.platform -eq "windows") {
+            Join-Path artifacts "$($descriptor.rootDirectory)/runtime/node.exe"
+          } else {
+            Join-Path artifacts "$($descriptor.rootDirectory)/runtime/bin/node"
+          }
+          $cli = Join-Path artifacts "$($descriptor.rootDirectory)/dist/SL-src/SL-cli/SL-cli.js"
+          & $runtime $cli --help
+          if ($LASTEXITCODE -ne 0) {
+            throw "Portable CLI smoke test failed."
+          }
+          "archive=$($descriptor.fileName)" >> $env:GITHUB_OUTPUT
+          "descriptor=$([System.IO.Path]::GetFileName($descriptorPath))" >> $env:GITHUB_OUTPUT
+      - name: Upload portable archive
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # actions/upload-artifact v4.6.2
+        with:
+          name: portable-${{ matrix.platform }}-${{ matrix.architecture }}
+          path: |
+            artifacts/${{ steps.portable.outputs.archive }}
+            artifacts/${{ steps.portable.outputs.descriptor }}
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # actions/checkout v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # actions/setup-node v4.4.0
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Download portable archives
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # actions/download-artifact v4.3.0
+        with:
+          pattern: portable-*
+          path: artifacts
+          merge-multiple: true
+      - name: Create release manifest
+        run: node dist/SL-src/SL-distribution/SL-create-release-manifest.js --assets artifacts
+      - name: Add command checksum
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash -LiteralPath sl.ps1 -Algorithm SHA256).Hash.ToLowerInvariant()
+          Add-Content -LiteralPath artifacts/sl-checksums.txt -Value "$hash  sl.ps1"
+      - name: Publish immutable-version assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          gh release create $env:GITHUB_REF_NAME `
+            --repo $env:GITHUB_REPOSITORY `
+            --verify-tag `
+            --title "SL Repo $env:GITHUB_REF_NAME" `
+            --generate-notes `
+            artifacts/sl-release-manifest.json `
+            artifacts/sl-checksums.txt `
+            sl.ps1
+          Get-ChildItem artifacts -Filter *.tar.gz | ForEach-Object {
+            gh release upload $env:GITHUB_REF_NAME $_.FullName `
+              --repo $env:GITHUB_REPOSITORY
+            if ($LASTEXITCODE -ne 0) {
+              throw "Failed to upload $($_.Name)."
+            }
+          }
