@@ -26,5 +26,5 @@ artifact and require pull-request review. Azure Pipelines retention publishes
 a patch artifact but never pushes, opens or merges a pull request, or bypasses
 repository protections.
 
-Report security concerns through the private `ffishkel_microsoft/SL`
+Report security concerns through the private `fabri777/SL-Repo`
 repository.

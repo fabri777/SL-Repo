@@ -9,7 +9,7 @@ param(
 
     [string]$Release = "v0.6.0",
 
-    [string]$Repository = "ffishkel_microsoft/SL",
+    [string]$Repository = "fabri777/SL-Repo",
 
     [ValidateSet("none", "github", "azure", "all")]
     [string]$Automation,
@@ -984,7 +984,7 @@ Usage:
 Defaults:
   repo-path   Current directory
   release     v0.6.0
-  repository  ffishkel_microsoft/SL
+  repository  fabri777/SL-Repo
 "@
 }
 

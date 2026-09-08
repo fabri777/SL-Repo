@@ -31,7 +31,7 @@
     {
       "path": ".github/sl-learning/sl-schema-bundle.schema.json",
       "category": "core",
-      "sha256": "73c8833b034dc7ceffe28d50200a7caff6212ff22b751aca472a4a655cde0562"
+      "sha256": "76670f8355683dfe4626401dbaa29f6ebdde31c19e61ffaba4b2ed8de85497db"
     },
     {
       "path": ".github/workflows/sl-learning-forget.yml",

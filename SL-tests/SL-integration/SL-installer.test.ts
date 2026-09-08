@@ -509,7 +509,7 @@ describe("SL installer", () => {
     }
     expect(
       ajv.getSchema(
-        "https://github.com/ffishkel_microsoft/SL/sl-resource-projection.schema.json",
+        "https://github.com/fabri777/SL-Repo/sl-resource-projection.schema.json",
       )?.({
         schemaVersion: 1,
         scope: { id: "SL-SCOPE-ROOT", path: "." },
@@ -518,7 +518,7 @@ describe("SL installer", () => {
     ).toBe(true);
     expect(
       ajv.getSchema(
-        "https://github.com/ffishkel_microsoft/SL/sl-scope-registry.schema.json",
+        "https://github.com/fabri777/SL-Repo/sl-scope-registry.schema.json",
       )?.({
         schemaVersion: 1,
         scope: { id: "SL-SCOPE-ROOT", path: "." },

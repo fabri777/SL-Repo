@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/ffishkel_microsoft/SL/sl-lesson.schema.json",
+  "$id": "https://github.com/fabri777/SL-Repo/sl-lesson.schema.json",
   "title": "SL lesson frontmatter",
   "type": "object",
   "additionalProperties": true,

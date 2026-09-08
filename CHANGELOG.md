@@ -24,6 +24,8 @@
 - Create usage and resource projections only after corresponding immutable
   source records exist.
 - Use an implicit root scope until a custom scope catalog is added.
+- Publish source, release assets, package metadata, and schema identities from
+  `fabri777/SL-Repo` under the `@fabri777/sl` package scope.
 
 ### Removed
 

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/ffishkel_microsoft/SL/sl-state-catalog.schema.json",
+  "$id": "https://github.com/fabri777/SL-Repo/sl-state-catalog.schema.json",
   "title": "SL scope shard catalog",
   "type": "object",
   "additionalProperties": false,

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/ffishkel_microsoft/SL/sl-resource-projection.schema.json",
+  "$id": "https://github.com/fabri777/SL-Repo/sl-resource-projection.schema.json",
   "title": "SL scope resource projection shard",
   "type": "object",
   "additionalProperties": false,
